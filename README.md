@@ -69,6 +69,18 @@ cp .env.example .env.local
    Entre os crons, o botão **Sincronizar agora** faz o incremental sob demanda (e os webhooks, quando entrarem, mantêm o espelho em tempo real).
 4. As rotas de sync usam `maxDuration = 60` e processam em lotes (`SYNC_TIME_BUDGET_MS`, padrão 20 s), retomando de onde pararam.
 
+## Verificar a configuração
+
+- **Variáveis (local ou baixadas da Vercel):** `npm run check:env` valida `.env.local`; para a Vercel use
+  `vercel env pull .env.vercel` e depois `npm run check:env -- .env.vercel`. Mostra só nomes e problemas (ausente, inválida,
+  valor de exemplo, chave de criptografia que não tem 32 bytes), nunca valores.
+- **Deploy no ar:** `GET /api/health` com `Authorization: Bearer <CRON_SECRET>` confere variáveis, conexão com o banco,
+  migrations aplicadas, admins liberados e acesso ao Neon Auth. Responde 200 quando tudo está ok.
+  ```bash
+  curl -H "Authorization: Bearer $CRON_SECRET" https://SEU-APP.vercel.app/api/health
+  ```
+  (URLs de prévia podem exigir o login da Vercel antes; use o domínio de produção.)
+
 ## Comandos
 
 | Comando | O que faz |
@@ -78,6 +90,7 @@ cp .env.example .env.local
 | `npm test` | Vitest (inclui migrations e sync em Postgres WASM/pglite) |
 | `npm run db:migrate` | aplica `db/migrations/*.sql` pendentes |
 | `npm run db:seed-admin -- email` | libera um e-mail no painel |
+| `npm run check:env [-- arquivo]` | valida as variáveis de ambiente |
 
 ## Pontos da documentação que ainda NÃO consegui confirmar
 
