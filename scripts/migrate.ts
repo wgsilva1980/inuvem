@@ -1,11 +1,11 @@
 import { Client } from "pg";
 import { join } from "node:path";
 import { loadMigrations, runMigrations } from "../lib/db/migrate";
-import { loadLocalEnv } from "./_env";
+import { loadLocalEnv, scriptConnectionString } from "./_env";
 
 loadLocalEnv();
 
-const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+const url = scriptConnectionString();
 if (!url) {
   console.error("Defina DATABASE_URL_UNPOOLED (ou DATABASE_URL) em .env.local");
   process.exit(1);

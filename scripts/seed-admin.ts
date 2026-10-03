@@ -1,9 +1,9 @@
 import { Client } from "pg";
-import { loadLocalEnv } from "./_env";
+import { loadLocalEnv, scriptConnectionString } from "./_env";
 
 loadLocalEnv();
 
-const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+const url = scriptConnectionString();
 const emails = (process.argv.slice(2).length ? process.argv.slice(2) : (process.env.ADMIN_EMAILS ?? "").split(","))
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
