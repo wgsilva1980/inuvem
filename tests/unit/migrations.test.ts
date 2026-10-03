@@ -44,6 +44,10 @@ describe("migrations", () => {
       [rows[0]!.id],
     );
     await expect(db.query(`DELETE FROM audit_log`)).rejects.toThrow(/somente de inserção/);
+    await expect(db.query(`UPDATE audit_log SET acao = 'x'`)).rejects.toThrow(/somente de inserção/);
+    // a remoção da loja (LGPD) leva o log junto, via cascade
+    await db.query(`DELETE FROM stores WHERE id = $1`, [rows[0]!.id]);
+    expect((await db.query(`SELECT 1 FROM audit_log`)).rows).toHaveLength(0);
   });
 
   it("permite apenas uma sincronização em andamento por loja", async () => {

@@ -52,7 +52,13 @@ cp .env.example .env.local
    (para testes locais use um túnel HTTPS; a Nuvemshop exige HTTPS).
 3. **Permissões (scopes):** `read_products` e `write_products`.
 4. Copie o *App ID* (`NUVEMSHOP_APP_ID`), *Client ID* e *Client Secret* para as variáveis de ambiente.
-5. Instale o app na loja e, no painel INuvem, clique em **Conectar loja Nuvemshop**.
+5. **URLs de webhooks de LGPD** (Portal de Parceiros → seu app):
+   - `store/redact` → `https://SEU-APP.vercel.app/api/nuvemshop/webhooks/store-redact` (apaga os dados da loja; exige assinatura HMAC válida)
+   - `customers/redact` → `https://SEU-APP.vercel.app/api/nuvemshop/webhooks/customers-redact`
+   - `customers/data_request` → `https://SEU-APP.vercel.app/api/nuvemshop/webhooks/customers-data-request`
+   O app não guarda dados de clientes finais, então os dois últimos só respondem 200.
+6. Instale o app na loja e, no painel INuvem, clique em **Conectar loja Nuvemshop**.
+7. **Nunca** cole o Client Secret em chats/commits. Se vazar, regenere no Portal e atualize a variável na Vercel.
 
 ## Deploy na Vercel (plano Hobby)
 
@@ -84,7 +90,8 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    Se não for, o callback depende só da sessão de admin (já exigida).
 5. **Payload de `PATCH /products/stock-price`** (campos `stock` x `inventory_levels`, limite por chamada) — Fase 4.
 6. **Upload de imagens** (`src` por URL pública x base64) e como reordenar — Fase 3.
-7. **Assinatura HMAC dos webhooks** (nome do header e algoritmo) e payload dos webhooks de LGPD — fase de webhooks.
+7. **Assinatura HMAC dos webhooks**: assumi o header `x-linkedstore-hmac-sha256` (HMAC-SHA256 do corpo bruto com o client secret; aceita hex ou base64).
+   Também a forma exata do payload de LGPD (usei apenas `store_id`) e se esses webhooks vêm assinados. `store-redact` falha fechado (401) sem assinatura válida.
 8. **Endpoint de dados da loja** (nome/URL) — não consumido ainda; `stores.name` e `stores.url` ficam vazios.
 9. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
    (versão beta), mas o envio real do e-mail não foi testado fora do seu ambiente.
