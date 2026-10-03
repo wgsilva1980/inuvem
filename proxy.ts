@@ -1,8 +1,15 @@
-import { auth } from "@/lib/auth/server";
+import { getAuth } from "@/lib/auth/server";
+
+type Middleware = ReturnType<ReturnType<typeof getAuth>["middleware"]>;
+
+let middleware: Middleware | undefined;
 
 // Exige sessão nas páginas do painel. A checagem de admin (allowlist) é feita no layout
 // e em cada rota de API, independentemente deste filtro.
-export default auth.middleware({ loginUrl: "/login" });
+export default function proxy(...args: Parameters<Middleware>): ReturnType<Middleware> {
+  middleware ??= getAuth().middleware({ loginUrl: "/login" });
+  return middleware(...args);
+}
 
 export const config = {
   matcher: [
