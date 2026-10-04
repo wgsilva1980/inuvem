@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button";
 import { SyncButton } from "@/components/sync-button";
+import { WebhookButton } from "@/components/webhook-button";
 import { query, queryOne } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import type { SyncRun } from "@/lib/sync/engine";
@@ -21,12 +22,17 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
 
   let counts = { products: 0, variants: 0 };
   let last: SyncRun | null = null;
+  let lastWebhook: { event: string; received_at: string } | null = null;
   if (store) {
     const [p, v] = await Promise.all([
       queryOne<{ n: string }>("SELECT count(*)::text AS n FROM products WHERE store_id = $1", [store.id]),
       queryOne<{ n: string }>("SELECT count(*)::text AS n FROM variants WHERE store_id = $1", [store.id]),
     ]);
     counts = { products: Number(p?.n ?? 0), variants: Number(v?.n ?? 0) };
+    lastWebhook = await queryOne<{ event: string; received_at: string }>(
+      "SELECT event, received_at FROM webhook_events WHERE store_id = $1 ORDER BY received_at DESC LIMIT 1",
+      [store.id],
+    );
     last = (await query<SyncRun>(
       "SELECT id, store_id, tipo, status, cursor, totais, erros, started_at, finished_at FROM sync_runs WHERE store_id = $1 AND tipo <> 'webhook' ORDER BY started_at DESC LIMIT 1",
       [store.id],
@@ -95,6 +101,19 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
         ) : null}
         <div className="mt-4">
           <SyncButton disabled={!store} />
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-base font-semibold">Webhooks</h2>
+        <p className="mt-2 text-sm text-muted">
+          A Nuvemshop avisa o painel quando um produto ou categoria muda, e o espelho é atualizado na hora. Registre uma vez (pode repetir sem problema).
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Último evento recebido: {lastWebhook ? `${lastWebhook.event} · ${fmt(lastWebhook.received_at)}` : "nenhum ainda"}
+        </p>
+        <div className="mt-4">
+          <WebhookButton disabled={!store} />
         </div>
       </Card>
     </main>
