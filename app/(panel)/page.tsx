@@ -13,6 +13,7 @@ import type { SyncRun } from "@/lib/sync/engine";
 import { Alert } from "@/components/ui/alert";
 import { HistoryIcon } from "@/components/history-icon";
 import { Badge } from "@/components/ui/badge";
+import { parseScopes } from "@/lib/nuvemshop/scopes";
 
 const ERROS: Record<string, string> = {
   "codigo-ausente": "A Nuvemshop não enviou o código de autorização. Tente conectar novamente.",
@@ -45,6 +46,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       [store.id],
     ))[0] ?? null;
   }
+
+  const scopes = parseScopes(store?.scope);
 
   const attention = stats
     ? [
@@ -166,18 +169,30 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
             <section>
               <h3 className="text-sm font-semibold">Loja Nuvemshop</h3>
               {store ? (
-                <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                   <div>
                     <dt className="text-muted">ID da loja</dt>
                     <dd className="font-medium">{store.nuvemshop_store_id}</dd>
                   </div>
                   <div>
-                    <dt className="text-muted">Permissões</dt>
-                    <dd className="font-medium">{store.scope || "—"}</dd>
-                  </div>
-                  <div>
                     <dt className="text-muted">Conectada em</dt>
                     <dd className="font-medium">{fmt(store.created_at)}</dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-muted">Permissões{scopes.length > 0 ? ` (${scopes.length})` : ""}</dt>
+                    <dd className="mt-1">
+                      {scopes.length === 0 ? (
+                        "—"
+                      ) : (
+                        <ul className="flex flex-wrap gap-1.5">
+                          {scopes.map((sc) => (
+                            <li key={sc}>
+                              <Badge className="font-mono">{sc}</Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </dd>
                   </div>
                 </dl>
               ) : (
