@@ -1,6 +1,14 @@
 import { z } from "zod";
-import type { ProductInput } from "@/lib/nuvemshop/types";
+import { pt, type Product, type ProductInput } from "@/lib/nuvemshop/types";
 import type { ProductDetail } from "./query";
+
+/** "a , b,,c" -> "a,b,c". */
+export const normalizeTags = (s: string) =>
+  s
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .join(",");
 
 /** Campos editáveis do produto na Fase 2 (variantes, preço, estoque e imagens ficam nas fases seguintes). */
 export const productEditSchema = z.object({
@@ -10,14 +18,7 @@ export const productEditSchema = z.object({
     .string()
     .trim()
     .max(1000, "No máximo 1000 caracteres.")
-    // normaliza "a , b,,c" -> "a,b,c"
-    .transform((s) =>
-      s
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .join(","),
-    ),
+    .transform(normalizeTags),
   published: z.boolean(),
   seo_title: z.string().trim().max(70, "O título SEO deve ter no máximo 70 caracteres."),
   seo_description: z.string().trim().max(320, "A descrição SEO deve ter no máximo 320 caracteres."),
@@ -32,11 +33,24 @@ export function toEdit(detail: ProductDetail): ProductEdit {
   return {
     name: detail.name,
     description: detail.description ?? "",
-    tags: detail.tags ?? "",
+    tags: normalizeTags(detail.tags ?? ""),
     published: detail.published,
     seo_title: detail.seo_title,
     seo_description: detail.seo_description,
     categories: detail.categories.map((c) => c.id).sort((a, b) => a - b),
+  };
+}
+
+/** Estado editável de um produto como a API o devolve (para comparar com o espelho). */
+export function remoteToEdit(p: Product): ProductEdit {
+  return {
+    name: pt(p.name),
+    description: pt(p.description),
+    tags: normalizeTags(p.tags ?? ""),
+    published: p.published ?? false,
+    seo_title: pt(p.seo_title),
+    seo_description: pt(p.seo_description),
+    categories: (p.categories ?? []).map((c) => c.id).sort((a, b) => a - b),
   };
 }
 

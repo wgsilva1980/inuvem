@@ -159,6 +159,26 @@ describe("updateProduct", () => {
     expect((await getProductDetail(db, storeId, 1))!.name).toBe("Mudou na loja");
   });
 
+  it("detecta mudança por fora pelo conteúdo, mesmo com updated_at igual (a loja não o atualiza)", async () => {
+    let put = false;
+    const api: ProductApi = {
+      get: async () => product(1, { description: { pt: "<p>mudou na loja</p>" } }), // mesmo updated_at do espelho
+      put: async () => { put = true; return product(1); },
+    };
+    await expect(updateProduct(db, api, { storeId, actor, productId: 1, after: await edit({ name: "Meu nome" }) })).rejects.toBeInstanceOf(ProductConflictError);
+    expect(put).toBe(false);
+    expect((await getProductDetail(db, storeId, 1))!.description).toBe("<p>mudou na loja</p>");
+  });
+
+  it("não acusa conflito só porque o updated_at mudou ou as tags têm espaços", async () => {
+    await upsertProducts(db, storeId, [product(1, { tags: "a, b" })]);
+    const api: ProductApi = {
+      get: async () => product(1, { tags: "a, b", updated_at: "2026-10-09T10:00:00+0000" }),
+      put: async () => product(1, { name: { pt: "Novo" }, tags: "a, b" }),
+    };
+    expect(await updateProduct(db, api, { storeId, actor, productId: 1, after: await edit({ name: "Novo" }) })).toEqual({ changed: true, fields: ["name"] });
+  });
+
   it("registra a falha da API no histórico e não altera o espelho", async () => {
     const api: ProductApi = {
       get: async () => product(1),
