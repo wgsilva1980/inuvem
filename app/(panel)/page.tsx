@@ -10,6 +10,7 @@ import { listHistory, type HistoryEntry } from "@/lib/history/query";
 import { query, queryOne } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import type { SyncRun } from "@/lib/sync/engine";
+import { Alert } from "@/components/ui/alert";
 
 const ERROS: Record<string, string> = {
   "codigo-ausente": "A Nuvemshop não enviou o código de autorização. Tente conectar novamente.",
@@ -46,14 +47,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   return (
     <main className="flex flex-col gap-4">
       {sp.conectado && (
-        <p role="status" className="rounded-md border border-border bg-card p-3 text-sm text-success">
+        <Alert tone="success">
           Loja conectada com sucesso. Faça a primeira sincronização abaixo.
-        </p>
+        </Alert>
       )}
       {sp.erro && (
-        <p role="alert" className="rounded-md border border-border bg-card p-3 text-sm text-danger">
+        <Alert tone="danger">
           {ERROS[sp.erro] ?? "Ocorreu um erro."}
-        </p>
+        </Alert>
       )}
 
       {stats && stats.produtos > 0 && (

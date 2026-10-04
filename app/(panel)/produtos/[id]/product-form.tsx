@@ -6,8 +6,8 @@ import { Card } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import type { CategoryOption, ProductDetail } from "@/lib/catalog/query";
 import { saveProduct, type SaveState } from "./actions";
-
-const field = "min-h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary";
+import { fieldClass } from "@/components/ui/field";
+import { Alert } from "@/components/ui/alert";
 
 export function ProductForm({ product, categories }: { product: ProductDetail; categories: CategoryOption[] }) {
   const [state, action, pending] = useActionState<SaveState | null, FormData>(saveProduct.bind(null, Number(product.id)), null);
@@ -20,7 +20,7 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
       <Card className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Nome</span>
-          <input name="name" defaultValue={product.name} required maxLength={255} className={field} aria-invalid={!!err("name")} />
+          <input name="name" defaultValue={product.name} required maxLength={255} className={fieldClass} aria-invalid={!!err("name")} />
           {err("name") && <span className="text-danger">{err("name")}</span>}
         </label>
         <div className="flex flex-col gap-1 text-sm">
@@ -32,7 +32,7 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
         </div>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Tags (separadas por vírgula)</span>
-          <input name="tags" defaultValue={product.tags ?? ""} className={field} />
+          <input name="tags" defaultValue={product.tags ?? ""} className={fieldClass} />
           {err("tags") && <span className="text-danger">{err("tags")}</span>}
         </label>
         <label className="flex items-center gap-2 text-sm">
@@ -45,12 +45,12 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
         <h2 className="text-base font-semibold">SEO</h2>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Título (até 70 caracteres)</span>
-          <input name="seo_title" defaultValue={product.seo_title} maxLength={70} className={field} />
+          <input name="seo_title" defaultValue={product.seo_title} maxLength={70} className={fieldClass} />
           {err("seo_title") && <span className="text-danger">{err("seo_title")}</span>}
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Descrição (até 320 caracteres)</span>
-          <textarea name="seo_description" defaultValue={product.seo_description} rows={3} maxLength={320} className={field} />
+          <textarea name="seo_description" defaultValue={product.seo_description} rows={3} maxLength={320} className={fieldClass} />
           {err("seo_description") && <span className="text-danger">{err("seo_description")}</span>}
         </label>
       </Card>
@@ -73,11 +73,7 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
         )}
       </Card>
 
-      {state?.message && (
-        <p role={state.ok ? "status" : "alert"} className={`rounded-md border border-border bg-card p-3 text-sm ${state.ok ? "text-success" : "text-danger"}`}>
-          {state.message}
-        </p>
-      )}
+      {state?.message && <Alert tone={state.ok ? "success" : "danger"}>{state.message}</Alert>}
       <div className="flex gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? "Salvando…" : "Salvar na Nuvemshop"}

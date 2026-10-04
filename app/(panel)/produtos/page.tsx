@@ -7,6 +7,7 @@ import { catalogParamsSchema, filtersQueryString, paramsToFilters } from "@/lib/
 import { listCatalog, listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
+import { fieldBase } from "@/components/ui/field";
 
 export default async function ProdutosPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireAdmin();
@@ -32,8 +33,6 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
     return qs ? `/produtos?${qs}` : "/produtos";
   };
 
-  const field = "min-h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary";
-
   return (
     <main className="flex flex-col gap-4">
       <div className="flex items-end justify-between gap-3">
@@ -45,11 +44,11 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
         <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-6">
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="font-medium">Buscar</span>
-            <input name="q" defaultValue={sp.q ?? ""} placeholder="Nome ou SKU" className={field} />
+            <input name="q" defaultValue={sp.q ?? ""} placeholder="Nome ou SKU" className={fieldBase} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Situação</span>
-            <select name="status" defaultValue={filters.status} className={field}>
+            <select name="status" defaultValue={filters.status} className={fieldBase}>
               <option value="todos">Todos</option>
               <option value="publicados">Publicados</option>
               <option value="rascunhos">Não publicados</option>
@@ -57,7 +56,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Categoria</span>
-            <select name="categoria" defaultValue={sp.categoria ?? ""} className={field}>
+            <select name="categoria" defaultValue={sp.categoria ?? ""} className={fieldBase}>
               <option value="">Todas</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -68,7 +67,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Ordenar por</span>
-            <select name="ordem" defaultValue={filters.sort} className={field}>
+            <select name="ordem" defaultValue={filters.sort} className={fieldBase}>
               <option value="nome">Nome</option>
               <option value="atualizados">Atualizados</option>
             </select>

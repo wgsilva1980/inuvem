@@ -6,8 +6,7 @@ import { Card } from "@/components/ui/card";
 import type { ImageRow } from "@/lib/catalog/images";
 import { prepareImageFile } from "@/lib/client/compress-image";
 import { addProductImage, moveProductImage, removeProductImage, setMainProductImage, uploadProductImage, type ActionState } from "./media-actions";
-
-const field = "min-h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary";
+import { fieldClass } from "@/components/ui/field";
 
 export function ImagesPanel({ productId, images }: { productId: number; images: ImageRow[] }) {
   const [addState, addAction, adding] = useActionState<ActionState | null, FormData>(addProductImage.bind(null, productId), null);
@@ -127,7 +126,7 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
       <form action={addAction} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start">
         <span className="text-sm text-muted sm:pt-2">ou por URL pública:</span>
         <div className="flex-1">
-          <input name="src" type="url" required placeholder="https://exemplo.com/foto.jpg" aria-label="URL da nova imagem" className={field} />
+          <input name="src" type="url" required placeholder="https://exemplo.com/foto.jpg" aria-label="URL da nova imagem" className={fieldClass} />
           {addState?.fieldErrors?.src && <p className="mt-1 text-sm text-danger">{addState.fieldErrors.src}</p>}
         </div>
         <Button type="submit" disabled={adding || busy}>

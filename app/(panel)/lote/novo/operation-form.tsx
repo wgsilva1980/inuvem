@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { CategoryOption } from "@/lib/catalog/query";
 import { createBulk, type BulkFormState } from "../actions";
-
-const field = "min-h-10 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary";
+import { fieldBase } from "@/components/ui/field";
 const label = "flex flex-col gap-1 text-sm";
 
 export function OperationForm({ selecao, total, categories }: { selecao: string; total: number; categories: CategoryOption[] }) {
@@ -24,7 +23,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
       <Card className="flex flex-col gap-4">
         <label className={label}>
           <span className="font-medium">O que fazer com os {total} {total === 1 ? "produto" : "produtos"}?</span>
-          <select name="tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} className={field}>
+          <select name="tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} className={fieldBase}>
             <option value="preco">Alterar preço</option>
             <option value="promocao">Preço promocional (desconto)</option>
             <option value="estoque">Alterar estoque</option>
@@ -37,7 +36,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <label className={label}>
               <span className="text-muted">Ação</span>
-              <select name="preco_modo" value={precoModo} onChange={(e) => setPrecoModo(e.target.value)} className={field}>
+              <select name="preco_modo" value={precoModo} onChange={(e) => setPrecoModo(e.target.value)} className={fieldBase}>
                 <option value="aumentar">Aumentar</option>
                 <option value="diminuir">Diminuir</option>
                 <option value="definir">Definir como</option>
@@ -45,12 +44,12 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             </label>
             <label className={label}>
               <span className="text-muted">{precoModo === "definir" ? "Novo valor (R$)" : "Valor"}</span>
-              <input name="preco_valor" inputMode="decimal" required placeholder={precoModo === "definir" ? "99,90" : "10"} className={field} />
+              <input name="preco_valor" inputMode="decimal" required placeholder={precoModo === "definir" ? "99,90" : "10"} className={fieldBase} />
             </label>
             {precoModo !== "definir" && (
               <label className={label}>
                 <span className="text-muted">Em</span>
-                <select name="preco_unidade" defaultValue="percentual" className={field}>
+                <select name="preco_unidade" defaultValue="percentual" className={fieldBase}>
                   <option value="percentual">% (percentual)</option>
                   <option value="valor">R$ (valor fixo)</option>
                 </select>
@@ -58,7 +57,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             )}
             <label className={label}>
               <span className="text-muted">Aplicar em</span>
-              <select name="preco_alvo" defaultValue="preco" className={field}>
+              <select name="preco_alvo" defaultValue="preco" className={fieldBase}>
                 <option value="preco">Preço</option>
                 <option value="promocional">Preço promocional</option>
               </select>
@@ -70,7 +69,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className={label}>
               <span className="text-muted">Ação</span>
-              <select name="promo_modo" value={promoModo} onChange={(e) => setPromoModo(e.target.value)} className={field}>
+              <select name="promo_modo" value={promoModo} onChange={(e) => setPromoModo(e.target.value)} className={fieldBase}>
                 <option value="desconto">Definir desconto sobre o preço</option>
                 <option value="remover">Remover o preço promocional</option>
               </select>
@@ -78,7 +77,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             {promoModo === "desconto" && (
               <label className={label}>
                 <span className="text-muted">Desconto (%)</span>
-                <input name="promo_percent" inputMode="decimal" required placeholder="15" className={field} />
+                <input name="promo_percent" inputMode="decimal" required placeholder="15" className={fieldBase} />
               </label>
             )}
           </div>
@@ -88,7 +87,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className={label}>
               <span className="text-muted">Ação</span>
-              <select name="estoque_modo" value={estoqueModo} onChange={(e) => setEstoqueModo(e.target.value)} className={field}>
+              <select name="estoque_modo" value={estoqueModo} onChange={(e) => setEstoqueModo(e.target.value)} className={fieldBase}>
                 <option value="definir">Definir como</option>
                 <option value="aumentar">Aumentar em</option>
                 <option value="diminuir">Diminuir em</option>
@@ -96,7 +95,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             </label>
             <label className={label}>
               <span className="text-muted">Quantidade</span>
-              <input name="estoque_valor" inputMode="numeric" required placeholder="10" className={field} />
+              <input name="estoque_valor" inputMode="numeric" required placeholder="10" className={fieldBase} />
             </label>
             <p className="self-end pb-2 text-xs text-muted">Só variantes com controle de estoque são alteradas.</p>
           </div>
@@ -105,7 +104,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
         {tipo === "publicar" && (
           <label className={label}>
             <span className="text-muted">Ação</span>
-            <select name="publicar_modo" defaultValue="publicar" className={field}>
+            <select name="publicar_modo" defaultValue="publicar" className={fieldBase}>
               <option value="publicar">Publicar na loja</option>
               <option value="despublicar">Despublicar (ocultar da loja)</option>
             </select>
@@ -116,14 +115,14 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className={label}>
               <span className="text-muted">Ação</span>
-              <select name="categoria_modo" defaultValue="adicionar" className={field}>
+              <select name="categoria_modo" defaultValue="adicionar" className={fieldBase}>
                 <option value="adicionar">Adicionar à categoria</option>
                 <option value="remover">Remover da categoria</option>
               </select>
             </label>
             <label className={label}>
               <span className="text-muted">Categoria</span>
-              <select name="categoria_id" required defaultValue="" className={field}>
+              <select name="categoria_id" required defaultValue="" className={fieldBase}>
                 <option value="" disabled>
                   Escolha…
                 </option>
@@ -140,7 +139,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
         {showRounding && (
           <label className={label}>
             <span className="text-muted">Arredondamento do resultado</span>
-            <select name="arredondar" defaultValue="nenhum" className={`${field} sm:max-w-xs`}>
+            <select name="arredondar" defaultValue="nenhum" className={`${fieldBase} sm:max-w-xs`}>
               <option value="nenhum">Sem arredondamento</option>
               <option value="90">Terminar em ,90</option>
               <option value="00">Reais inteiros</option>

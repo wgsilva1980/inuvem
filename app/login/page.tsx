@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { fieldClass } from "@/components/ui/field";
 import { authClient } from "@/lib/auth/client";
 
 interface LoginState {
@@ -81,7 +82,7 @@ export default function LoginPage() {
               required
               autoComplete="email"
               placeholder="voce@exemplo.com"
-              className="min-h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+              className={fieldClass}
             />
             {state?.error && (
               <p role="alert" className="text-sm text-danger">

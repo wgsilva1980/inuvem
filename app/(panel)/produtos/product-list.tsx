@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { buttonClass } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { CatalogItem } from "@/lib/catalog/query";
 
 const brl = (value: string | null) => (value === null ? "—" : Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -44,7 +46,11 @@ export function ProductList({ items, total, filterQuery }: { items: CatalogItem[
 
       <Card className="p-0 sm:p-0">
         {items.length === 0 ? (
-          <p className="p-6 text-sm text-muted">Nenhum produto encontrado com esses filtros.</p>
+          <EmptyState title="Nenhum produto encontrado com esses filtros.">
+            <Link href="/produtos" className={buttonClass("outline")}>
+              Limpar filtros
+            </Link>
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-border">
             {items.map((p) => (
@@ -60,7 +66,7 @@ export function ProductList({ items, total, filterQuery }: { items: CatalogItem[
                   <div className="flex shrink-0 items-center gap-4 text-sm">
                     <span>{priceRange(p.price_min, p.price_max)}</span>
                     <span className="text-muted">Estoque: {p.stock_total ?? "—"}</span>
-                    <span className={p.published ? "text-success" : "text-muted"}>{p.published ? "Publicado" : "Não publicado"}</span>
+                    <Badge tone={p.published ? "success" : "neutral"}>{p.published ? "Publicado" : "Não publicado"}</Badge>
                   </div>
                 </Link>
               </li>
