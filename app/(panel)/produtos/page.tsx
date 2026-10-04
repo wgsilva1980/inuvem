@@ -23,11 +23,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
   const [result, categories] = await Promise.all([listCatalog(db, store.id, filters), listCategoryOptions(db, store.id)]);
 
   const href = (page: number) => {
-    const p = new URLSearchParams();
-    if (sp.q) p.set("q", sp.q);
-    if (sp.status && sp.status !== "todos") p.set("status", sp.status);
-    if (sp.categoria) p.set("categoria", String(sp.categoria));
-    if (sp.sem_sku) p.set("sem_sku", "1");
+    const p = new URLSearchParams(filtersQueryString(sp));
     if (sp.ordem && sp.ordem !== "nome") p.set("ordem", sp.ordem);
     if (page > 1) p.set("pagina", String(page));
     const qs = p.toString();
@@ -75,10 +71,23 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
               <option value="atualizados">Atualizados</option>
             </select>
           </label>
-          <label className="flex items-end gap-2 pb-2 text-sm">
-            <input type="checkbox" name="sem_sku" value="1" defaultChecked={filters.semSku} />
-            <span>Com variante sem SKU</span>
-          </label>
+          <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:col-span-6">
+            <legend className="mb-1 font-medium">Mostrar só produtos…</legend>
+            {(
+              [
+                ["sem_sku", "com variante sem SKU", filters.semSku],
+                ["sem_imagem", "sem imagem", filters.semImagem],
+                ["sem_categoria", "sem categoria", filters.semCategoria],
+                ["sem_estoque", "com variante sem estoque", filters.semEstoque],
+                ["sem_descricao", "sem descrição", filters.semDescricao],
+              ] as const
+            ).map(([name, text, checked]) => (
+              <label key={name} className="flex items-center gap-2">
+                <input type="checkbox" name={name} value="1" defaultChecked={checked} />
+                <span>{text}</span>
+              </label>
+            ))}
+          </fieldset>
           <div className="flex gap-2 sm:col-span-6">
             <button type="submit" className={buttonClass("primary")}>
               Filtrar

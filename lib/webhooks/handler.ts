@@ -3,7 +3,7 @@ import { z } from "zod";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Category, Product } from "@/lib/nuvemshop/types";
 import { verifyWebhookSignature } from "@/lib/nuvemshop/webhook-verify";
-import { upsertCategories, upsertProducts, type Db } from "@/lib/sync/repo";
+import { removeCategoryFromMirror, upsertCategories, upsertProducts, type Db } from "@/lib/sync/repo";
 
 /** Eventos que o painel assina na Nuvemshop (produtos e categorias). */
 export const WEBHOOK_EVENTS = [
@@ -70,17 +70,6 @@ async function removeProduct(db: Db, storeId: string, id: number) {
   await db.query("DELETE FROM products WHERE store_id = $1::uuid AND id = $2::bigint", [storeId, id]);
 }
 
-async function removeCategory(db: Db, storeId: string, id: number) {
-  await db.query("DELETE FROM categories WHERE store_id = $1::uuid AND id = $2::bigint", [storeId, id]);
-  // Produtos que apontavam para a categoria deixam de listá-la.
-  await db.query(
-    `UPDATE products
-       SET categories = coalesce((SELECT jsonb_agg(c) FROM jsonb_array_elements(categories) c WHERE (c->>'id')::bigint <> $2::bigint), '[]'::jsonb)
-     WHERE store_id = $1::uuid AND categories @> $3::jsonb`,
-    [storeId, id, JSON.stringify([{ id }])],
-  );
-}
-
 async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEvent, id: number) {
   const { db } = deps;
   const storeId = store.id;
@@ -88,7 +77,7 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
     case "product/deleted":
       return removeProduct(db, storeId, id);
     case "category/deleted":
-      return removeCategory(db, storeId, id);
+      return removeCategoryFromMirror(db, storeId, id);
     case "product/created":
     case "product/updated": {
       const api = await deps.apiFor(store);
@@ -106,7 +95,7 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
       try {
         await upsertCategories(db, storeId, [await api.getCategory(id)]);
       } catch (err) {
-        if (isNotFound(err)) return removeCategory(db, storeId, id);
+        if (isNotFound(err)) return removeCategoryFromMirror(db, storeId, id);
         throw err;
       }
       return;

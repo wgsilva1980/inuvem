@@ -7,13 +7,17 @@ export const catalogParamsSchema = z.object({
   status: z.enum(["todos", "publicados", "rascunhos"]).optional().catch(undefined),
   categoria: z.coerce.number().int().positive().optional().catch(undefined),
   sem_sku: z.literal("1").optional().catch(undefined),
+  sem_imagem: z.literal("1").optional().catch(undefined),
+  sem_categoria: z.literal("1").optional().catch(undefined),
+  sem_estoque: z.literal("1").optional().catch(undefined),
+  sem_descricao: z.literal("1").optional().catch(undefined),
   ordem: z.enum(["nome", "atualizados"]).optional().catch(undefined),
   pagina: z.coerce.number().int().min(1).optional().catch(undefined),
 });
 export type CatalogParams = z.infer<typeof catalogParamsSchema>;
 
 export function paramsToFilters(sp: CatalogParams): CatalogFilters {
-  return { q: sp.q, status: sp.status ?? "todos", categoryId: sp.categoria, semSku: sp.sem_sku === "1", sort: sp.ordem ?? "nome", page: sp.pagina };
+  return { q: sp.q, status: sp.status ?? "todos", categoryId: sp.categoria, semSku: sp.sem_sku === "1", semImagem: sp.sem_imagem === "1", semCategoria: sp.sem_categoria === "1", semEstoque: sp.sem_estoque === "1", semDescricao: sp.sem_descricao === "1", sort: sp.ordem ?? "nome", page: sp.pagina };
 }
 
 /** Só os filtros (sem página nem ordem) como query string, para ir junto de "selecionar todos os resultados". */
@@ -22,6 +26,6 @@ export function filtersQueryString(sp: CatalogParams): string {
   if (sp.q) p.set("q", sp.q);
   if (sp.status && sp.status !== "todos") p.set("status", sp.status);
   if (sp.categoria) p.set("categoria", String(sp.categoria));
-  if (sp.sem_sku) p.set("sem_sku", "1");
+  for (const k of ["sem_sku", "sem_imagem", "sem_categoria", "sem_estoque", "sem_descricao"] as const) if (sp[k]) p.set(k, "1");
   return p.toString();
 }

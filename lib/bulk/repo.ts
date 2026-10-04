@@ -172,7 +172,7 @@ export async function cancelJob(db: Db, storeId: string, id: string): Promise<bo
 
 /** Pega até `limit` produtos pendentes (ou travados há mais de 2 min). SKIP LOCKED: dois "passos" simultâneos nunca pegam o mesmo item. */
 export async function claimItems(db: Db, jobId: string, limit: number): Promise<JobItem[]> {
-  return db.query<JobItem>(
+  const items = await db.query<JobItem>(
     `UPDATE bulk_job_items i SET status = 'processing', claimed_at = now()
      WHERE (i.job_id, i.seq) IN (
        SELECT job_id, seq FROM bulk_job_items
@@ -181,6 +181,8 @@ export async function claimItems(db: Db, jobId: string, limit: number): Promise<
      RETURNING i.seq, i.product_id::text AS product_id, i.product_name, i.changes, i.status, i.resultado`,
     [jobId],
   );
+  // O RETURNING não garante ordem: processa sempre na ordem da pré-visualização (progresso e histórico previsíveis).
+  return items.sort((a, b) => a.seq - b.seq);
 }
 
 export async function completeItem(db: Db, jobId: string, seq: number, status: "ok" | "error" | "conflict", resultado: ItemResult): Promise<void> {

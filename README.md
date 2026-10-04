@@ -20,6 +20,10 @@ Próximas: catálogo (2), variantes e imagens (3), operações em massa (4), cat
   `repo.ts` guarda o lote e os itens (`bulk_jobs`, `bulk_job_items`), `engine.ts` aplica em passos curtos e retomáveis e reverte.
   Fluxo: escolher produtos na lista → configurar a operação → **pré-visualizar (nada vai à loja)** → confirmar → aplicar (cada produto é
   conferido na loja antes de alterar; se mudou, fica de fora como "conflito") → opcionalmente **reverter o lote**.
+- `lib/categories/` — categorias (Fase 5): árvore, criar/renomear/mover/apagar com regras (sem ciclos, sem nome repetido no mesmo nível,
+  não apaga categoria com subcategorias), detecção de alteração por fora e `audit_log`.
+- `lib/dashboard/` e `lib/history/` — indicadores do painel inicial (cada "ponto de atenção" abre a lista de produtos já filtrada) e o
+  histórico pesquisável das alterações (`audit_log` com o nome do que mudou).
 - `lib/webhooks/` — webhooks de produtos e categorias (`/api/webhooks/nuvemshop`, público, autenticado por HMAC): busca o estado
   atual na API e atualiza o espelho; registro idempotente dos eventos (`register.ts`), acionado pelo botão "Registrar webhooks" no painel.
 - `lib/auth/` — Neon Auth (magic link) + allowlist de admins (`admins`). Exige e-mail verificado.
@@ -132,9 +136,13 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
 11. **Operações em massa.** Aplico cada alteração com os mesmos `PUT /products/{id}` e `PUT /products/{id}/variants/{id}` já usados na edição
    individual (1 leitura + 1 escrita por produto/variante), e não o `PATCH /products/stock-price` (formato não confirmado). Custo: ~2 chamadas por
    variante, no limite de 2 req/s por loja; um lote de ~190 produtos leva alguns minutos, em passos de até 30 s.
-12. **Webhooks de produtos e categorias.** Nomes dos eventos (`product/created|updated|deleted`, `category/created|updated|deleted`),
+12. **Categorias (Fase 5).** `POST /categories` com `name` e `parent`, `PUT /categories/{id}` com `name`/`parent` e `DELETE`. Para mover uma
+   categoria para a raiz envio `parent: null` (a API pode esperar outro valor, por exemplo `0`); se a loja recusar, a mensagem aparece na
+   tela e o histórico guarda a resposta. Também não confirmei o que a Nuvemshop faz com os produtos de uma categoria apagada (o painel
+   tira a categoria deles no espelho e os webhooks confirmam).
+13. **Webhooks de produtos e categorias.** Nomes dos eventos (`product/created|updated|deleted`, `category/created|updated|deleted`),
    corpo `{ store_id, event, id }`, `POST /webhooks` com `{ event, url }` e o header de assinatura (item 7). Como o corpo não traz hora nem
    id de entrega, a deduplicação só descarta repetições em até 3 s; o processamento é idempotente (busca o estado atual e regrava).
    Se todas as entregas forem recusadas com 401, o nome do header de assinatura está errado (o log `webhook.rejected` mostra se ele veio).
-13. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
+14. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
    (versão beta), mas o envio real do e-mail não foi testado fora do seu ambiente.

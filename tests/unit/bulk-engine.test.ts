@@ -137,6 +137,7 @@ describe("execução", () => {
     expect((await getJob(db, storeId, jobId))!.status).toBe("completed");
     const log = await audits();
     expect(log).toHaveLength(2);
+    expect(log.map((l) => l.entidade_id)).toEqual(["1", "2"]); // processados na ordem da pré-visualização
     expect(log[0]).toMatchObject({ acao: "lote.preco", entidade_id: "1", sucesso: true });
     expect(log[0]!.antes).toMatchObject({ lote: jobId, variantes: { "10": { preco: "100.00" } } });
     expect(log[0]!.depois).toMatchObject({ variantes: { "10": { preco: "110.00" } } });
@@ -232,6 +233,16 @@ describe("execução", () => {
     expect(await claimItems(db, jobId, 5)).toHaveLength(0); // já estão em processamento
     await pg.query("UPDATE bulk_job_items SET claimed_at = now() - interval '3 minutes' WHERE seq = 1");
     expect((await claimItems(db, jobId, 5)).map((i) => i.seq)).toEqual([1]);
+  });
+
+  it("claimItems devolve sempre na ordem da pré-visualização", async () => {
+    await setup([product(1), product(2), product(3), product(4)]);
+    const { jobId } = await newJob({ type: "publicar", published: false }, [1, 2, 3, 4]);
+    await startJob(db, storeId, jobId);
+    for (let i = 0; i < 5; i++) {
+      await pg.query("UPDATE bulk_job_items SET status = 'pending', claimed_at = NULL WHERE job_id = $1", [jobId]);
+      expect((await claimItems(db, jobId, 4)).map((x) => x.seq)).toEqual([1, 2, 3, 4]);
+    }
   });
 
   it("só um lote em execução por loja; cancelar interrompe", async () => {
