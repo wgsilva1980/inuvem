@@ -51,6 +51,14 @@ describe("checkEnv", () => {
     expect(r.invalid).toEqual([]);
     expect(r.unverifiable.sort()).toEqual(["CRON_SECRET", "ENCRYPTION_KEY", "NUVEMSHOP_CLIENT_SECRET"]);
   });
+  it("acusa APP_URL apontando para localhost somente em produção", () => {
+    const local = { ...good, APP_URL: "http://localhost:3000" };
+    expect(checkEnv(local).ok).toBe(true); // desenvolvimento local é normal
+    const r = checkEnv({ ...local, VERCEL_ENV: "production" });
+    expect(r.ok).toBe(false);
+    expect(r.invalid).toEqual([{ name: "APP_URL", problem: expect.stringContaining("localhost") }]);
+    expect(checkEnv({ ...good, VERCEL_ENV: "production" }).ok).toBe(true);
+  });
   it("avisa sobre connection string não pooled, http em produção e client id diferente", () => {
     const r = checkEnv({
       ...good,
