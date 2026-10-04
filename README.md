@@ -14,6 +14,8 @@ Próximas: catálogo (2), variantes e imagens (3), operações em massa (4), cat
 - `lib/sync/` — motor de sincronização retomável (cursor em `sync_runs`, lotes curtos por causa do timeout da Vercel).
 - `lib/catalog/` — catálogo (Fase 2): consulta com filtros sobre o espelho (`query.ts`), regras de edição (`edit.ts`) e o
   salvamento (`update.ts`): confere conflito com a loja, envia só os campos alterados, atualiza o espelho e grava em `audit_log`.
+- `lib/webhooks/` — webhooks de produtos e categorias (`/api/webhooks/nuvemshop`, público, autenticado por HMAC): busca o estado
+  atual na API e atualiza o espelho; registro idempotente dos eventos (`register.ts`), acionado pelo botão "Registrar webhooks" no painel.
 - `lib/auth/` — Neon Auth (magic link) + allowlist de admins (`admins`). Exige e-mail verificado.
 - `lib/crypto.ts` — AES-256-GCM para o token da loja (`ENCRYPTION_KEY`).
 - `db/migrations/` — SQL puro, aplicado por `npm run db:migrate`.
@@ -111,5 +113,9 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
 9. **Edição de produto (Fase 2).** `PUT /products/{id}` com corpo parcial (só os campos alterados), `categories` como lista de IDs,
    campos multi-idioma como `{ "pt": "..." }`, e o formato de `updated_at` usado para detectar alteração feita por fora da loja.
    `images[].alt` chega como objeto multi-idioma na loja real (a documentação mostra lista); o schema aceita as duas formas.
-10. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
+10. **Webhooks de produtos e categorias.** Nomes dos eventos (`product/created|updated|deleted`, `category/created|updated|deleted`),
+   corpo `{ store_id, event, id }`, `POST /webhooks` com `{ event, url }` e o header de assinatura (item 7). Como o corpo não traz hora nem
+   id de entrega, a deduplicação só descarta repetições em até 3 s; o processamento é idempotente (busca o estado atual e regrava).
+   Se todas as entregas forem recusadas com 401, o nome do header de assinatura está errado (o log `webhook.rejected` mostra se ele veio).
+11. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
    (versão beta), mas o envio real do e-mail não foi testado fora do seu ambiente.
