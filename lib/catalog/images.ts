@@ -24,6 +24,16 @@ export const imageUrlSchema = z
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 export const UPLOAD_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
 
+/** Tipo real da imagem pelos primeiros bytes (o tipo declarado pelo navegador não é confiável). null se não for um dos formatos aceitos. */
+export function sniffImageType(bytes: Uint8Array): keyof typeof UPLOAD_TYPES | null {
+  const starts = (sig: number[], at = 0) => sig.every((b, i) => bytes[at + i] === b);
+  if (starts([0xff, 0xd8, 0xff])) return "image/jpeg";
+  if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
+  if (starts([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) || starts([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])) return "image/gif";
+  if (starts([0x52, 0x49, 0x46, 0x46]) && starts([0x57, 0x45, 0x42, 0x50], 8)) return "image/webp";
+  return null;
+}
+
 /** Confere tipo e tamanho do arquivo enviado; devolve a mensagem de erro ou null. */
 export function validateImageUpload(file: { type: string; size: number }): string | null {
   if (!(file.type in UPLOAD_TYPES)) return "Formato não aceito. Use JPEG, PNG, WEBP ou GIF.";

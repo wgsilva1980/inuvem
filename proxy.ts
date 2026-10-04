@@ -13,6 +13,7 @@ export default function proxy(...args: Parameters<Middleware>): ReturnType<Middl
 
 export const config = {
   matcher: [
-    "/((?!api/auth|api/cron|api/health|api/sync|api/webhooks|api/nuvemshop/webhooks|api/nuvemshop/callback|login|_next/static|_next/image|favicon.ico).*)",
+    // Cada exceção termina em "/" ou fim do caminho: "login" não deixa "/login-qualquer-coisa" escapar do filtro de sessão.
+    "/((?!(?:api/auth|api/cron|api/health|api/sync|api/webhooks|api/nuvemshop/webhooks|api/nuvemshop/callback|login|_next/static|_next/image)(?:/|$)|favicon\\.ico$).*)",
   ],
 };

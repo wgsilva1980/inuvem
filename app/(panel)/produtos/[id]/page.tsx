@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { notFound } from "next/navigation";
 import { getProductImages } from "@/lib/catalog/images";
 import { getProductDetail, listCategoryOptions } from "@/lib/catalog/query";
@@ -9,6 +10,7 @@ import { ProductForm } from "./product-form";
 import { VariantsEditor } from "./variants-editor";
 
 export default async function ProdutoPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const productId = Number(id);
   if (!Number.isInteger(productId) || productId <= 0) notFound();

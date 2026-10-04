@@ -2,8 +2,8 @@ import { cookies } from "next/headers";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { getEnv, userAgent } from "@/lib/env";
 import { NuvemshopError, exchangeCode } from "@/lib/nuvemshop";
-import { safeEqual } from "@/lib/security";
-import { saveStore } from "@/lib/stores";
+import { mayConnectStore, safeEqual } from "@/lib/security";
+import { getActiveStore, saveStore } from "@/lib/stores";
 
 /** Volta ao painel na mesma origem em que a requisição chegou (não depende de APP_URL). */
 function back(request: Request, path: string): Response {
@@ -34,6 +34,12 @@ export async function GET(request: Request) {
       code,
       userAgent: userAgent(env),
     });
+    // Painel de uma loja só: um callback forjado não pode trocar a loja já conectada por outra.
+    const existing = await getActiveStore();
+    if (!mayConnectStore(existing?.nuvemshop_store_id, token.user_id)) {
+      console.error(JSON.stringify({ level: "warn", event: "nuvemshop.oauth_other_store_rejected" }));
+      return back(request, "/?erro=loja-diferente");
+    }
     await saveStore({ nuvemshopStoreId: token.user_id, accessToken: token.access_token, scope: token.scope });
     (await cookies()).delete("ns_state");
     return back(request, "/?conectado=1");

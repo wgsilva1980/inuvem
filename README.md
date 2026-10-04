@@ -106,6 +106,36 @@ cp .env.example .env.local
 | `npm run db:seed-admin -- email` | libera um e-mail no painel |
 | `npm run check:env [-- arquivo]` | valida as variáveis de ambiente |
 
+## Segurança (revisão da Fase 5)
+
+Modelo: painel privado de uma loja só. O navegador nunca fala com a Nuvemshop nem com o banco; tudo passa pelo servidor.
+
+**Autorização em camadas**
+1. `proxy.ts` exige sessão em tudo, exceto rotas com autenticação própria (webhooks com HMAC, cron/health com `CRON_SECRET`, login, OAuth).
+   Cada exceção vale só para o caminho exato (`/login` sim, `/login-qualquer-coisa` não).
+2. **Cada página, Server Action e rota de API chama `requireAdmin()`/`requireAdminApi()`** (sessão + e-mail verificado + lista `admins`).
+   Não dependemos do layout: o Next pode renderizar uma página sem rodar o layout.
+3. Segredos do app e da loja só no servidor (`server-only`); o token da Nuvemshop fica criptografado (AES-256-GCM) e nunca é logado.
+
+**Entradas**
+- SQL sempre parametrizado (os trechos dinâmicos são fragmentos fixos do código; limites são números internos).
+- Descrição HTML sanitizada no servidor quando editada; upload de imagem confere o conteúdo real (bytes iniciais), não o tipo declarado.
+- Webhooks: HMAC-SHA256 do corpo bruto com comparação em tempo constante; `store-redact` (destrutivo) também exige assinatura.
+- OAuth: `state` em cookie `HttpOnly`; o callback exige sessão de admin e **não aceita trocar a loja já conectada**.
+
+**Abuso e navegador**
+- Rotas POST chamadas pela tela recusam requisições de outro site (`Origin`/`Sec-Fetch-Site`), além do cookie de sessão `SameSite=Lax`.
+- Pedido de link de acesso limitado por IP (5 por 15 min) e no total (30 por hora), para ninguém encher a caixa do administrador nem esgotar a cota de envio de e-mail.
+- Cabeçalhos: `X-Frame-Options: DENY` e `frame-ancestors 'none'` (clickjacking), `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS.
+  Não há `script-src` de propósito (o Next injeta scripts em linha); fechar isso exigiria nonces.
+
+**Sua parte (não dá para fazer pelo código)**
+- Rotacionar `CRON_SECRET` e o Client Secret da Nuvemshop se algum dia foram colados em chat, e-mail ou tela compartilhada.
+- No Neon Console → Auth: manter o cadastro de novos usuários desligado e, se não usa login com Google, **remover o provedor Google**
+  (com ele ativo, qualquer conta Google poderia criar um usuário no Neon Auth; o painel ainda recusaria por não estar em `admins`, mas é uma porta a menos).
+- Manter a lista `admins` só com quem deve ter acesso (`npm run db:seed-admin -- email`).
+- `ENCRYPTION_KEY`: guardar uma cópia segura; trocá-la exige reconectar a loja (o formato `v1.` já permite versionar a chave no futuro).
+
 ## Pontos da documentação que ainda NÃO consegui confirmar
 
 Marcados no código como "a confirmar". Validar com a documentação oficial / uma chamada real antes de depender deles:

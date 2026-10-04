@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
 import { loadCategories, productCountsByCategory } from "@/lib/categories/manage";
 import { descendantIds, flattenTree } from "@/lib/categories/tree";
@@ -9,6 +10,7 @@ import { CreateCategoryForm, DeleteCategoryButton, EditCategoryForm, type Parent
 export const dynamic = "force-dynamic";
 
 export default async function CategoriasPage() {
+  await requireAdmin();
   const store = await getActiveStore();
   if (!store) {
     return (

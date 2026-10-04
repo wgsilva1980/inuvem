@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
 import { ProductList } from "./product-list";
 import { buttonClass } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 
 export default async function ProdutosPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  await requireAdmin();
   const store = await getActiveStore();
   if (!store) {
     return (

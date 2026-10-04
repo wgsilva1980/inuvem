@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
 import { STATUS_LABEL } from "@/lib/bulk/format";
 import { listJobs } from "@/lib/bulk/repo";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 const fmt = (d: string) => new Date(d).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
 export default async function LotesPage() {
+  await requireAdmin();
   const store = await getActiveStore();
   const jobs = store ? await listJobs({ query }, store.id) : [];
   return (

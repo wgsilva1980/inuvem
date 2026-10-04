@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
 import { MAX_PRODUCTS_PER_JOB } from "@/lib/bulk/operations";
 import { resolveSelection } from "@/lib/bulk/selection";
@@ -9,6 +10,7 @@ import { getActiveStore } from "@/lib/stores";
 import { OperationForm } from "./operation-form";
 
 export default async function NovoLotePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  await requireAdmin();
   const store = await getActiveStore();
   if (!store) {
     return (

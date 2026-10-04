@@ -49,6 +49,7 @@ function parse(formData: FormData): { edit: ReturnType<typeof categoryEditSchema
 }
 
 export async function createCategoryAction(_prev: CategoryActionState | null, formData: FormData): Promise<CategoryActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   const p = parse(formData);
   if ("state" in p) return p.state;
   return run(async ({ storeId, actor, api }) => {
@@ -58,6 +59,7 @@ export async function createCategoryAction(_prev: CategoryActionState | null, fo
 }
 
 export async function updateCategoryAction(id: number, _prev: CategoryActionState | null, formData: FormData): Promise<CategoryActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   if (!Number.isInteger(id) || id <= 0) return { message: "Categoria inválida." };
   const p = parse(formData);
   if ("state" in p) return p.state;
@@ -68,6 +70,7 @@ export async function updateCategoryAction(id: number, _prev: CategoryActionStat
 }
 
 export async function deleteCategoryAction(id: number): Promise<CategoryActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   if (!Number.isInteger(id) || id <= 0) return { message: "Categoria inválida." };
   return run(async ({ storeId, actor, api }) => {
     const r = await deleteCategory(db, api, { storeId, actor, id });
