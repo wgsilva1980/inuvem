@@ -11,6 +11,7 @@ import { query, queryOne } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import type { SyncRun } from "@/lib/sync/engine";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 const ERROS: Record<string, string> = {
   "codigo-ausente": "A Nuvemshop não enviou o código de autorização. Tente conectar novamente.",
@@ -44,6 +45,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
     ))[0] ?? null;
   }
 
+  const attention = stats
+    ? [
+        { label: "sem imagem", value: stats.semImagem, param: "sem_imagem" },
+        { label: "sem categoria", value: stats.semCategoria, param: "sem_categoria" },
+        { label: "com variante sem SKU", value: stats.semSku, param: "sem_sku" },
+        { label: "com variante sem estoque", value: stats.semEstoque, param: "sem_estoque" },
+        { label: "sem descrição", value: stats.semDescricao, param: "sem_descricao" },
+      ]
+    : [];
+
+  // O bloco de conexão fica aberto só quando precisa de ação: sem loja, nunca sincronizou ou a última sincronização falhou.
+  const connectionNeedsAttention = !store || !last || last.status === "failed";
+  const connectionSummary = !store
+    ? "Nenhuma loja conectada"
+    : `Loja ${store.nuvemshop_store_id} · ${last ? (last.status === "failed" ? "última sincronização falhou" : `sincronizada em ${fmt(last.finished_at ?? last.started_at)}`) : "ainda não sincronizada"}`;
+
   return (
     <main className="flex flex-col gap-4">
       {sp.conectado && (
@@ -58,49 +75,52 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       )}
 
       {stats && stats.produtos > 0 && (
-        <Card>
-          <h2 className="text-base font-semibold">Visão geral do catálogo</h2>
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
-            {(
-              [
-                ["Produtos", stats.produtos, "/produtos"],
-                ["Publicados", stats.publicados, "/produtos?status=publicados"],
-                ["Não publicados", stats.naoPublicados, "/produtos?status=rascunhos"],
-                ["Variantes", stats.variantes, null],
-                ["Categorias", stats.categorias, "/categorias"],
-              ] as const
-            ).map(([label, value, href]) => (
-              <div key={label}>
-                <dt className="text-muted">{label}</dt>
-                <dd className="text-2xl font-semibold">{href ? <Link href={href} className="hover:underline">{value}</Link> : value}</dd>
-              </div>
-            ))}
-          </dl>
+        <>
+          <Card>
+            <h2 className="text-base font-semibold">Precisa de atenção</h2>
+            {attention.every((a) => a.value === 0) ? (
+              <p className="mt-2 text-sm text-success">Tudo em ordem: nenhum produto com pendências.</p>
+            ) : (
+              <ul className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                {attention.map((a) => (
+                  <li key={a.param}>
+                    {a.value > 0 ? (
+                      <Link href={`/produtos?${a.param}=1`} className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border-strong px-3 py-2 hover:bg-border/40">
+                        <span>Produtos {a.label}</span>
+                        <Badge tone="danger">{a.value}</Badge>
+                      </Link>
+                    ) : (
+                      <div className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-muted">
+                        <span>Produtos {a.label}</span>
+                        <Badge tone="success">0</Badge>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
 
-          <h3 className="mt-5 text-sm font-semibold">Pontos de atenção</h3>
-          <ul className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            {(
-              [
-                ["sem imagem", stats.semImagem, "sem_imagem"],
-                ["sem categoria", stats.semCategoria, "sem_categoria"],
-                ["com variante sem SKU", stats.semSku, "sem_sku"],
-                ["com variante sem estoque", stats.semEstoque, "sem_estoque"],
-                ["sem descrição", stats.semDescricao, "sem_descricao"],
-              ] as const
-            ).map(([label, value, param]) => (
-              <li key={param} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <span>Produtos {label}</span>
-                {value > 0 ? (
-                  <Link href={`/produtos?${param}=1`} className="font-semibold text-danger underline">
-                    {value}
-                  </Link>
-                ) : (
-                  <span className="text-success">0</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
+          <Card>
+            <h2 className="text-base font-semibold">Visão geral do catálogo</h2>
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+              {(
+                [
+                  ["Produtos", stats.produtos, "/produtos"],
+                  ["Publicados", stats.publicados, "/produtos?status=publicados"],
+                  ["Não publicados", stats.naoPublicados, "/produtos?status=rascunhos"],
+                  ["Variantes", stats.variantes, null],
+                  ["Categorias", stats.categorias, "/categorias"],
+                ] as const
+              ).map(([label, value, href]) => (
+                <div key={label}>
+                  <dt className="text-muted">{label}</dt>
+                  <dd className="text-2xl font-semibold">{href ? <Link href={href} className="hover:underline">{value}</Link> : value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+        </>
       )}
 
       {recent.length > 0 && (
@@ -127,59 +147,75 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       )}
 
       <Card>
-        <h2 className="text-base font-semibold">Loja Nuvemshop</h2>
-        {store ? (
-          <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="text-muted">ID da loja</dt>
-              <dd className="font-medium">{store.nuvemshop_store_id}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Permissões</dt>
-              <dd className="font-medium">{store.scope || "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Conectada em</dt>
-              <dd className="font-medium">{fmt(store.created_at)}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="mt-2 text-sm text-muted">Nenhuma loja conectada ainda.</p>
-        )}
-        <div className="mt-4">
-          <a href="/api/nuvemshop/connect" className={buttonClass(store ? "outline" : "primary")}>
-            {store ? "Reconectar loja" : "Conectar loja Nuvemshop"}
-          </a>
-        </div>
-      </Card>
+        <details open={connectionNeedsAttention} className="group">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md">
+            <span>
+              <span className="block text-base font-semibold">Conexão com a loja</span>
+              <span className="block text-sm text-muted">{connectionSummary}</span>
+            </span>
+            <span aria-hidden="true" className="text-muted transition group-open:rotate-180">
+              ▾
+            </span>
+          </summary>
 
-      <Card>
-        <h2 className="text-base font-semibold">Sincronização</h2>
-        <p className="mt-1 text-sm text-muted">O catálogo daqui é uma cópia da loja; webhooks e o cron diário a mantêm em dia, e você pode forçar a qualquer momento.</p>
-        <p className="mt-3 text-sm text-muted">
-          Última sincronização: {last ? `${last.tipo} · ${last.status === "completed" ? "concluída" : last.status === "failed" ? "falhou" : "em andamento"} · ${fmt(last.finished_at ?? last.started_at)}` : "nunca"}
-        </p>
-        {last?.erros?.length ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            Último erro: {last.erros[last.erros.length - 1]?.message}
-          </p>
-        ) : null}
-        <div className="mt-4">
-          <SyncButton disabled={!store} />
-        </div>
-      </Card>
+          <div className="mt-4 flex flex-col gap-6">
+            <section>
+              <h3 className="text-sm font-semibold">Loja Nuvemshop</h3>
+              {store ? (
+                <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                  <div>
+                    <dt className="text-muted">ID da loja</dt>
+                    <dd className="font-medium">{store.nuvemshop_store_id}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Permissões</dt>
+                    <dd className="font-medium">{store.scope || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Conectada em</dt>
+                    <dd className="font-medium">{fmt(store.created_at)}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="mt-2 text-sm text-muted">Nenhuma loja conectada ainda.</p>
+              )}
+              <div className="mt-4">
+                <a href="/api/nuvemshop/connect" className={buttonClass(store ? "outline" : "primary")}>
+                  {store ? "Reconectar loja" : "Conectar loja Nuvemshop"}
+                </a>
+              </div>
+            </section>
 
-      <Card>
-        <h2 className="text-base font-semibold">Webhooks</h2>
-        <p className="mt-2 text-sm text-muted">
-          A Nuvemshop avisa o painel quando um produto ou categoria muda, e o espelho é atualizado na hora. Registre uma vez (pode repetir sem problema).
-        </p>
-        <p className="mt-2 text-sm text-muted">
-          Último evento recebido: {lastWebhook ? `${lastWebhook.event} · ${fmt(lastWebhook.received_at)}` : "nenhum ainda"}
-        </p>
-        <div className="mt-4">
-          <WebhookButton disabled={!store} />
-        </div>
+            <section>
+              <h3 className="text-sm font-semibold">Sincronização</h3>
+              <p className="mt-1 text-sm text-muted">O catálogo daqui é uma cópia da loja; webhooks e o cron diário a mantêm em dia, e você pode forçar a qualquer momento.</p>
+              <p className="mt-3 text-sm text-muted">
+                Última sincronização: {last ? `${last.tipo} · ${last.status === "completed" ? "concluída" : last.status === "failed" ? "falhou" : "em andamento"} · ${fmt(last.finished_at ?? last.started_at)}` : "nunca"}
+              </p>
+              {last?.erros?.length ? (
+                <p role="alert" className="mt-1 text-sm text-danger">
+                  Último erro: {last.erros[last.erros.length - 1]?.message}
+                </p>
+              ) : null}
+              <div className="mt-4">
+                <SyncButton disabled={!store} />
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold">Webhooks</h3>
+              <p className="mt-2 text-sm text-muted">
+                A Nuvemshop avisa o painel quando um produto ou categoria muda, e o espelho é atualizado na hora. Registre uma vez (pode repetir sem problema).
+              </p>
+              <p className="mt-2 text-sm text-muted">
+                Último evento recebido: {lastWebhook ? `${lastWebhook.event} · ${fmt(lastWebhook.received_at)}` : "nenhum ainda"}
+              </p>
+              <div className="mt-4">
+                <WebhookButton disabled={!store} />
+              </div>
+            </section>
+          </div>
+        </details>
       </Card>
     </main>
   );

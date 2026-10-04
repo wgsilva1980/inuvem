@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
@@ -14,9 +14,19 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
   const selected = new Set(product.categories.map((c) => c.id));
   const err = (name: string) => state?.fieldErrors?.[name];
 
+  // Alterações ainda não salvas: avisa ao fechar/recarregar a aba. Volta a "limpo" quando o espelho é atualizado (salvou ou recarregou).
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => setDirty(false), [product.updated_at_remote, product.id]);
+  useEffect(() => {
+    if (!dirty || pending) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, pending]);
+
   return (
     // `key` recria o formulário com os valores novos quando o espelho é atualizado (conflito ou salvamento).
-    <form key={product.updated_at_remote ?? product.id} action={action} className="flex flex-col gap-4">
+    <form key={product.updated_at_remote ?? product.id} action={action} onChange={() => setDirty(true)} className="flex flex-col gap-4">
       <Card className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Nome</span>
@@ -27,7 +37,7 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
           <label htmlFor="description-editor" className="font-medium">
             Descrição
           </label>
-          <RichTextEditor name="description" defaultValue={product.description ?? ""} id="description-editor" />
+          <RichTextEditor name="description" defaultValue={product.description ?? ""} id="description-editor" onChange={() => setDirty(true)} />
           {err("description") && <span className="text-danger">{err("description")}</span>}
         </div>
         <label className="flex flex-col gap-1 text-sm">
@@ -73,9 +83,19 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
         )}
       </Card>
 
-      {state?.message && <Alert tone={state.ok ? "success" : "danger"}>{state.message}</Alert>}
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>
+      <div className="sticky bottom-0 z-10 -mx-4 flex flex-col gap-2 border-t border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 text-sm">
+          {state?.message ? (
+            <Alert tone={state.ok ? "success" : "danger"} className="border-0 p-0">
+              {state.message}
+            </Alert>
+          ) : dirty ? (
+            <span className="text-warning">Alterações não salvas</span>
+          ) : (
+            <span className="text-muted">Nenhuma alteração pendente</span>
+          )}
+        </div>
+        <Button type="submit" disabled={pending} className="min-h-11">
           {pending ? "Salvando…" : "Salvar na Nuvemshop"}
         </Button>
       </div>

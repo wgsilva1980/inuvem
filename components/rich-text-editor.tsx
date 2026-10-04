@@ -53,7 +53,7 @@ function normalizeUrl(raw: string, schemes: string[]): string | null {
  * Editor visual da descrição (Tiptap). O valor que vai no formulário é o campo escondido `name`:
  * começa como o HTML original e só muda quando o usuário edita, então abrir e salvar não reescreve nada.
  */
-export function RichTextEditor({ name, defaultValue, id }: { name: string; defaultValue: string; id?: string }) {
+export function RichTextEditor({ name, defaultValue, id, onChange }: { name: string; defaultValue: string; id?: string; onChange?: () => void }) {
   const [html, setHtml] = useState(defaultValue);
   const [mode, setMode] = useState<"visual" | "html">("visual");
 
@@ -62,7 +62,10 @@ export function RichTextEditor({ name, defaultValue, id }: { name: string; defau
     content: defaultValue,
     immediatelyRender: false,
     editorProps: { attributes: { class: "rte-content", role: "textbox", "aria-multiline": "true", "aria-label": "Descrição do produto", ...(id ? { id } : {}) } },
-    onUpdate: ({ editor: e }) => setHtml(e.isEmpty ? "" : e.getHTML()),
+    onUpdate: ({ editor: e }) => {
+      setHtml(e.isEmpty ? "" : e.getHTML());
+      onChange?.();
+    },
   });
 
   const s = useEditorState({
@@ -240,7 +243,10 @@ export function RichTextEditor({ name, defaultValue, id }: { name: string; defau
           <textarea
             aria-label="HTML da descrição"
             value={html}
-            onChange={(e) => setHtml(e.target.value)}
+            onChange={(e) => {
+              setHtml(e.target.value);
+              onChange?.();
+            }}
             rows={12}
             spellCheck={false}
             className="w-full rounded border border-border bg-background p-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary"
