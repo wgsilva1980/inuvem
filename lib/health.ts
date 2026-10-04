@@ -63,6 +63,11 @@ export function checkEnv(source: Record<string, string | undefined>): EnvReport 
     }
   }
 
+  const isProduction = source.VERCEL_ENV === "production";
+  if (isProduction && source.APP_URL && /^https?:\/\/(localhost|127\.0\.0\.1)/.test(source.APP_URL.trim()) && !invalid.some((i) => i.name === "APP_URL")) {
+    invalid.push({ name: "APP_URL", problem: "aponta para localhost em produção; use a URL pública (https://seu-app.vercel.app)" });
+  }
+
   const url = source.DATABASE_URL;
   if (url && !/-pooler\./.test(url)) warnings.push("DATABASE_URL não parece ser a connection string pooled (host com -pooler); recomendado na Vercel.");
   if (source.APP_URL?.startsWith("http://") && !/localhost|127\.0\.0\.1/.test(source.APP_URL)) {
