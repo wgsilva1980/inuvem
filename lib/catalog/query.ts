@@ -24,6 +24,8 @@ export interface CatalogItem {
   name: string;
   published: boolean;
   image_count: number;
+  /** Primeira imagem do produto (menor position), para a miniatura da lista. */
+  thumb_url: string | null;
   categories: Array<{ id: number; name: string }>;
   variant_count: number;
   price_min: string | null;
@@ -92,6 +94,8 @@ export async function listCatalog(db: Db, storeId: string, filters: CatalogFilte
   const order = filters.sort === "atualizados" ? "p.updated_at_remote DESC NULLS LAST, p.id DESC" : "lower(p.name), p.id";
   const items = await db.query<CatalogItem>(
     `SELECT p.id::text AS id, p.name, p.published, p.image_count, p.categories, p.updated_at_remote,
+            (SELECT i->>'src' FROM jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) i
+              ORDER BY CASE WHEN (i->>'position') ~ '^[0-9]+$' THEN (i->>'position')::int END NULLS LAST LIMIT 1) AS thumb_url,
             agg.variant_count, agg.price_min, agg.price_max, agg.stock_total
      FROM products p
      LEFT JOIN LATERAL (
