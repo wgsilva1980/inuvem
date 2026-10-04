@@ -4,8 +4,6 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/admin";
 import {
   ProductMissingError,
-  addImage,
-  imageUrlSchema,
   moveImage,
   moveImageTo,
   removeImage,
@@ -106,17 +104,6 @@ async function withImages<T>(productId: number, fn: (ctx: { storeId: string; act
     revalidatePath(`/produtos/${productId}`); // a loja pode ter mudado mesmo com erro
     return fail(err, "image.operation.failed");
   }
-}
-
-export async function addProductImage(productId: number, _prev: ActionState | null, formData: FormData): Promise<ActionState> {
-  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
-  const parsed = imageUrlSchema.safeParse(formData.get("src") ?? "");
-  if (!parsed.success) return { message: parsed.error.issues[0]?.message ?? "URL inválida.", fieldErrors: { src: parsed.error.issues[0]?.message ?? "URL inválida." } };
-  const r = await withImages(productId, async ({ storeId, actor, api }) => {
-    await addImage({ query }, api, { storeId, actor, productId, src: parsed.data });
-    return { ok: true, message: "Imagem enviada à Nuvemshop." } satisfies ActionState;
-  });
-  return r;
 }
 
 export async function removeProductImage(productId: number, imageId: number): Promise<ActionState> {

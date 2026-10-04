@@ -15,7 +15,7 @@ Próximas: catálogo (2), variantes e imagens (3), operações em massa (4), cat
 - `lib/catalog/` — catálogo (Fase 2): consulta com filtros sobre o espelho (`query.ts`), regras de edição (`edit.ts`) e o
   salvamento (`update.ts`): confere conflito com a loja, envia só os campos alterados, atualiza o espelho e grava em `audit_log`.
 - `lib/catalog/variants.ts`, `update-variant.ts`, `images.ts` — edição de variantes (SKU, preço, promocional, estoque) e de imagens
-  (adicionar por URL, remover, reordenar): validação, detecção de alteração por fora, espelho e `audit_log`.
+  (enviar arquivo, remover, reordenar, tornar principal): validação, detecção de alteração por fora, espelho e `audit_log`.
 - `lib/bulk/` — operações em massa (Fase 4): `operations.ts` calcula a pré-visualização (antes → depois, o que fica de fora e por quê),
   `repo.ts` guarda o lote e os itens (`bulk_jobs`, `bulk_job_items`), `engine.ts` aplica em passos curtos e retomáveis e reverte.
   Fluxo: escolher produtos na lista → configurar a operação → **pré-visualizar (nada vai à loja)** → confirmar → aplicar (cada produto é
@@ -146,7 +146,7 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
 4. **URL de autorização OAuth** (`https://www.nuvemshop.com.br/apps/{APP_ID}/authorize`) e se o parâmetro `state` é devolvido no callback.
    Se não for, o callback depende só da sessão de admin (já exigida).
 5. **Payload de `PATCH /products/stock-price`** (campos `stock` x `inventory_levels`, limite por chamada) — Fase 4.
-6. **Imagens (Fase 3).** `POST /products/{id}/images` com `src` por URL pública (base64 não usado), `DELETE .../images/{id}` e, para reordenar,
+6. **Imagens (Fase 3).** `POST /products/{id}/images` (envio por arquivo; o painel não envia imagem por URL), `DELETE .../images/{id}` e, para reordenar,
    `PUT .../images/{id}` com `position` (assumo que `position` é a posição de destino). Depois de cada operação o painel rebusca o produto,
    então a tela sempre mostra a ordem real da loja, mesmo se a regra de reposicionamento for diferente.
    **Upload de arquivo:** `POST .../images` com `attachment` (base64) e `filename`. O arquivo passa pelo servidor do painel (limite de 4,5 MB

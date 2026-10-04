@@ -1,15 +1,13 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { ImageRow } from "@/lib/catalog/images";
 import { prepareImageFile } from "@/lib/client/compress-image";
-import { addProductImage, moveProductImage, removeProductImage, setMainProductImage, uploadProductImage, type ActionState } from "./media-actions";
-import { fieldClass } from "@/components/ui/field";
+import { moveProductImage, removeProductImage, setMainProductImage, uploadProductImage, type ActionState } from "./media-actions";
 
 export function ImagesPanel({ productId, images }: { productId: number; images: ImageRow[] }) {
-  const [addState, addAction, adding] = useActionState<ActionState | null, FormData>(addProductImage.bind(null, productId), null);
   const [busy, startTransition] = useTransition();
   const [message, setMessage] = useState<ActionState | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -123,20 +121,9 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
         </ul>
       )}
 
-      <form action={addAction} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start">
-        <span className="text-sm text-muted sm:pt-2">ou por URL pública:</span>
-        <div className="flex-1">
-          <input name="src" type="url" required placeholder="https://exemplo.com/foto.jpg" aria-label="URL da nova imagem" className={fieldClass} />
-          {addState?.fieldErrors?.src && <p className="mt-1 text-sm text-danger">{addState.fieldErrors.src}</p>}
-        </div>
-        <Button type="submit" disabled={adding || busy}>
-          {adding ? "Enviando…" : "Adicionar imagem"}
-        </Button>
-      </form>
-
-      {(message?.message || (addState?.message && !addState.fieldErrors)) && (
-        <p role="status" className={`mt-3 text-sm ${(message ?? addState)?.ok ? "text-success" : "text-danger"}`}>
-          {message?.message ?? addState?.message}
+      {message?.message && (
+        <p role="status" className={`mt-3 text-sm ${message.ok ? "text-success" : "text-danger"}`}>
+          {message.message}
         </p>
       )}
     </Card>
