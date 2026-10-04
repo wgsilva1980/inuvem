@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import type { CategoryOption, ProductDetail } from "@/lib/catalog/query";
 import { saveProduct, type SaveState } from "./actions";
 
@@ -22,11 +23,13 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
           <input name="name" defaultValue={product.name} required maxLength={255} className={field} aria-invalid={!!err("name")} />
           {err("name") && <span className="text-danger">{err("name")}</span>}
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Descrição (HTML)</span>
-          <textarea name="description" defaultValue={product.description ?? ""} rows={8} className={field} />
+        <div className="flex flex-col gap-1 text-sm">
+          <label htmlFor="description-editor" className="font-medium">
+            Descrição
+          </label>
+          <RichTextEditor name="description" defaultValue={product.description ?? ""} id="description-editor" />
           {err("description") && <span className="text-danger">{err("description")}</span>}
-        </label>
+        </div>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Tags (separadas por vírgula)</span>
           <input name="tags" defaultValue={product.tags ?? ""} className={field} />

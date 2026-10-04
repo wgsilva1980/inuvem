@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/admin";
+import { prepareDescription } from "@/lib/catalog/description";
 import { productEditSchema } from "@/lib/catalog/edit";
+import { getProductDetail } from "@/lib/catalog/query";
 import { ProductConflictError, ProductNotFoundError, updateProduct } from "@/lib/catalog/update";
 import { query } from "@/lib/db";
 import { NuvemshopError, getProduct, updateProduct as apiUpdateProduct } from "@/lib/nuvemshop";
@@ -38,10 +40,13 @@ export async function saveProduct(productId: number, _prev: SaveState | null, fo
 
   try {
     const client = await clientForStore(store);
+    // Só limpa o HTML se a descrição foi editada; sem edição, o original da loja segue intacto.
+    const current = await getProductDetail({ query }, store.id, productId);
+    const after = { ...parsed.data, description: prepareDescription(parsed.data.description, current?.description ?? null) };
     const result = await updateProduct(
       { query },
       { get: (id) => getProduct(client, id), put: (id, input) => apiUpdateProduct(client, id, input) },
-      { storeId: store.id, actor: admin.email, productId, after: parsed.data },
+      { storeId: store.id, actor: admin.email, productId, after },
     );
     revalidatePath("/produtos");
     revalidatePath(`/produtos/${productId}`);

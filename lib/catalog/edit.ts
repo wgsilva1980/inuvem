@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pt, type Product, type ProductInput } from "@/lib/nuvemshop/types";
+import { normalizeNewlines } from "./description";
 import type { ProductDetail } from "./query";
 
 /** "a , b,,c" -> "a,b,c". */
@@ -13,7 +14,7 @@ export const normalizeTags = (s: string) =>
 /** Campos editáveis do produto na Fase 2 (variantes, preço, estoque e imagens ficam nas fases seguintes). */
 export const productEditSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome do produto.").max(255, "No máximo 255 caracteres."),
-  description: z.string().max(100_000, "Descrição longa demais."),
+  description: z.string().max(100_000, "Descrição longa demais.").transform(normalizeNewlines),
   tags: z
     .string()
     .trim()
@@ -32,7 +33,7 @@ export type EditableField = keyof ProductEdit;
 export function toEdit(detail: ProductDetail): ProductEdit {
   return {
     name: detail.name,
-    description: detail.description ?? "",
+    description: normalizeNewlines(detail.description ?? ""),
     tags: normalizeTags(detail.tags ?? ""),
     published: detail.published,
     seo_title: detail.seo_title,
@@ -45,7 +46,7 @@ export function toEdit(detail: ProductDetail): ProductEdit {
 export function remoteToEdit(p: Product): ProductEdit {
   return {
     name: pt(p.name),
-    description: pt(p.description),
+    description: normalizeNewlines(pt(p.description)),
     tags: normalizeTags(p.tags ?? ""),
     published: p.published ?? false,
     seo_title: pt(p.seo_title),
