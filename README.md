@@ -111,6 +111,9 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
 6. **Imagens (Fase 3).** `POST /products/{id}/images` com `src` por URL pública (base64 não usado), `DELETE .../images/{id}` e, para reordenar,
    `PUT .../images/{id}` com `position` (assumo que `position` é a posição de destino). Depois de cada operação o painel rebusca o produto,
    então a tela sempre mostra a ordem real da loja, mesmo se a regra de reposicionamento for diferente.
+   **Upload de arquivo:** `POST .../images` com `attachment` (base64) e `filename`. O arquivo passa pelo servidor do painel (limite de 4,5 MB
+   por requisição na Vercel): fotos maiores que 3,5 MB são reduzidas no navegador (JPEG, até 2400 px) antes do envio; o limite final é 4 MB.
+   **Foto da variação:** campo `image_id` da variante (id de uma imagem do produto), enviado no `PUT` da variante.
    **Variantes (Fase 3):** `PUT /products/{id}/variants/{id}` com `sku`, `price`, `promotional_price`, `stock_management` e `stock`
    (`stock: null` = ilimitado; loja sem multi-estoque, então não uso `inventory_levels`).
 7. **Assinatura HMAC dos webhooks**: assumi o header `x-linkedstore-hmac-sha256` (HMAC-SHA256 do corpo bruto com o client secret; aceita hex ou base64).

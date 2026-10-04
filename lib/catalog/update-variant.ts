@@ -22,6 +22,12 @@ export class VariantConflictError extends Error {
   }
 }
 
+export class InvalidVariantImageError extends Error {
+  constructor() {
+    super("A imagem escolhida não pertence a este produto.");
+  }
+}
+
 export type VariantUpdateResult = { changed: false } | { changed: true; fields: string[] };
 
 interface MirrorRow {
@@ -30,6 +36,7 @@ interface MirrorRow {
   promotional_price: string | null;
   stock: number | null;
   stock_management: boolean;
+  image_id: string | null;
 }
 
 async function audit(
@@ -51,15 +58,25 @@ export async function updateVariant(
 ): Promise<VariantUpdateResult> {
   const { storeId, actor, productId, variantId, after } = args;
   const rows = await db.query<MirrorRow>(
-    `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management
+    `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management,
+            nullif(raw_json->>'image_id', '') AS image_id
      FROM variants WHERE store_id = $1::uuid AND product_id = $2::bigint AND id = $3::bigint`,
     [storeId, productId, variantId],
   );
   if (!rows[0]) throw new VariantNotFoundError();
 
-  const before = variantToEdit(rows[0]);
+  const before = variantToEdit({ ...rows[0], image_id: rows[0].image_id === null ? null : Number(rows[0].image_id) });
   const fields = changedVariantFields(before, after);
   if (fields.length === 0) return { changed: false };
+
+  if (fields.includes("image_id") && after.image_id !== null) {
+    const owned = await db.query(
+      `SELECT 1 FROM products p, jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) i
+       WHERE p.store_id = $1::uuid AND p.id = $2::bigint AND (i->>'id') = $3`,
+      [storeId, productId, String(after.image_id)],
+    );
+    if (owned.length === 0) throw new InvalidVariantImageError();
+  }
 
   const remote = await api.get(productId, variantId);
   if (changedVariantFields(before, remoteVariantToEdit(remote)).length > 0) {

@@ -4,8 +4,20 @@ import { join } from "node:path";
 import { loadMigrations, runMigrations } from "@/lib/db/migrate";
 import { upsertProducts, type Db } from "@/lib/sync/repo";
 import { buildVariantInput, changedVariantFields, parseMoney, variantEditSchema, variantToEdit } from "@/lib/catalog/variants";
-import { VariantConflictError, VariantNotFoundError, updateVariant, type VariantApi } from "@/lib/catalog/update-variant";
-import { addImage, getProductImages, imageUrlSchema, moveImage, removeImage, type ImageApi } from "@/lib/catalog/images";
+import { InvalidVariantImageError, VariantConflictError, VariantNotFoundError, updateVariant, type VariantApi } from "@/lib/catalog/update-variant";
+import {
+  MAX_UPLOAD_BYTES,
+  addImage,
+  getProductImages,
+  imageUrlSchema,
+  moveImage,
+  moveImageTo,
+  removeImage,
+  safeFilename,
+  uploadImage,
+  validateImageUpload,
+  type ImageApi,
+} from "@/lib/catalog/images";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Product, ProductImage, Variant } from "@/lib/nuvemshop/types";
 
@@ -44,7 +56,7 @@ describe("parseMoney", () => {
 });
 
 describe("variantEditSchema", () => {
-  const base = { sku: "A-1", price: "100,00", promotional_price: "", stock_management: true, stock: "5" };
+  const base = { sku: "A-1", price: "100,00", promotional_price: "", stock_management: true, stock: "5", image_id: "" };
 
   it("normaliza os campos", () => {
     expect(variantEditSchema.parse({ ...base, sku: "  ", promotional_price: "79,9" })).toEqual({
@@ -53,7 +65,15 @@ describe("variantEditSchema", () => {
       promotional_price: "79.90",
       stock_management: true,
       stock: 5,
+      image_id: null,
     });
+  });
+
+  it("aceita a foto da variação (id numérico ou vazio) e recusa lixo", () => {
+    expect(variantEditSchema.parse({ ...base, image_id: "123456" }).image_id).toBe(123456);
+    expect(variantEditSchema.parse({ ...base, image_id: "" }).image_id).toBeNull();
+    expect(variantEditSchema.safeParse({ ...base, image_id: "abc" }).success).toBe(false);
+    expect(variantEditSchema.safeParse({ ...base, image_id: "1; DROP" }).success).toBe(false);
   });
 
   it("zera o estoque quando não há controle", () => {
@@ -83,6 +103,13 @@ describe("diff de variante", () => {
     expect(changedVariantFields(before, { ...before, price: "100.0" as string })).toEqual([]);
     expect(changedVariantFields(before, { ...before, price: "90.00", stock: 7 })).toEqual(["price", "stock"]);
     expect(changedVariantFields(before, { ...before, promotional_price: "80.00" })).toEqual(["promotional_price"]);
+  });
+
+  it("a troca da foto da variação entra no diff e no corpo do PUT (inclusive remover = null)", () => {
+    expect(changedVariantFields(before, { ...before, image_id: 11 })).toEqual(["image_id"]);
+    expect(buildVariantInput({ ...before, image_id: 11 }, ["image_id"])).toEqual({ image_id: 11 });
+    const withImage = { ...before, image_id: 11 };
+    expect(buildVariantInput({ ...withImage, image_id: null }, changedVariantFields(withImage, { ...withImage, image_id: null }))).toEqual({ image_id: null });
   });
 
   it("envia só o alterado; ao ligar o controle, a quantidade vai junto", () => {
@@ -149,6 +176,27 @@ describe("updateVariant", () => {
     expect(await updateVariant(db, api, { storeId, actor, productId: 1, variantId: 100, after: after({}) })).toEqual({ changed: false });
   });
 
+  it("troca a foto da variação por uma imagem do produto", async () => {
+    const puts: unknown[] = [];
+    const api: VariantApi = {
+      get: async () => variant(100, 1),
+      put: async (_p, _v, input) => {
+        puts.push(input);
+        return variant(100, 1, { image_id: 12 });
+      },
+    };
+    expect(await updateVariant(db, api, { storeId, actor, productId: 1, variantId: 100, after: after({ image_id: 12 }) })).toEqual({ changed: true, fields: ["image_id"] });
+    expect(puts).toEqual([{ image_id: 12 }]);
+    expect((await pg.query<{ image_id: string }>("SELECT raw_json->>'image_id' AS image_id FROM variants WHERE id = 100")).rows[0]).toEqual({ image_id: "12" });
+    // mesma escolha de novo: nada a enviar
+    expect(await updateVariant(db, { get: async () => { throw new Error("não deveria"); }, put: async () => { throw new Error("não deveria"); } }, { storeId, actor, productId: 1, variantId: 100, after: after({ image_id: 12 }) })).toEqual({ changed: false });
+  });
+
+  it("recusa foto que não é do produto, sem chamar a API", async () => {
+    const api: VariantApi = { get: async () => { throw new Error("não deveria"); }, put: async () => { throw new Error("não deveria"); } };
+    await expect(updateVariant(db, api, { storeId, actor, productId: 1, variantId: 100, after: after({ image_id: 999 }) })).rejects.toBeInstanceOf(InvalidVariantImageError);
+  });
+
   it("recusa e atualiza o espelho se a loja mudou a variante por fora", async () => {
     let put = false;
     const api: VariantApi = { get: async () => variant(100, 1, { stock: 99 }), put: async () => { put = true; return variant(100, 1); } };
@@ -185,8 +233,11 @@ describe("imagens", () => {
     api = {
       getProduct: async () => structuredClone(remote),
       create: async (_p, input) => {
-        calls.push(`create ${input.src}`);
-        remote.images = [...(remote.images ?? []), { id: 14, product_id: 1, src: input.src, position: (remote.images?.length ?? 0) + 1 }];
+        calls.push(`create ${"src" in input ? input.src : `arquivo ${input.filename}`}`);
+        remote.images = [
+          ...(remote.images ?? []),
+          { id: 14, product_id: 1, src: "src" in input ? input.src : "https://cdn/arquivo.jpg", position: (remote.images?.length ?? 0) + 1 },
+        ];
         return remote.images[remote.images.length - 1] as ProductImage;
       },
       remove: async (_p, id) => {
@@ -247,5 +298,37 @@ describe("imagens", () => {
     await expect(addImage(db, api, { storeId, actor, productId: 1, src: "https://cdn/x.jpg" })).rejects.toBeInstanceOf(NuvemshopError);
     expect(await ids()).toEqual(["11", "12", "13"]);
     expect(await audits()).toMatchObject([{ acao: "imagem.adicionar", sucesso: false }]);
+  });
+
+  it("valida o arquivo enviado (tipo e tamanho) e saneia o nome", () => {
+    expect(validateImageUpload({ type: "image/jpeg", size: 1000 })).toBeNull();
+    expect(validateImageUpload({ type: "image/webp", size: MAX_UPLOAD_BYTES })).toBeNull();
+    expect(validateImageUpload({ type: "application/pdf", size: 1000 })).toMatch(/Formato/);
+    expect(validateImageUpload({ type: "image/svg+xml", size: 1000 })).toMatch(/Formato/);
+    expect(validateImageUpload({ type: "image/png", size: 0 })).toMatch(/vazio/);
+    expect(validateImageUpload({ type: "image/png", size: MAX_UPLOAD_BYTES + 1 })).toMatch(/4 MB/);
+    expect(safeFilename("../../etc/Foto Ação (1).PNG", "image/png")).toBe("Foto-Acao-1.png");
+    expect(safeFilename("???.exe", "image/jpeg")).toBe("imagem.jpg");
+    expect(safeFilename("a.b.c", "image/webp")).toBe("a.b.webp");
+  });
+
+  it("envia o arquivo em base64 e registra só nome e tamanho (nunca o conteúdo)", async () => {
+    let sent: unknown;
+    api.create = async (_p, input) => {
+      sent = input;
+      return { id: 20, product_id: 1, src: "https://cdn/up.jpg" } as ProductImage;
+    };
+    const bytes = Buffer.from("conteudo-binario-fake");
+    await uploadImage(db, api, { storeId, actor, productId: 1, filename: "foto.jpg", bytes });
+    expect(sent).toEqual({ attachment: bytes.toString("base64"), filename: "foto.jpg" });
+    const [log] = await audits();
+    expect(log).toMatchObject({ acao: "imagem.enviar", sucesso: true, depois: { filename: "foto.jpg", bytes: bytes.length } });
+    expect(JSON.stringify(log)).not.toContain(bytes.toString("base64"));
+  });
+
+  it("tornar principal move a imagem para a primeira posição", async () => {
+    expect(await moveImageTo(db, api, { storeId, actor, productId: 1, imageId: 13, toIndex: 0 })).toBe(true);
+    expect(await ids()).toEqual(["13", "11", "12"]);
+    expect(await moveImageTo(db, api, { storeId, actor, productId: 1, imageId: 13, toIndex: 0 })).toBe(false);
   });
 });
