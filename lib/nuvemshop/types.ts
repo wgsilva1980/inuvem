@@ -32,7 +32,9 @@ export const imageSchema = z
     product_id: z.number(),
     src: z.string(),
     position: z.number().nullable().optional(),
-    alt: z.array(z.string()).nullable().optional(),
+    // A API devolve `alt` como objeto multi-idioma ({ "pt": "..." }, ou {} quando vazio) na loja real,
+    // embora a documentação o mostre como lista: aceitamos as duas formas.
+    alt: z.union([z.array(z.string()), i18nSchema]).nullable().optional(),
   })
   .passthrough();
 export type ProductImage = z.infer<typeof imageSchema>;
