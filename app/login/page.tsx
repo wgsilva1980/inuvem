@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authClient } from "@/lib/auth/client";
@@ -13,6 +13,27 @@ interface LoginState {
 export default function LoginPage() {
   const [state, setState] = useState<LoginState | null>(null);
   const [pending, setPending] = useState(false);
+
+  // Volta do link de acesso: o Neon Auth redireciona para cá com `neon_auth_session_verifier`.
+  // O getSession() do cliente envia esse código ao /api/auth, que grava a sessão neste domínio.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("neon_auth_session_verifier")) return;
+    setPending(true);
+    authClient
+      .getSession()
+      .then(({ data }) => {
+        if (data?.session) {
+          window.location.replace("/");
+          return;
+        }
+        setState({ error: "Não foi possível concluir o login. Peça um novo link." });
+        setPending(false);
+      })
+      .catch(() => {
+        setState({ error: "Não foi possível concluir o login. Peça um novo link." });
+        setPending(false);
+      });
+  }, []);
 
   // O pedido sai do navegador (via /api/auth): assim o cookie de desafio do Neon Auth fica neste
   // navegador e, ao voltar do link, o proxy troca o retorno por uma sessão no nosso domínio.
