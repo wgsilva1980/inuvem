@@ -1,12 +1,38 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { sendMagicLink } from "./actions";
+import { authClient } from "@/lib/auth/client";
+
+interface LoginState {
+  sent?: boolean;
+  error?: string;
+}
 
 export default function LoginPage() {
-  const [state, action, pending] = useActionState(sendMagicLink, null);
+  const [state, setState] = useState<LoginState | null>(null);
+  const [pending, setPending] = useState(false);
+
+  // O pedido sai do navegador (via /api/auth): assim o cookie de desafio do Neon Auth fica neste
+  // navegador e, ao voltar do link, o proxy troca o retorno por uma sessão no nosso domínio.
+  // O acesso continua restrito no servidor: só e-mails da allowlist `admins` passam do login.
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const email = String(new FormData(event.currentTarget).get("email") ?? "")
+      .trim()
+      .toLowerCase();
+    if (!email) return setState({ error: "Informe um e-mail válido." });
+    setPending(true);
+    try {
+      const { error } = await authClient.signIn.magicLink({ email, callbackURL: `${window.location.origin}/` });
+      setState(error ? { error: "Não foi possível enviar o link agora. Tente novamente em instantes." } : { sent: true });
+    } catch {
+      setState({ error: "Não foi possível enviar o link agora. Tente novamente em instantes." });
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
@@ -19,7 +45,7 @@ export default function LoginPage() {
             Se o e-mail tiver acesso, você receberá um link de entrada em instantes. Confira também o spam.
           </p>
         ) : (
-          <form action={action} className="mt-6 flex flex-col gap-3">
+          <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-3">
             <label htmlFor="email" className="text-sm font-medium">
               E-mail
             </label>
