@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import type { ImageRow } from "@/lib/catalog/images";
 import type { ProductDetail } from "@/lib/catalog/query";
 import { saveVariant, type ActionState } from "./media-actions";
 
@@ -12,12 +13,12 @@ const ptMoney = (value: string | null) => (value === null ? "" : Number(value).t
 
 type Variant = ProductDetail["variants"][number];
 
-function VariantRow({ productId, variant }: { productId: number; variant: Variant }) {
+function VariantRow({ productId, variant, images }: { productId: number; variant: Variant; images: ImageRow[] }) {
   const [state, action, pending] = useActionState<ActionState | null, FormData>(saveVariant.bind(null, productId, Number(variant.id)), null);
   const err = (name: string) => state?.fieldErrors?.[name];
   const label = variant.values.map((x) => Object.values(x)[0]).filter(Boolean).join(" / ") || "Padrão";
   // `key` recria o formulário com os valores novos quando o espelho muda (conflito ou salvamento).
-  const key = `${variant.sku}|${variant.price}|${variant.promotional_price}|${variant.stock}|${variant.stock_management}`;
+  const key = `${variant.sku}|${variant.price}|${variant.promotional_price}|${variant.stock}|${variant.stock_management}|${variant.image_id}`;
 
   return (
     <form key={key} action={action} className="flex flex-col gap-3 rounded-md border border-border p-3">
@@ -48,6 +49,32 @@ function VariantRow({ productId, variant }: { productId: number; variant: Varian
           <span>Controlar estoque</span>
         </label>
       </div>
+      {images.length > 0 && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-sm text-muted">Foto da variação</legend>
+          <div className="flex flex-wrap gap-2">
+            <label className="cursor-pointer">
+              <input type="radio" name="image_id" value="" defaultChecked={variant.image_id === null} className="peer sr-only" />
+              <span className="flex size-14 items-center justify-center rounded border border-border text-center text-xs text-muted peer-checked:ring-2 peer-checked:ring-primary peer-focus-visible:ring-2">
+                Nenhuma
+              </span>
+            </label>
+            {images.map((img, i) => (
+              <label key={img.id} className="cursor-pointer">
+                <input type="radio" name="image_id" value={img.id} defaultChecked={variant.image_id === img.id} className="peer sr-only" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.src}
+                  alt={img.alt || `Imagem ${i + 1}`}
+                  loading="lazy"
+                  className="size-14 rounded border border-border object-cover peer-checked:ring-2 peer-checked:ring-primary peer-focus-visible:ring-2"
+                />
+              </label>
+            ))}
+          </div>
+          {err("image_id") && <span className="text-sm text-danger">{err("image_id")}</span>}
+        </fieldset>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant="outline" disabled={pending}>
           {pending ? "Salvando…" : "Salvar variante"}
@@ -62,7 +89,7 @@ function VariantRow({ productId, variant }: { productId: number; variant: Varian
   );
 }
 
-export function VariantsEditor({ productId, variants }: { productId: number; variants: Variant[] }) {
+export function VariantsEditor({ productId, variants, images }: { productId: number; variants: Variant[]; images: ImageRow[] }) {
   return (
     <Card>
       <h2 className="text-base font-semibold">Variantes</h2>
@@ -71,7 +98,7 @@ export function VariantsEditor({ productId, variants }: { productId: number; var
       </p>
       <div className="mt-3 flex flex-col gap-3">
         {variants.map((v) => (
-          <VariantRow key={v.id} productId={productId} variant={v} />
+          <VariantRow key={v.id} productId={productId} variant={v} images={images} />
         ))}
       </div>
     </Card>

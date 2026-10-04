@@ -34,7 +34,7 @@ export default async function ProdutoPage({ params }: { params: Promise<{ id: st
 
       <ProductForm product={product} categories={categories} />
 
-      <VariantsEditor productId={productId} variants={product.variants} />
+      <VariantsEditor productId={productId} variants={product.variants} images={images} />
 
       <ImagesPanel productId={productId} images={images} />
     </main>

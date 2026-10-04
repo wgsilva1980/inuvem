@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
+import type { ImageUpload } from "@/lib/nuvemshop/images";
 import type { Product, ProductImage } from "@/lib/nuvemshop/types";
 import { upsertProducts, type Db } from "@/lib/sync/repo";
 
 /** Acesso à API da Nuvemshop (injetado para testar sem rede). */
 export interface ImageApi {
   getProduct(productId: number): Promise<Product>;
-  create(productId: number, input: { src: string; position?: number }): Promise<ProductImage>;
+  create(productId: number, input: ImageUpload): Promise<ProductImage>;
   remove(productId: number, imageId: number): Promise<void>;
   setPosition(productId: number, imageId: number, position: number): Promise<ProductImage>;
 }
@@ -18,6 +19,32 @@ export const imageUrlSchema = z
   .max(2000, "URL longa demais.")
   .url("Informe uma URL válida.")
   .refine((u) => u.startsWith("https://"), "A URL deve começar com https://");
+
+/** Limite do arquivo enviado ao painel: o corpo de uma requisição na Vercel é de no máximo 4,5 MB. */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+export const UPLOAD_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+
+/** Confere tipo e tamanho do arquivo enviado; devolve a mensagem de erro ou null. */
+export function validateImageUpload(file: { type: string; size: number }): string | null {
+  if (!(file.type in UPLOAD_TYPES)) return "Formato não aceito. Use JPEG, PNG, WEBP ou GIF.";
+  if (file.size <= 0) return "O arquivo está vazio.";
+  if (file.size > MAX_UPLOAD_BYTES) return "A imagem passa de 4 MB. Reduza o tamanho e tente de novo.";
+  return null;
+}
+
+/** Nome de arquivo seguro: sem caminho, só letras/números/._-, e a extensão do tipo real do arquivo. */
+export function safeFilename(name: string, contentType: string): string {
+  const ext = UPLOAD_TYPES[contentType] ?? "jpg";
+  const base = name
+    .replace(/^.*[\\/]/, "")
+    .replace(/\.[^.]*$/, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 80);
+  return `${base || "imagem"}.${ext}`;
+}
 
 export interface ImageRow {
   id: string;
@@ -44,7 +71,7 @@ export class ProductMissingError extends Error {
   }
 }
 
-type Action = "adicionar" | "remover" | "reordenar";
+type Action = "adicionar" | "enviar" | "remover" | "reordenar";
 
 async function audit(
   db: Db,
@@ -96,6 +123,14 @@ export async function addImage(db: Db, api: ImageApi, base: Base & { src: string
   );
 }
 
+/** Envia o arquivo (já validado) à Nuvemshop em base64. O conteúdo não vai para o histórico, só o nome e o tamanho. */
+export async function uploadImage(db: Db, api: ImageApi, base: Base & { filename: string; bytes: Buffer }): Promise<void> {
+  const images = await current(db, base);
+  await run(db, api, { ...base, acao: "enviar", antes: { total: images.length }, depois: { filename: base.filename, bytes: base.bytes.length } }, () =>
+    api.create(base.productId, { attachment: base.bytes.toString("base64"), filename: base.filename }),
+  );
+}
+
 export async function removeImage(db: Db, api: ImageApi, base: Base & { imageId: number }): Promise<void> {
   const images = await current(db, base);
   const target = images.find((i) => Number(i.id) === base.imageId);
@@ -104,15 +139,23 @@ export async function removeImage(db: Db, api: ImageApi, base: Base & { imageId:
   );
 }
 
-/** Move a imagem uma posição para cima (-1) ou para baixo (+1). Sem efeito nas pontas. */
-export async function moveImage(db: Db, api: ImageApi, base: Base & { imageId: number; direction: -1 | 1 }): Promise<boolean> {
+/** Move a imagem para o índice `toIndex` (0 = principal). Sem efeito se já estiver lá. */
+export async function moveImageTo(db: Db, api: ImageApi, base: Base & { imageId: number; toIndex: number }): Promise<boolean> {
   const images = await current(db, base);
   const from = images.findIndex((i) => Number(i.id) === base.imageId);
-  const to = from + base.direction;
-  if (from < 0 || to < 0 || to >= images.length) return false;
-  const newPosition = images[to]!.position ?? to + 1; // assume a posição que a imagem vizinha ocupa hoje
+  const to = base.toIndex;
+  if (from < 0 || to < 0 || to >= images.length || from === to) return false;
+  const newPosition = images[to]!.position ?? to + 1; // assume a posição que a imagem daquele lugar ocupa hoje
   await run(db, api, { ...base, acao: "reordenar", antes: { id: base.imageId, posicao: images[from]!.position ?? from + 1 }, depois: { id: base.imageId, posicao: newPosition } }, () =>
     api.setPosition(base.productId, base.imageId, newPosition),
   );
   return true;
+}
+
+/** Move a imagem uma posição para cima (-1) ou para baixo (+1). Sem efeito nas pontas. */
+export async function moveImage(db: Db, api: ImageApi, base: Base & { imageId: number; direction: -1 | 1 }): Promise<boolean> {
+  const images = await current(db, base);
+  const from = images.findIndex((i) => Number(i.id) === base.imageId);
+  if (from < 0) return false;
+  return moveImageTo(db, api, { storeId: base.storeId, actor: base.actor, productId: base.productId, imageId: base.imageId, toIndex: from + base.direction });
 }

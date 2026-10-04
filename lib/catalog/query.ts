@@ -112,7 +112,7 @@ export interface ProductDetail {
   seo_title: string;
   seo_description: string;
   updated_at_remote: string | null;
-  variants: Array<{ id: string; sku: string | null; price: string | null; promotional_price: string | null; stock: number | null; stock_management: boolean; values: Array<Record<string, string | null>> }>;
+  variants: Array<{ id: string; sku: string | null; price: string | null; promotional_price: string | null; stock: number | null; stock_management: boolean; values: Array<Record<string, string | null>>; image_id: string | null }>;
 }
 
 export async function getProductDetail(db: Db, storeId: string, id: number): Promise<ProductDetail | null> {
@@ -126,7 +126,7 @@ export async function getProductDetail(db: Db, storeId: string, id: number): Pro
   const product = rows[0];
   if (!product) return null;
   const variants = await db.query<ProductDetail["variants"][number]>(
-    `SELECT id::text AS id, sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management, values
+    `SELECT id::text AS id, sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management, values, nullif(raw_json->>'image_id', '') AS image_id
      FROM variants WHERE store_id = $1::uuid AND product_id = $2::bigint ORDER BY position NULLS LAST, id`,
     [storeId, id],
   );

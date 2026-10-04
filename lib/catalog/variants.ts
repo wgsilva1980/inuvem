@@ -29,6 +29,16 @@ const money = (required: boolean, requiredMessage: string) =>
     return parsed;
   });
 
+const imageId = z.string().transform((value, ctx) => {
+  const s = value.trim();
+  if (s === "") return null;
+  if (!/^\d{1,15}$/.test(s)) {
+    ctx.addIssue({ code: "custom", message: "Imagem inválida." });
+    return z.NEVER;
+  }
+  return Number(s);
+});
+
 const stockValue = z.string().transform((value, ctx) => {
   const s = value.trim();
   if (s === "") return null;
@@ -51,6 +61,7 @@ export const variantEditSchema = z
     promotional_price: money(false, ""),
     stock_management: z.boolean(),
     stock: stockValue,
+    image_id: imageId,
   })
   .superRefine((v, ctx) => {
     if (v.price !== null && v.promotional_price !== null && Number(v.promotional_price) >= Number(v.price)) {
@@ -67,6 +78,7 @@ export const variantEditSchema = z
     stock_management: v.stock_management,
     // sem controle de estoque, a quantidade não vale (a API usa null = ilimitado)
     stock: v.stock_management ? v.stock : null,
+    image_id: v.image_id,
   }));
 export type VariantEdit = z.infer<typeof variantEditSchema>;
 export type VariantField = keyof VariantEdit;
@@ -83,6 +95,7 @@ export function variantToEdit(v: {
   promotional_price?: unknown;
   stock_management?: boolean | null;
   stock?: number | null;
+  image_id?: number | null;
 }): VariantEdit {
   const management = v.stock_management ?? false;
   return {
@@ -91,6 +104,7 @@ export function variantToEdit(v: {
     promotional_price: money2(v.promotional_price),
     stock_management: management,
     stock: management ? (v.stock ?? null) : null,
+    image_id: v.image_id ?? null,
   };
 }
 
@@ -105,6 +119,7 @@ export function changedVariantFields(before: VariantEdit, after: VariantEdit): V
   }
   if (before.stock_management !== after.stock_management) fields.push("stock_management");
   if (before.stock !== after.stock) fields.push("stock");
+  if (before.image_id !== after.image_id) fields.push("image_id");
   return fields;
 }
 
@@ -118,6 +133,7 @@ export function buildVariantInput(after: VariantEdit, fields: VariantField[]): V
   if (has("stock_management")) input.stock_management = after.stock_management;
   // ao ligar o controle, a quantidade precisa ir junto
   if (has("stock") || (has("stock_management") && after.stock_management)) input.stock = after.stock;
+  if (has("image_id")) input.image_id = after.image_id;
   return input;
 }
 

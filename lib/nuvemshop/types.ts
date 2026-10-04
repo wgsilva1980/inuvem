@@ -22,6 +22,8 @@ export const variantSchema = z
     depth: decimal.optional(),
     values: z.array(i18nSchema).optional(),
     position: z.number().nullable().optional(),
+    /** Imagem escolhida para a variação (uma das imagens do produto). */
+    image_id: z.number().nullable().optional(),
   })
   .passthrough();
 export type Variant = z.infer<typeof variantSchema>;
@@ -105,6 +107,7 @@ export type VariantInput = Partial<{
   height: string | number;
   depth: string | number;
   values: I18n[];
+  image_id: number | null;
 }>;
 
 /**
