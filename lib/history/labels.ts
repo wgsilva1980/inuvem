@@ -39,3 +39,11 @@ export const TIPO_LABEL: Record<string, string> = {
   categoria: "Categorias",
   lote: "Operações em massa",
 };
+
+export type AcaoGrupo = "produto" | "variante" | "imagem" | "categoria" | "lote" | "outro";
+
+/** Grupo da ação (para o ícone na lista): o prefixo do código gravado no `audit_log`. */
+export function acaoGrupo(acao: string): AcaoGrupo {
+  const grupo = acao.split(".")[0];
+  return grupo === "produto" || grupo === "variante" || grupo === "imagem" || grupo === "categoria" || grupo === "lote" ? grupo : "outro";
+}

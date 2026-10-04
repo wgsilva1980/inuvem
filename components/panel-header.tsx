@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Brand } from "@/components/brand";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { NAV_LINKS as LINKS, isActive } from "@/lib/nav";
 
@@ -43,6 +44,7 @@ export function PanelHeader({ email, signOut }: { email: string; signOut: () => 
         </nav>
 
         <form action={signOut} className="hidden items-center gap-3 md:flex">
+          <ThemeToggle />
           <span className="max-w-48 truncate text-sm text-muted">{email}</span>
           <Button type="submit" variant="outline">
             Sair
@@ -79,6 +81,7 @@ export function PanelHeader({ email, signOut }: { email: string; signOut: () => 
           </nav>
           <form action={signOut} className="mt-2 flex flex-col gap-2 border-t border-border p-3">
             <span className="truncate text-sm text-muted">{email}</span>
+            <ThemeToggle className="min-h-11 justify-center" />
             <Button type="submit" variant="outline" className="min-h-11">
               Sair
             </Button>

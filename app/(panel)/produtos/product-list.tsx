@@ -89,7 +89,7 @@ export function ProductList({ items, total, filterQuery }: { items: CatalogItem[
 
       {selected.size > 0 && (
         <div role="region" aria-label="Ações para os produtos selecionados" className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-card px-4 py-3 shadow-lg">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-medium" aria-live="polite">
               {selected.size} {selected.size === 1 ? "produto selecionado" : "produtos selecionados"}
             </p>

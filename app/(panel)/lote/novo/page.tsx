@@ -26,7 +26,7 @@ export default async function NovoLotePage({ searchParams }: { searchParams: Pro
   const selecao = sp.ids ? `ids=${selection.ids.join(",")}` : filtersQueryString(catalogParamsSchema.parse(sp));
 
   return (
-    <main className="flex flex-col gap-4">
+    <main className="flex max-w-4xl flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Link href="/produtos" className="text-sm text-muted hover:underline">
           ← Produtos

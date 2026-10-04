@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-16">
+    <div className="mx-auto w-full max-w-6xl px-4 pb-16">
       <PanelHeader email={admin.email} signOut={signOut} />
       {children}
     </div>

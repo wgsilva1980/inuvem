@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
+import { Pagination } from "@/components/ui/pagination";
 import { ProductList } from "./product-list";
 import { buttonClass } from "@/components/ui/button";
 import { activeFilters, catalogParamsSchema, filtersQueryString, paramsToFilters } from "@/lib/catalog/params";
@@ -121,27 +122,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
 
       <ProductList items={result.items} total={result.total} filterQuery={filtersQueryString(sp)} />
 
-      {result.pages > 1 && (
-        <nav aria-label="Paginação" className="flex items-center justify-between gap-3">
-          {result.page > 1 ? (
-            <Link href={href(result.page - 1)} className={buttonClass("outline")}>
-              Anterior
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-sm text-muted">
-            Página {result.page} de {result.pages}
-          </span>
-          {result.page < result.pages ? (
-            <Link href={href(result.page + 1)} className={buttonClass("outline")}>
-              Próxima
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
+      <Pagination page={result.page} pages={result.pages} href={href} />
     </main>
   );
 }

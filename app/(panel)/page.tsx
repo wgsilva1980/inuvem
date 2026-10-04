@@ -11,6 +11,7 @@ import { query, queryOne } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import type { SyncRun } from "@/lib/sync/engine";
 import { Alert } from "@/components/ui/alert";
+import { HistoryIcon } from "@/components/history-icon";
 import { Badge } from "@/components/ui/badge";
 
 const ERROS: Record<string, string> = {
@@ -62,7 +63,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
     : `Loja ${store.nuvemshop_store_id} · ${last ? (last.status === "failed" ? "última sincronização falhou" : `sincronizada em ${fmt(last.finished_at ?? last.started_at)}`) : "ainda não sincronizada"}`;
 
   return (
-    <main className="flex flex-col gap-4">
+    <main className="flex max-w-4xl flex-col gap-4">
       {sp.conectado && (
         <Alert tone="success">
           Loja conectada com sucesso. Faça a primeira sincronização abaixo.
@@ -133,13 +134,16 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
           </div>
           <ul className="mt-3 flex flex-col gap-2 text-sm">
             {recent.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2">
-                <span>
-                  <span className={e.sucesso ? "" : "text-danger"}>{acaoLabel(e.acao, e.entidade)}</span>
-                  {e.nome ? <span className="text-muted"> · {e.nome}</span> : null}
-                  {e.sucesso ? null : <span className="text-danger"> (falhou)</span>}
-                </span>
-                <span className="text-xs text-muted">{fmt(e.created_at)}</span>
+              <li key={e.id} className="flex items-center gap-3">
+                <HistoryIcon acao={e.acao} falhou={!e.sucesso} />
+                <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <span>
+                    <span className={e.sucesso ? "" : "text-danger"}>{acaoLabel(e.acao, e.entidade)}</span>
+                    {e.nome ? <span className="text-muted"> · {e.nome}</span> : null}
+                    {e.sucesso ? null : <span className="text-danger"> (falhou)</span>}
+                  </span>
+                  <span className="text-xs text-muted">{fmt(e.created_at)}</span>
+                </div>
               </li>
             ))}
           </ul>
