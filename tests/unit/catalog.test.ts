@@ -55,6 +55,17 @@ describe("listCatalog", () => {
     ]);
   });
 
+  it("traz a primeira imagem (menor position) como miniatura e null sem imagens", async () => {
+    await upsertProducts(db, storeId, [
+      product(7, { images: [{ id: 71, product_id: 7, src: "https://x/segunda.jpg", position: 2 }, { id: 70, product_id: 7, src: "https://x/primeira.jpg", position: 1 }] }),
+      product(8, { images: [] }),
+    ]);
+    const r = await listCatalog(db, storeId, { q: "Produto 7" });
+    expect(r.items[0]?.thumb_url).toBe("https://x/primeira.jpg");
+    const none = await listCatalog(db, storeId, { q: "Produto 8" });
+    expect(none.items[0]?.thumb_url).toBeNull();
+  });
+
   it("lista tudo ordenado por nome, com agregados das variantes", async () => {
     const r = await listCatalog(db, storeId);
     expect(r.total).toBe(3);

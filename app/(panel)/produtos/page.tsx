@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
 import { ProductList } from "./product-list";
 import { buttonClass } from "@/components/ui/button";
-import { catalogParamsSchema, filtersQueryString, paramsToFilters } from "@/lib/catalog/params";
+import { activeFilters, catalogParamsSchema, filtersQueryString, paramsToFilters } from "@/lib/catalog/params";
 import { listCatalog, listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
@@ -25,6 +25,8 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
   const db = { query };
   const [result, categories] = await Promise.all([listCatalog(db, store.id, filters), listCategoryOptions(db, store.id)]);
 
+  const chips = activeFilters(sp, (id) => categories.find((c) => c.id === id)?.name);
+
   const href = (page: number) => {
     const p = new URLSearchParams(filtersQueryString(sp));
     if (sp.ordem && sp.ordem !== "nome") p.set("ordem", sp.ordem);
@@ -34,7 +36,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
   };
 
   return (
-    <main className="flex flex-col gap-4">
+    <main className="flex flex-col gap-4 pb-20">
       <div className="flex items-end justify-between gap-3">
         <h1 className="text-xl font-semibold">Produtos</h1>
         <p className="text-sm text-muted">{result.total} {result.total === 1 ? "produto" : "produtos"}</p>
@@ -99,6 +101,23 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
           </div>
         </form>
       </Card>
+
+      {chips.length > 0 && (
+        <ul aria-label="Filtros ativos" className="flex flex-wrap items-center gap-2">
+          {chips.map((c) => (
+            <li key={c.key}>
+              <Link
+                href={c.removeQuery ? `/produtos?${c.removeQuery}` : "/produtos"}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border-strong bg-card px-3 text-sm hover:bg-border/40"
+                aria-label={`Remover filtro: ${c.label}`}
+              >
+                {c.label}
+                <span aria-hidden="true">×</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <ProductList items={result.items} total={result.total} filterQuery={filtersQueryString(sp)} />
 

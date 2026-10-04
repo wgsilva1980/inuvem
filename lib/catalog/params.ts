@@ -29,3 +29,35 @@ export function filtersQueryString(sp: CatalogParams): string {
   for (const k of ["sem_sku", "sem_imagem", "sem_categoria", "sem_estoque", "sem_descricao"] as const) if (sp[k]) p.set(k, "1");
   return p.toString();
 }
+
+export interface ActiveFilter {
+  key: string;
+  label: string;
+  /** Query string dos filtros sem este (a ordem é mantida; a página volta para a primeira). */
+  removeQuery: string;
+}
+
+const FLAG_LABELS = {
+  sem_sku: "Variante sem SKU",
+  sem_imagem: "Sem imagem",
+  sem_categoria: "Sem categoria",
+  sem_estoque: "Variante sem estoque",
+  sem_descricao: "Sem descrição",
+} as const;
+
+/** Filtros em uso, para mostrar como chips removíveis acima da lista. */
+export function activeFilters(sp: CatalogParams, categoryName?: (id: number) => string | undefined): ActiveFilter[] {
+  const without = (omit: (keyof CatalogParams)[]) => {
+    const p = new URLSearchParams(filtersQueryString({ ...sp, ...Object.fromEntries(omit.map((k) => [k, undefined])) }));
+    if (sp.ordem && sp.ordem !== "nome") p.set("ordem", sp.ordem);
+    return p.toString();
+  };
+  const out: ActiveFilter[] = [];
+  if (sp.q) out.push({ key: "q", label: `Busca: ${sp.q}`, removeQuery: without(["q"]) });
+  if (sp.status && sp.status !== "todos") out.push({ key: "status", label: sp.status === "publicados" ? "Publicados" : "Não publicados", removeQuery: without(["status"]) });
+  if (sp.categoria) out.push({ key: "categoria", label: `Categoria: ${categoryName?.(sp.categoria) ?? sp.categoria}`, removeQuery: without(["categoria"]) });
+  for (const k of Object.keys(FLAG_LABELS) as (keyof typeof FLAG_LABELS)[]) {
+    if (sp[k]) out.push({ key: k, label: FLAG_LABELS[k], removeQuery: without([k]) });
+  }
+  return out;
+}
