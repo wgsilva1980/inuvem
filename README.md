@@ -12,6 +12,8 @@ Próximas: catálogo (2), variantes e imagens (3), operações em massa (4), cat
 - `lib/nuvemshop/` — SDK tipado (uma função por endpoint) + `client.ts` (único ponto de saída HTTP: fila/rate limit por loja,
   retry com backoff em 429/5xx, timeout, logs estruturados, token nunca logado).
 - `lib/sync/` — motor de sincronização retomável (cursor em `sync_runs`, lotes curtos por causa do timeout da Vercel).
+- `lib/catalog/` — catálogo (Fase 2): consulta com filtros sobre o espelho (`query.ts`), regras de edição (`edit.ts`) e o
+  salvamento (`update.ts`): confere conflito com a loja, envia só os campos alterados, atualiza o espelho e grava em `audit_log`.
 - `lib/auth/` — Neon Auth (magic link) + allowlist de admins (`admins`). Exige e-mail verificado.
 - `lib/crypto.ts` — AES-256-GCM para o token da loja (`ENCRYPTION_KEY`).
 - `db/migrations/` — SQL puro, aplicado por `npm run db:migrate`.
@@ -106,5 +108,8 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
 7. **Assinatura HMAC dos webhooks**: assumi o header `x-linkedstore-hmac-sha256` (HMAC-SHA256 do corpo bruto com o client secret; aceita hex ou base64).
    Também a forma exata do payload de LGPD (usei apenas `store_id`) e se esses webhooks vêm assinados. `store-redact` falha fechado (401) sem assinatura válida.
 8. **Endpoint de dados da loja** (nome/URL) — não consumido ainda; `stores.name` e `stores.url` ficam vazios.
-9. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
+9. **Edição de produto (Fase 2).** `PUT /products/{id}` com corpo parcial (só os campos alterados), `categories` como lista de IDs,
+   campos multi-idioma como `{ "pt": "..." }`, e o formato de `updated_at` usado para detectar alteração feita por fora da loja.
+   `images[].alt` chega como objeto multi-idioma na loja real (a documentação mostra lista); o schema aceita as duas formas.
+10. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
    (versão beta), mas o envio real do e-mail não foi testado fora do seu ambiente.
