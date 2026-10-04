@@ -122,9 +122,12 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
 9. **Edição de produto (Fase 2).** `PUT /products/{id}` com corpo parcial (só os campos alterados), `categories` como lista de IDs,
    campos multi-idioma como `{ "pt": "..." }`, e o comportamento de `updated_at`: na loja real ele **não avança** com edições, então a detecção de alteração por fora compara o conteúdo editável (não a data).
    `images[].alt` chega como objeto multi-idioma na loja real (a documentação mostra lista); o schema aceita as duas formas.
-10. **Webhooks de produtos e categorias.** Nomes dos eventos (`product/created|updated|deleted`, `category/created|updated|deleted`),
+10. **Descrição (editor visual).** O HTML enviado é limpo no servidor (`sanitize-html`): só formatação de texto, links https/mailto/tel, imagens https e tabelas;
+   estilos só de cor e alinhamento. Uma descrição que ninguém editou segue idêntica à da loja (não é reescrita nem limpa). Não confirmei
+   quais tags a Nuvemshop aceita/remove na vitrine; se algum elemento sumir depois de salvar, ajustar a lista em `lib/catalog/description.ts`.
+11. **Webhooks de produtos e categorias.** Nomes dos eventos (`product/created|updated|deleted`, `category/created|updated|deleted`),
    corpo `{ store_id, event, id }`, `POST /webhooks` com `{ event, url }` e o header de assinatura (item 7). Como o corpo não traz hora nem
    id de entrega, a deduplicação só descarta repetições em até 3 s; o processamento é idempotente (busca o estado atual e regrava).
    Se todas as entregas forem recusadas com 401, o nome do header de assinatura está errado (o log `webhook.rejected` mostra se ele veio).
-11. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
+12. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
    (versão beta), mas o envio real do e-mail não foi testado fora do seu ambiente.
