@@ -39,14 +39,14 @@ export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-export async function listCatalog(db: Db, storeId: string, filters: CatalogFilters = {}): Promise<CatalogPage> {
+/** Monta o WHERE (e os parâmetros) dos filtros do catálogo. Compartilhado com a seleção de produtos para operações em massa. */
+export function buildCatalogWhere(storeId: string, filters: CatalogFilters): { whereSql: string; params: unknown[] } {
   const where: string[] = ["p.store_id = $1::uuid"];
   const params: unknown[] = [storeId];
   const add = (value: unknown) => {
     params.push(value);
     return `$${params.length}`;
   };
-
   const q = filters.q?.trim();
   if (q) {
     const like = add(`%${escapeLike(q)}%`);
@@ -65,7 +65,11 @@ export async function listCatalog(db: Db, storeId: string, filters: CatalogFilte
     );
   }
 
-  const whereSql = where.join(" AND ");
+  return { whereSql: where.join(" AND "), params };
+}
+
+export async function listCatalog(db: Db, storeId: string, filters: CatalogFilters = {}): Promise<CatalogPage> {
+  const { whereSql, params } = buildCatalogWhere(storeId, filters);
   const totalRow = await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM products p WHERE ${whereSql}`, params);
   const total = Number(totalRow[0]?.n ?? 0);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -131,4 +135,11 @@ export async function getProductDetail(db: Db, storeId: string, id: number): Pro
     [storeId, id],
   );
   return { ...product, variants };
+}
+
+/** IDs dos produtos que casam com os filtros (para operações em massa). Pede um a mais que o limite para saber se estourou. */
+export async function listProductIds(db: Db, storeId: string, filters: CatalogFilters, limit: number): Promise<{ ids: number[]; truncated: boolean }> {
+  const { whereSql, params } = buildCatalogWhere(storeId, { ...filters, page: undefined });
+  const rows = await db.query<{ id: string }>(`SELECT p.id::text AS id FROM products p WHERE ${whereSql} ORDER BY lower(p.name), p.id LIMIT ${limit + 1}`, params);
+  return { ids: rows.slice(0, limit).map((r) => Number(r.id)), truncated: rows.length > limit };
 }
