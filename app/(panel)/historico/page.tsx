@@ -8,6 +8,8 @@ import { HISTORY_TYPES, listHistory } from "@/lib/history/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import { fieldBase } from "@/components/ui/field";
+import { HistoryIcon } from "@/components/history-icon";
+import { Pagination } from "@/components/ui/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +95,9 @@ export default async function HistoricoPage({ searchParams }: { searchParams: Pr
         ) : (
           <ul className="divide-y divide-border">
             {result.items.map((e) => (
-              <li key={e.id} className="flex flex-col gap-1 p-4 text-sm">
+              <li key={e.id} className="flex gap-3 p-4 text-sm">
+                <HistoryIcon acao={e.acao} falhou={!e.sucesso} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span>
                     <span className={`font-medium ${e.sucesso ? "" : "text-danger"}`}>{acaoLabel(e.acao, e.entidade)}</span>
@@ -137,33 +141,14 @@ export default async function HistoricoPage({ searchParams }: { searchParams: Pr
                     </div>
                   </details>
                 )}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </Card>
 
-      {result.pages > 1 && (
-        <nav aria-label="Paginação" className="flex items-center justify-between gap-3">
-          {result.page > 1 ? (
-            <Link href={href(result.page - 1)} className={buttonClass("outline")}>
-              Mais recentes
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-sm text-muted">
-            Página {result.page} de {result.pages}
-          </span>
-          {result.page < result.pages ? (
-            <Link href={href(result.page + 1)} className={buttonClass("outline")}>
-              Mais antigos
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
+      <Pagination page={result.page} pages={result.pages} href={href} prevLabel="Mais recentes" nextLabel="Mais antigos" />
     </main>
   );
 }

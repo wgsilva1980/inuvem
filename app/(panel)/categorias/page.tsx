@@ -26,7 +26,7 @@ export default async function CategoriasPage() {
   const allOptions: ParentOption[] = flat.map((r) => ({ id: r.id, label: label(r) }));
 
   return (
-    <main className="flex flex-col gap-4">
+    <main className="flex max-w-4xl flex-col gap-4">
       <div className="flex items-end justify-between gap-3">
         <h1 className="text-xl font-semibold">Categorias</h1>
         <p className="text-sm text-muted">{rows.length} {rows.length === 1 ? "categoria" : "categorias"}</p>

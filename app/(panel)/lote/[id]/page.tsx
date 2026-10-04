@@ -39,7 +39,7 @@ export default async function LotePage({ params, searchParams }: { params: Promi
   const ignorados = job.ignorados ?? [];
 
   return (
-    <main className="flex flex-col gap-4">
+    <main className="flex max-w-4xl flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Link href="/lote" className="text-sm text-muted hover:underline">
           ← Lotes

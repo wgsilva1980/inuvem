@@ -28,6 +28,14 @@ const contrast = (a: string, b: string) => {
 const light: Tokens = block(":root {");
 const dark: Tokens = block("@media (prefers-color-scheme: dark)");
 
+describe("tema escuro manual", () => {
+  it("[data-theme=dark] tem exatamente as mesmas cores do tema escuro automático", () => {
+    const manual: Tokens = block(':root[data-theme="dark"]');
+    expect(Object.keys(manual).length).toBeGreaterThan(5);
+    expect(manual).toEqual(dark);
+  });
+});
+
 describe.each([
   ["claro", light],
   ["escuro", dark],
