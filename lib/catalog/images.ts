@@ -1,0 +1,118 @@
+import { z } from "zod";
+import { NuvemshopError } from "@/lib/nuvemshop/errors";
+import type { Product, ProductImage } from "@/lib/nuvemshop/types";
+import { upsertProducts, type Db } from "@/lib/sync/repo";
+
+/** Acesso à API da Nuvemshop (injetado para testar sem rede). */
+export interface ImageApi {
+  getProduct(productId: number): Promise<Product>;
+  create(productId: number, input: { src: string; position?: number }): Promise<ProductImage>;
+  remove(productId: number, imageId: number): Promise<void>;
+  setPosition(productId: number, imageId: number, position: number): Promise<ProductImage>;
+}
+
+/** A Nuvemshop baixa a imagem a partir da URL: precisa ser pública e https. */
+export const imageUrlSchema = z
+  .string()
+  .trim()
+  .max(2000, "URL longa demais.")
+  .url("Informe uma URL válida.")
+  .refine((u) => u.startsWith("https://"), "A URL deve começar com https://");
+
+export interface ImageRow {
+  id: string;
+  src: string;
+  position: number | null;
+  alt: string;
+}
+
+/** Imagens do produto no espelho, na ordem de exibição. */
+export async function getProductImages(db: Db, storeId: string, productId: number): Promise<ImageRow[]> {
+  return db.query<ImageRow>(
+    `SELECT (i->>'id') AS id, (i->>'src') AS src, nullif(i->>'position', '')::int AS position,
+            coalesce(i->'alt'->>'pt', '') AS alt
+     FROM products p, jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) WITH ORDINALITY AS t(i, n)
+     WHERE p.store_id = $1::uuid AND p.id = $2::bigint
+     ORDER BY nullif(i->>'position', '')::int NULLS LAST, t.n`,
+    [storeId, productId],
+  );
+}
+
+export class ProductMissingError extends Error {
+  constructor() {
+    super("Produto não encontrado no espelho. Sincronize o catálogo e tente de novo.");
+  }
+}
+
+type Action = "adicionar" | "remover" | "reordenar";
+
+async function audit(
+  db: Db,
+  e: { storeId: string; actor: string; productId: number; acao: Action; antes: unknown; depois: unknown; resultado: unknown; sucesso: boolean },
+) {
+  await db.query(
+    `INSERT INTO audit_log (store_id, actor_email, acao, entidade, entidade_id, antes, depois, resultado_api, sucesso)
+     VALUES ($1::uuid, $2, $3, 'produto', $4, $5::jsonb, $6::jsonb, $7::jsonb, $8)`,
+    [e.storeId, e.actor, `imagem.${e.acao}`, String(e.productId), JSON.stringify(e.antes), JSON.stringify(e.depois), JSON.stringify(e.resultado), e.sucesso],
+  );
+}
+
+/**
+ * Executa uma operação de imagem na Nuvemshop e, em seguida, rebusca o produto e regrava o espelho: assim a tela
+ * mostra a ordem e as imagens exatamente como a loja ficou (a regra de reposicionamento é decidida por ela).
+ */
+async function run(
+  db: Db,
+  api: ImageApi,
+  args: { storeId: string; actor: string; productId: number; acao: Action; antes: unknown; depois: unknown },
+  op: () => Promise<unknown>,
+): Promise<void> {
+  const { storeId, actor, productId, acao, antes, depois } = args;
+  try {
+    await op();
+    await upsertProducts(db, storeId, [await api.getProduct(productId)]);
+    await audit(db, { storeId, actor, productId, acao, antes, depois, resultado: { status: "ok" }, sucesso: true });
+  } catch (err) {
+    const resultado =
+      err instanceof NuvemshopError ? { status: err.status, mensagem: err.apiMessage ?? err.message } : { mensagem: err instanceof Error ? err.message : String(err) };
+    await audit(db, { storeId, actor, productId, acao, antes, depois, resultado, sucesso: false });
+    throw err;
+  }
+}
+
+type Base = { storeId: string; actor: string; productId: number };
+
+async function current(db: Db, base: Base): Promise<ImageRow[]> {
+  const images = await getProductImages(db, base.storeId, base.productId);
+  const exists = await db.query("SELECT 1 FROM products WHERE store_id = $1::uuid AND id = $2::bigint", [base.storeId, base.productId]);
+  if (exists.length === 0) throw new ProductMissingError();
+  return images;
+}
+
+export async function addImage(db: Db, api: ImageApi, base: Base & { src: string }): Promise<void> {
+  const images = await current(db, base);
+  await run(db, api, { ...base, acao: "adicionar", antes: { total: images.length }, depois: { src: base.src } }, () =>
+    api.create(base.productId, { src: base.src }),
+  );
+}
+
+export async function removeImage(db: Db, api: ImageApi, base: Base & { imageId: number }): Promise<void> {
+  const images = await current(db, base);
+  const target = images.find((i) => Number(i.id) === base.imageId);
+  await run(db, api, { ...base, acao: "remover", antes: { id: base.imageId, src: target?.src ?? null }, depois: { total: images.length - 1 } }, () =>
+    api.remove(base.productId, base.imageId),
+  );
+}
+
+/** Move a imagem uma posição para cima (-1) ou para baixo (+1). Sem efeito nas pontas. */
+export async function moveImage(db: Db, api: ImageApi, base: Base & { imageId: number; direction: -1 | 1 }): Promise<boolean> {
+  const images = await current(db, base);
+  const from = images.findIndex((i) => Number(i.id) === base.imageId);
+  const to = from + base.direction;
+  if (from < 0 || to < 0 || to >= images.length) return false;
+  const newPosition = images[to]!.position ?? to + 1; // assume a posição que a imagem vizinha ocupa hoje
+  await run(db, api, { ...base, acao: "reordenar", antes: { id: base.imageId, posicao: images[from]!.position ?? from + 1 }, depois: { id: base.imageId, posicao: newPosition } }, () =>
+    api.setPosition(base.productId, base.imageId, newPosition),
+  );
+  return true;
+}
