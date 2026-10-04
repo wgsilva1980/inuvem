@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { join } from "node:path";
-import { loadMigrations, runMigrations, type MigrationExecutor } from "@/lib/db/migrate";
+import { loadMigrations, pendingMigrations, runMigrations, type MigrationExecutor } from "@/lib/db/migrate";
 
 function pgliteExecutor(db: PGlite): MigrationExecutor {
   return {
@@ -19,6 +19,12 @@ describe("migrations", () => {
     const first = await runMigrations(exec, migrations);
     expect(first).toEqual(migrations.map((m) => m.name));
     expect(await runMigrations(exec, migrations)).toEqual([]);
+  });
+
+  it("pendingMigrations lista o que falta aplicar", () => {
+    expect(pendingMigrations(["0001_init.sql"], ["0001_init.sql", "0002_x.sql"])).toEqual(["0002_x.sql"]);
+    expect(pendingMigrations(["0001_init.sql", "0002_x.sql"], ["0001_init.sql", "0002_x.sql"])).toEqual([]);
+    expect(pendingMigrations([], [])).toEqual([]);
   });
 
   it("liga RLS em todas as tabelas do app", async () => {

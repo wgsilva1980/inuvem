@@ -37,3 +37,9 @@ export async function runMigrations(db: MigrationExecutor, migrations: Migration
   }
   return applied;
 }
+
+/** Migrations do código que ainda não constam como aplicadas no banco. */
+export function pendingMigrations(applied: string[], expected: string[]): string[] {
+  const done = new Set(applied);
+  return expected.filter((name) => !done.has(name));
+}

@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { loadMigrations, pendingMigrations } from "@/lib/db/migrate";
 import { checkEnv } from "@/lib/health";
 import { isValidCronAuth } from "@/lib/security";
 
@@ -23,7 +25,20 @@ export async function GET(request: Request) {
     const migrations = await query<{ name: string }>("SELECT name FROM schema_migrations ORDER BY name");
     const admins = await query<{ n: string }>("SELECT count(*)::text AS n FROM admins");
     checks.database = { ok: true };
-    checks.migrations = { ok: migrations.length > 0, detail: migrations.map((m) => m.name).join(", ") || "nenhuma aplicada" };
+    const applied = migrations.map((m) => m.name);
+    let expected: string[] = [];
+    try {
+      expected = loadMigrations(join(process.cwd(), "db/migrations")).map((m) => m.name);
+    } catch {
+      /* arquivos não empacotados: compara só com o que está aplicado */
+    }
+    const pending = pendingMigrations(applied, expected);
+    checks.migrations = {
+      ok: applied.length > 0 && pending.length === 0,
+      detail: pending.length
+        ? `pendentes: ${pending.join(", ")} (rode npm run db:migrate)`
+        : `aplicadas: ${applied.join(", ") || "nenhuma"}`,
+    };
     checks.admins = { ok: Number(admins[0]?.n ?? 0) > 0, detail: `${admins[0]?.n ?? 0} liberado(s)` };
   } catch (err) {
     checks.database = { ok: false, detail: err instanceof Error ? err.message.slice(0, 120) : "falha" };
