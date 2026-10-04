@@ -17,8 +17,14 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           <Link href="/produtos" className="text-muted hover:text-foreground">
             Produtos
           </Link>
+          <Link href="/categorias" className="text-muted hover:text-foreground">
+            Categorias
+          </Link>
           <Link href="/lote" className="text-muted hover:text-foreground">
             Lotes
+          </Link>
+          <Link href="/historico" className="text-muted hover:text-foreground">
+            Histórico
           </Link>
         </nav>
         <form action={signOut} className="flex items-center gap-3">

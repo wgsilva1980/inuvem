@@ -10,6 +10,11 @@ export interface CatalogFilters {
   status?: StatusFilter;
   categoryId?: number;
   semSku?: boolean;
+  semImagem?: boolean;
+  semCategoria?: boolean;
+  /** Variante com controle de estoque e quantidade zerada (ou sem quantidade). */
+  semEstoque?: boolean;
+  semDescricao?: boolean;
   sort?: SortKey;
   page?: number;
 }
@@ -62,6 +67,15 @@ export function buildCatalogWhere(storeId: string, filters: CatalogFilters): { w
   if (filters.semSku) {
     where.push(
       "EXISTS (SELECT 1 FROM variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND (v.sku IS NULL OR v.sku = ''))",
+    );
+  }
+
+  if (filters.semImagem) where.push("p.image_count = 0");
+  if (filters.semCategoria) where.push("jsonb_array_length(p.categories) = 0");
+  if (filters.semDescricao) where.push("(p.description IS NULL OR btrim(p.description) = '')");
+  if (filters.semEstoque) {
+    where.push(
+      "EXISTS (SELECT 1 FROM variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.stock_management AND coalesce(v.stock, 0) <= 0)",
     );
   }
 

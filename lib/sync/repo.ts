@@ -84,3 +84,14 @@ export async function pruneStale(db: Db, storeId: string, before: string): Promi
   );
   return { products: p.length, categories: c.length };
 }
+
+/** Remove uma categoria do espelho e a tira da lista de categorias dos produtos que a tinham. */
+export async function removeCategoryFromMirror(db: Db, storeId: string, id: number): Promise<void> {
+  await db.query("DELETE FROM categories WHERE store_id = $1::uuid AND id = $2::bigint", [storeId, id]);
+  await db.query(
+    `UPDATE products
+       SET categories = coalesce((SELECT jsonb_agg(c) FROM jsonb_array_elements(categories) c WHERE (c->>'id')::bigint <> $2::bigint), '[]'::jsonb)
+     WHERE store_id = $1::uuid AND categories @> $3::jsonb`,
+    [storeId, id, JSON.stringify([{ id }])],
+  );
+}

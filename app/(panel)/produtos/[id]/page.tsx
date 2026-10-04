@@ -30,6 +30,9 @@ export default async function ProdutoPage({ params }: { params: Promise<{ id: st
           ← Produtos
         </Link>
         <h1 className="text-xl font-semibold">{product.name}</h1>
+        <Link href={`/historico?produto=${product.id}`} className="text-sm text-muted underline hover:text-foreground">
+          Ver histórico deste produto
+        </Link>
       </div>
 
       <ProductForm product={product} categories={categories} />
