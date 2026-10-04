@@ -1,4 +1,5 @@
 import { requireAdminApi } from "@/lib/auth/admin";
+import { isSameOrigin } from "@/lib/security";
 import { getEnv } from "@/lib/env";
 import { query } from "@/lib/db";
 import { stepJob } from "@/lib/bulk/engine";
@@ -10,7 +11,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /** Processa mais um pedaço do lote (a tela chama de novo até `done`). Retomável: o estado fica no banco. */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!isSameOrigin(request)) return Response.json({ error: "Origem não permitida." }, { status: 403 });
   const admin = await requireAdminApi();
   if (admin instanceof Response) return admin;
   const { id } = await params;

@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/card";
+import { requireAdmin } from "@/lib/auth/admin";
 import { buttonClass } from "@/components/ui/button";
 import { SyncButton } from "@/components/sync-button";
 import { WebhookButton } from "@/components/webhook-button";
@@ -13,6 +14,7 @@ import type { SyncRun } from "@/lib/sync/engine";
 const ERROS: Record<string, string> = {
   "codigo-ausente": "A Nuvemshop não enviou o código de autorização. Tente conectar novamente.",
   "estado-invalido": "A verificação de segurança da conexão falhou. Tente conectar novamente.",
+  "loja-diferente": "Essa autorização é de outra loja. O painel administra uma loja só; para reconectar, autorize a mesma loja já conectada.",
   "falha-oauth": "Não foi possível concluir a conexão com a Nuvemshop. Confira as credenciais do app e tente de novo.",
 };
 
@@ -21,6 +23,7 @@ function fmt(date: string | null): string {
 }
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ conectado?: string; erro?: string }> }) {
+  await requireAdmin();
   const sp = await searchParams;
   const store = await getActiveStore();
 

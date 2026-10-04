@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { ITEM_LABEL, STATUS_LABEL, describeChanges } from "@/lib/bulk/format";
@@ -14,6 +15,7 @@ const fmt = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR", { tim
 const PREVIEW_LIMIT = 100;
 
 export default async function LotePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ todos?: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const { todos } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/auth/admin";
 import { z } from "zod";
 import { Card } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button";
@@ -20,6 +21,7 @@ const fmt = (d: string) => new Date(d).toLocaleString("pt-BR", { timeZone: "Amer
 const json = (v: unknown) => (v === null || v === undefined ? null : JSON.stringify(v, null, 2));
 
 export default async function HistoricoPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  await requireAdmin();
   const store = await getActiveStore();
   if (!store) {
     return (

@@ -11,6 +11,7 @@ import {
   removeImage,
   safeFilename,
   uploadImage,
+  sniffImageType,
   validateImageUpload,
   type ImageApi,
 } from "@/lib/catalog/images";
@@ -108,6 +109,7 @@ async function withImages<T>(productId: number, fn: (ctx: { storeId: string; act
 }
 
 export async function addProductImage(productId: number, _prev: ActionState | null, formData: FormData): Promise<ActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   const parsed = imageUrlSchema.safeParse(formData.get("src") ?? "");
   if (!parsed.success) return { message: parsed.error.issues[0]?.message ?? "URL inválida.", fieldErrors: { src: parsed.error.issues[0]?.message ?? "URL inválida." } };
   const r = await withImages(productId, async ({ storeId, actor, api }) => {
@@ -118,6 +120,7 @@ export async function addProductImage(productId: number, _prev: ActionState | nu
 }
 
 export async function removeProductImage(productId: number, imageId: number): Promise<ActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   if (!validId(imageId)) return { message: "Imagem inválida." };
   return withImages(productId, async ({ storeId, actor, api }) => {
     await removeImage({ query }, api, { storeId, actor, productId, imageId });
@@ -126,6 +129,7 @@ export async function removeProductImage(productId: number, imageId: number): Pr
 }
 
 export async function moveProductImage(productId: number, imageId: number, direction: -1 | 1): Promise<ActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   if (!validId(imageId) || (direction !== -1 && direction !== 1)) return { message: "Imagem inválida." };
   return withImages(productId, async ({ storeId, actor, api }) => {
     const moved = await moveImage({ query }, api, { storeId, actor, productId, imageId, direction });
@@ -135,18 +139,22 @@ export async function moveProductImage(productId: number, imageId: number, direc
 
 /** Upload de arquivo (já reduzido no navegador quando grande). Valida tipo e tamanho de novo aqui: o navegador não é confiável. */
 export async function uploadProductImage(productId: number, formData: FormData): Promise<ActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   const file = formData.get("file");
   if (!(file instanceof File)) return { message: "Escolha um arquivo de imagem." };
   const problem = validateImageUpload(file);
   if (problem) return { message: problem };
   const bytes = Buffer.from(await file.arrayBuffer());
+  const real = sniffImageType(bytes);
+  if (!real) return { message: "O conteúdo do arquivo não é uma imagem JPEG, PNG, WEBP ou GIF." };
   return withImages(productId, async ({ storeId, actor, api }) => {
-    await uploadImage({ query }, api, { storeId, actor, productId, filename: safeFilename(file.name, file.type), bytes });
+    await uploadImage({ query }, api, { storeId, actor, productId, filename: safeFilename(file.name, real), bytes });
     return { ok: true, message: "Imagem enviada à Nuvemshop." } satisfies ActionState;
   });
 }
 
 export async function setMainProductImage(productId: number, imageId: number): Promise<ActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
   if (!validId(imageId)) return { message: "Imagem inválida." };
   return withImages(productId, async ({ storeId, actor, api }) => {
     const moved = await moveImageTo({ query }, api, { storeId, actor, productId, imageId, toIndex: 0 });

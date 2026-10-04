@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/server";
 import { queryOne } from "@/lib/db";
@@ -18,16 +19,22 @@ export async function isAdminEmail(email: string): Promise<boolean> {
  * Exige e-mail verificado: sem isso, alguém poderia criar uma conta (e-mail+senha) com o e-mail
  * de um admin e herdar o acesso.
  */
-export async function getAdminSession(): Promise<AdminSession | null> {
+export const getAdminSession = cache(async (): Promise<AdminSession | null> => {
   const { data: session } = await auth.getSession();
   const user = session?.user;
   if (!user?.email || user.emailVerified !== true) return null;
   const email = user.email.trim().toLowerCase();
   if (!(await isAdminEmail(email))) return null;
   return { email, name: user.name ?? email };
-}
+});
 
-/** Para páginas e Server Actions: redireciona ao login se não for admin. */
+/**
+ * Para páginas e Server Actions: redireciona ao login se não for admin.
+ *
+ * Chame em CADA página e ação, não só no layout: o Next pode renderizar uma página sem rodar o layout que a envolve
+ * (navegação parcial), então o layout não é uma barreira de autorização. A sessão é memorizada por requisição
+ * (`cache`), então chamar de novo no layout e na página custa uma consulta só.
+ */
 export async function requireAdmin(): Promise<AdminSession> {
   const admin = await getAdminSession();
   if (!admin) redirect("/login");

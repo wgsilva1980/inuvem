@@ -1,4 +1,5 @@
 import { requireAdminApi } from "@/lib/auth/admin";
+import { isSameOrigin } from "@/lib/security";
 import { getEnv } from "@/lib/env";
 import { NuvemshopError, createWebhook, listWebhooks } from "@/lib/nuvemshop";
 import { clientForStore, getActiveStore } from "@/lib/stores";
@@ -7,7 +8,8 @@ import { ensureWebhooks } from "@/lib/webhooks/register";
 export const dynamic = "force-dynamic";
 
 /** Registra (ou confere) os webhooks de produtos e categorias na Nuvemshop. Só para admin logado. */
-export async function POST() {
+export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return Response.json({ error: "Origem não permitida." }, { status: 403 });
   const admin = await requireAdminApi();
   if (admin instanceof Response) return admin;
 

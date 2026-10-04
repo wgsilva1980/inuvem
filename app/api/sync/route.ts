@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
+import { isSameOrigin } from "@/lib/security";
 import { NuvemshopError } from "@/lib/nuvemshop";
 import { NoStoreError, summarize, syncStep } from "@/lib/sync/service";
 
@@ -9,6 +10,7 @@ const bodySchema = z.object({ tipo: z.enum(["full", "incremental", "auto"]).defa
 
 /** Executa um lote. A UI chama repetidamente até `done: true` (sync retomável). */
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return Response.json({ error: "Origem não permitida." }, { status: 403 });
   const admin = await requireAdminApi();
   if (admin instanceof Response) return admin;
 

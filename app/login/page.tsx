@@ -47,7 +47,11 @@ export default function LoginPage() {
     setPending(true);
     try {
       const { error } = await authClient.signIn.magicLink({ email, callbackURL: `${window.location.origin}/` });
-      setState(error ? { error: "Não foi possível enviar o link agora. Tente novamente em instantes." } : { sent: true });
+      setState(
+        error
+          ? { error: error.status === 429 ? "Muitas tentativas. Aguarde alguns minutos e tente de novo." : "Não foi possível enviar o link agora. Tente novamente em instantes." }
+          : { sent: true },
+      );
     } catch {
       setState({ error: "Não foi possível enviar o link agora. Tente novamente em instantes." });
     } finally {
