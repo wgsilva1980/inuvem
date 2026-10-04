@@ -26,7 +26,7 @@ export default async function ProdutoPage({ params }: { params: Promise<{ id: st
   if (!product) notFound();
 
   return (
-    <main className="flex max-w-4xl flex-col gap-4">
+    <main className="flex max-w-4xl flex-col gap-4 pb-32">
       <div className="flex flex-col gap-1">
         <Link href="/produtos" className="text-sm text-muted hover:underline">
           ← Produtos

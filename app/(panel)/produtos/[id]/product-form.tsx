@@ -83,21 +83,24 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
         )}
       </Card>
 
-      <div className="sticky bottom-0 z-10 -mx-4 flex flex-col gap-2 border-t border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 text-sm">
-          {state?.message ? (
-            <Alert tone={state.ok ? "success" : "danger"} className="border-0 p-0">
-              {state.message}
-            </Alert>
-          ) : dirty ? (
-            <span className="text-warning">Alterações não salvas</span>
-          ) : (
-            <span className="text-muted">Nenhuma alteração pendente</span>
-          )}
+      {/* Fixa no rodapé da janela durante toda a página (não só enquanto o formulário está à vista). */}
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-card px-4 py-3 shadow-lg">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 text-sm">
+            {state?.message ? (
+              <Alert tone={state.ok ? "success" : "danger"} className="border-0 p-0">
+                {state.message}
+              </Alert>
+            ) : dirty ? (
+              <span className="text-warning">Dados do produto: alterações não salvas</span>
+            ) : (
+              <span className="text-muted">Dados do produto: nenhuma alteração pendente</span>
+            )}
+          </div>
+          <Button type="submit" disabled={pending} className="min-h-11">
+            {pending ? "Salvando…" : "Salvar na Nuvemshop"}
+          </Button>
         </div>
-        <Button type="submit" disabled={pending} className="min-h-11">
-          {pending ? "Salvando…" : "Salvar na Nuvemshop"}
-        </Button>
       </div>
     </form>
   );
