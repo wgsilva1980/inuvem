@@ -1,26 +1,11 @@
 import Link from "next/link";
-import { z } from "zod";
 import { Card } from "@/components/ui/card";
+import { ProductList } from "./product-list";
 import { buttonClass } from "@/components/ui/button";
-import { listCatalog, listCategoryOptions, type CatalogFilters } from "@/lib/catalog/query";
+import { catalogParamsSchema, filtersQueryString, paramsToFilters } from "@/lib/catalog/params";
+import { listCatalog, listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
-
-const paramsSchema = z.object({
-  q: z.string().trim().max(100).optional().catch(undefined),
-  status: z.enum(["todos", "publicados", "rascunhos"]).optional().catch(undefined),
-  categoria: z.coerce.number().int().positive().optional().catch(undefined),
-  sem_sku: z.literal("1").optional().catch(undefined),
-  ordem: z.enum(["nome", "atualizados"]).optional().catch(undefined),
-  pagina: z.coerce.number().int().min(1).optional().catch(undefined),
-});
-
-const brl = (value: string | null) =>
-  value === null ? "—" : Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-function priceRange(min: string | null, max: string | null) {
-  return min === max ? brl(min) : `${brl(min)} – ${brl(max)}`;
-}
 
 export default async function ProdutosPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const store = await getActiveStore();
@@ -32,15 +17,8 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const sp = paramsSchema.parse(await searchParams);
-  const filters: CatalogFilters = {
-    q: sp.q,
-    status: sp.status ?? "todos",
-    categoryId: sp.categoria,
-    semSku: sp.sem_sku === "1",
-    sort: sp.ordem ?? "nome",
-    page: sp.pagina,
-  };
+  const sp = catalogParamsSchema.parse(await searchParams);
+  const filters = paramsToFilters(sp);
   const db = { query };
   const [result, categories] = await Promise.all([listCatalog(db, store.id, filters), listCategoryOptions(db, store.id)]);
 
@@ -112,31 +90,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
         </form>
       </Card>
 
-      <Card className="p-0 sm:p-0">
-        {result.items.length === 0 ? (
-          <p className="p-6 text-sm text-muted">Nenhum produto encontrado com esses filtros.</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {result.items.map((p) => (
-              <li key={p.id}>
-                <Link href={`/produtos/${p.id}`} className="flex flex-col gap-1 p-4 hover:bg-border/30 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{p.name}</p>
-                    <p className="truncate text-xs text-muted">
-                      {p.categories.map((c) => c.name).join(", ") || "Sem categoria"} · {p.variant_count} {p.variant_count === 1 ? "variante" : "variantes"} · {p.image_count} {p.image_count === 1 ? "imagem" : "imagens"}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-4 text-sm">
-                    <span>{priceRange(p.price_min, p.price_max)}</span>
-                    <span className="text-muted">Estoque: {p.stock_total ?? "—"}</span>
-                    <span className={p.published ? "text-success" : "text-muted"}>{p.published ? "Publicado" : "Não publicado"}</span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <ProductList items={result.items} total={result.total} filterQuery={filtersQueryString(sp)} />
 
       {result.pages > 1 && (
         <nav aria-label="Paginação" className="flex items-center justify-between gap-3">

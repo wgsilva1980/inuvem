@@ -17,6 +17,9 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           <Link href="/produtos" className="text-muted hover:text-foreground">
             Produtos
           </Link>
+          <Link href="/lote" className="text-muted hover:text-foreground">
+            Lotes
+          </Link>
         </nav>
         <form action={signOut} className="flex items-center gap-3">
           <span className="hidden text-sm text-muted sm:inline">{admin.email}</span>
