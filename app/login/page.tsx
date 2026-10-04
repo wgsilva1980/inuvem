@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fieldClass } from "@/components/ui/field";
@@ -63,7 +64,9 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
-        <h1 className="text-xl font-semibold">INuvem</h1>
+        <h1>
+          <Brand className="text-xl" />
+        </h1>
         <p className="mt-1 text-sm text-muted">Painel privado da loja. Entre com seu e-mail.</p>
 
         {state?.sent ? (
