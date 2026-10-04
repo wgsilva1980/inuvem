@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { Button } from "@/components/ui/button";
 import { signOut } from "./actions";
@@ -9,7 +10,14 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   return (
     <div className="mx-auto w-full max-w-5xl px-4 pb-16">
       <header className="flex items-center justify-between gap-3 py-4">
-        <span className="text-lg font-semibold">INuvem</span>
+        <nav className="flex items-center gap-4 text-sm">
+          <Link href="/" className="text-lg font-semibold">
+            INuvem
+          </Link>
+          <Link href="/produtos" className="text-muted hover:text-foreground">
+            Produtos
+          </Link>
+        </nav>
         <form action={signOut} className="flex items-center gap-3">
           <span className="hidden text-sm text-muted sm:inline">{admin.email}</span>
           <Button type="submit" variant="outline">
