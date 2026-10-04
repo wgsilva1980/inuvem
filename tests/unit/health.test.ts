@@ -35,6 +35,16 @@ describe("checkEnv", () => {
     const names = r.invalid.map((i) => i.name);
     expect(names).toEqual(expect.arrayContaining(["ENCRYPTION_KEY", "NEON_AUTH_COOKIE_SECRET", "DATABASE_URL"]));
   });
+  it("detecta valores colados com aspas ou espaços (erro comum na Vercel)", () => {
+    const r = checkEnv({
+      ...good,
+      NUVEMSHOP_CONTACT_EMAIL: `"${good.NUVEMSHOP_CONTACT_EMAIL}"`,
+      APP_URL: `'${good.APP_URL}'`,
+      ENCRYPTION_KEY: ` ${good.ENCRYPTION_KEY}`,
+    });
+    expect(r.invalid.map((i) => i.name).sort()).toEqual(["APP_URL", "ENCRYPTION_KEY", "NUVEMSHOP_CONTACT_EMAIL"]);
+    expect(r.invalid.every((i) => i.problem.includes("SEM aspas"))).toBe(true);
+  });
   it("avisa sobre connection string não pooled, http em produção e client id diferente", () => {
     const r = checkEnv({
       ...good,

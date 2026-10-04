@@ -35,6 +35,11 @@ export function checkEnv(source: Record<string, string | undefined>): EnvReport 
       missing.push(name);
       continue;
     }
+    // Erro comum: colar o valor com aspas (ou espaços) no painel da Vercel; lá elas viram parte do valor.
+    if (/^\s|\s$/.test(value) || /^(["']).*\1$/.test(value.trim())) {
+      invalid.push({ name, problem: "o valor tem aspas ou espaços nas pontas; na Vercel cole o valor SEM aspas" });
+      continue;
+    }
     const parsed = rule.safeParse(value);
     if (!parsed.success) invalid.push({ name, problem: parsed.error.issues[0]?.message ?? "valor inválido" });
     else if (PLACEHOLDER.test(value)) invalid.push({ name, problem: "ainda contém valor de exemplo" });
