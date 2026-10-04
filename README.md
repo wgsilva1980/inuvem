@@ -111,7 +111,7 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    Também a forma exata do payload de LGPD (usei apenas `store_id`) e se esses webhooks vêm assinados. `store-redact` falha fechado (401) sem assinatura válida.
 8. **Endpoint de dados da loja** (nome/URL) — não consumido ainda; `stores.name` e `stores.url` ficam vazios.
 9. **Edição de produto (Fase 2).** `PUT /products/{id}` com corpo parcial (só os campos alterados), `categories` como lista de IDs,
-   campos multi-idioma como `{ "pt": "..." }`, e o formato de `updated_at` usado para detectar alteração feita por fora da loja.
+   campos multi-idioma como `{ "pt": "..." }`, e o comportamento de `updated_at`: na loja real ele **não avança** com edições, então a detecção de alteração por fora compara o conteúdo editável (não a data).
    `images[].alt` chega como objeto multi-idioma na loja real (a documentação mostra lista); o schema aceita as duas formas.
 10. **Webhooks de produtos e categorias.** Nomes dos eventos (`product/created|updated|deleted`, `category/created|updated|deleted`),
    corpo `{ store_id, event, id }`, `POST /webhooks` com `{ event, url }` e o header de assinatura (item 7). Como o corpo não traz hora nem

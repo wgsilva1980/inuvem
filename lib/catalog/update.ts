@@ -1,7 +1,7 @@
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Product, ProductInput } from "@/lib/nuvemshop/types";
 import { upsertProducts, type Db } from "@/lib/sync/repo";
-import { buildProductInput, changedFields, pick, toEdit, type ProductEdit } from "./edit";
+import { buildProductInput, changedFields, pick, remoteToEdit, toEdit, type ProductEdit } from "./edit";
 import { getProductDetail } from "./query";
 
 /** Acesso à API da Nuvemshop (injetado para testar sem rede). */
@@ -24,8 +24,6 @@ export class ProductConflictError extends Error {
 }
 
 export type UpdateResult = { changed: false } | { changed: true; fields: string[] };
-
-const stamp = (value: string | null | undefined) => (value ? Date.parse(value) : NaN);
 
 async function audit(
   db: Db,
@@ -55,11 +53,11 @@ export async function updateProduct(
   const fields = changedFields(before, after);
   if (fields.length === 0) return { changed: false };
 
-  // Detecta alteração feita na Nuvemshop (ou por outro admin) depois da última sincronização.
+  // Detecta alteração feita na Nuvemshop (ou por outro admin) depois da última sincronização. Compara o
+  // CONTEÚDO editável, não o `updated_at`: na loja real esse campo não avança com edições (nem pelo admin
+  // da Nuvemshop, nem pela API), então não serve para detectar mudança.
   const remote = await api.get(productId);
-  const remoteStamp = stamp(remote.updated_at);
-  const localStamp = stamp(detail.updated_at_remote);
-  if (!Number.isNaN(remoteStamp) && !Number.isNaN(localStamp) && remoteStamp > localStamp) {
+  if (changedFields(before, remoteToEdit(remote)).length > 0) {
     await upsertProducts(db, storeId, [remote]);
     throw new ProductConflictError();
   }
