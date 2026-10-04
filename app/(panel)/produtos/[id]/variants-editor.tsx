@@ -6,8 +6,7 @@ import { Card } from "@/components/ui/card";
 import type { ImageRow } from "@/lib/catalog/images";
 import type { ProductDetail } from "@/lib/catalog/query";
 import { saveVariant, type ActionState } from "./media-actions";
-
-const field = "min-h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary";
+import { fieldClass } from "@/components/ui/field";
 
 const ptMoney = (value: string | null) => (value === null ? "" : Number(value).toFixed(2).replace(".", ","));
 
@@ -26,22 +25,22 @@ function VariantRow({ productId, variant, images }: { productId: number; variant
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">SKU</span>
-          <input name="sku" defaultValue={variant.sku ?? ""} maxLength={255} className={field} />
+          <input name="sku" defaultValue={variant.sku ?? ""} maxLength={255} className={fieldClass} />
           {err("sku") && <span className="text-danger">{err("sku")}</span>}
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Preço (R$)</span>
-          <input name="price" defaultValue={ptMoney(variant.price)} inputMode="decimal" required className={field} />
+          <input name="price" defaultValue={ptMoney(variant.price)} inputMode="decimal" required className={fieldClass} />
           {err("price") && <span className="text-danger">{err("price")}</span>}
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Promocional (R$)</span>
-          <input name="promotional_price" defaultValue={ptMoney(variant.promotional_price)} inputMode="decimal" className={field} />
+          <input name="promotional_price" defaultValue={ptMoney(variant.promotional_price)} inputMode="decimal" className={fieldClass} />
           {err("promotional_price") && <span className="text-danger">{err("promotional_price")}</span>}
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Estoque</span>
-          <input name="stock" defaultValue={variant.stock_management ? String(variant.stock ?? "") : ""} inputMode="numeric" className={field} />
+          <input name="stock" defaultValue={variant.stock_management ? String(variant.stock ?? "") : ""} inputMode="numeric" className={fieldClass} />
           {err("stock") && <span className="text-danger">{err("stock")}</span>}
         </label>
         <label className="flex items-end gap-2 pb-2 text-sm">

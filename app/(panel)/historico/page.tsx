@@ -7,6 +7,7 @@ import { acaoLabel, TIPO_LABEL } from "@/lib/history/labels";
 import { HISTORY_TYPES, listHistory } from "@/lib/history/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
+import { fieldBase } from "@/components/ui/field";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,6 @@ export default async function HistoricoPage({ searchParams }: { searchParams: Pr
     const qs = p.toString();
     return qs ? `/historico?${qs}` : "/historico";
   };
-  const field = "min-h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary";
 
   return (
     <main className="flex flex-col gap-4">
@@ -55,7 +55,7 @@ export default async function HistoricoPage({ searchParams }: { searchParams: Pr
         <form method="get" className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">O que</span>
-            <select name="tipo" defaultValue={sp.tipo ?? ""} className={field}>
+            <select name="tipo" defaultValue={sp.tipo ?? ""} className={fieldBase}>
               <option value="">Tudo</option>
               {HISTORY_TYPES.map((t) => (
                 <option key={t} value={t}>

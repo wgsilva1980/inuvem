@@ -3,8 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { createCategoryAction, deleteCategoryAction, updateCategoryAction, type CategoryActionState } from "./actions";
-
-const field = "min-h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary";
+import { fieldClass } from "@/components/ui/field";
 
 export interface ParentOption {
   id: number;
@@ -13,7 +12,7 @@ export interface ParentOption {
 
 function ParentSelect({ options, value }: { options: ParentOption[]; value: number | null }) {
   return (
-    <select name="parent" defaultValue={value === null ? "" : String(value)} className={field} aria-label="Categoria pai">
+    <select name="parent" defaultValue={value === null ? "" : String(value)} className={fieldClass} aria-label="Categoria pai">
       <option value="">(nenhuma: categoria principal)</option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>
@@ -41,7 +40,7 @@ export function CreateCategoryForm({ options }: { options: ParentOption[] }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Nome</span>
-          <input name="name" required maxLength={100} className={field} placeholder="Ex.: Vestidos" />
+          <input name="name" required maxLength={100} className={fieldClass} placeholder="Ex.: Vestidos" />
           {state?.fieldErrors?.name && <span className="text-danger">{state.fieldErrors.name}</span>}
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -66,7 +65,7 @@ export function EditCategoryForm({ id, name, parent, options }: { id: number; na
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Nome</span>
-          <input name="name" defaultValue={name} required maxLength={100} className={field} />
+          <input name="name" defaultValue={name} required maxLength={100} className={fieldClass} />
           {state?.fieldErrors?.name && <span className="text-danger">{state.fieldErrors.name}</span>}
         </label>
         <label className="flex flex-col gap-1 text-sm">

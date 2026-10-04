@@ -3,13 +3,15 @@
 :root {
   --background: #fafafa;
   --foreground: #18181b;
-  --muted: #71717a;
+  --muted: #52525b;
   --border: #e4e4e7;
+  --border-strong: #85858f;
   --card: #ffffff;
-  --primary: #4f46e5;
+  --primary: #4338ca;
   --primary-foreground: #ffffff;
-  --danger: #dc2626;
-  --success: #16a34a;
+  --danger: #b91c1c;
+  --success: #15803d;
+  --warning: #b45309;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,11 +20,13 @@
     --foreground: #fafafa;
     --muted: #a1a1aa;
     --border: #27272a;
+    --border-strong: #71717a;
     --card: #18181b;
     --primary: #818cf8;
     --primary-foreground: #09090b;
     --danger: #f87171;
     --success: #4ade80;
+    --warning: #fbbf24;
   }
 }
 
@@ -31,17 +35,29 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-card: var(--card);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-danger: var(--danger);
   --color-success: var(--success);
+  --color-warning: var(--warning);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Foco visível para quem navega por teclado: vale para links, botões e controles sem estilo próprio. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* Editor de descrição (Tiptap): o reset do Tailwind remove estilos de listas, títulos e tabelas. */
