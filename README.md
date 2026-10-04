@@ -14,6 +14,8 @@ Próximas: catálogo (2), variantes e imagens (3), operações em massa (4), cat
 - `lib/sync/` — motor de sincronização retomável (cursor em `sync_runs`, lotes curtos por causa do timeout da Vercel).
 - `lib/catalog/` — catálogo (Fase 2): consulta com filtros sobre o espelho (`query.ts`), regras de edição (`edit.ts`) e o
   salvamento (`update.ts`): confere conflito com a loja, envia só os campos alterados, atualiza o espelho e grava em `audit_log`.
+- `lib/catalog/variants.ts`, `update-variant.ts`, `images.ts` — edição de variantes (SKU, preço, promocional, estoque) e de imagens
+  (adicionar por URL, remover, reordenar): validação, detecção de alteração por fora, espelho e `audit_log`.
 - `lib/webhooks/` — webhooks de produtos e categorias (`/api/webhooks/nuvemshop`, público, autenticado por HMAC): busca o estado
   atual na API e atualiza o espelho; registro idempotente dos eventos (`register.ts`), acionado pelo botão "Registrar webhooks" no painel.
 - `lib/auth/` — Neon Auth (magic link) + allowlist de admins (`admins`). Exige e-mail verificado.
@@ -106,7 +108,11 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
 4. **URL de autorização OAuth** (`https://www.nuvemshop.com.br/apps/{APP_ID}/authorize`) e se o parâmetro `state` é devolvido no callback.
    Se não for, o callback depende só da sessão de admin (já exigida).
 5. **Payload de `PATCH /products/stock-price`** (campos `stock` x `inventory_levels`, limite por chamada) — Fase 4.
-6. **Upload de imagens** (`src` por URL pública x base64) e como reordenar — Fase 3.
+6. **Imagens (Fase 3).** `POST /products/{id}/images` com `src` por URL pública (base64 não usado), `DELETE .../images/{id}` e, para reordenar,
+   `PUT .../images/{id}` com `position` (assumo que `position` é a posição de destino). Depois de cada operação o painel rebusca o produto,
+   então a tela sempre mostra a ordem real da loja, mesmo se a regra de reposicionamento for diferente.
+   **Variantes (Fase 3):** `PUT /products/{id}/variants/{id}` com `sku`, `price`, `promotional_price`, `stock_management` e `stock`
+   (`stock: null` = ilimitado; loja sem multi-estoque, então não uso `inventory_levels`).
 7. **Assinatura HMAC dos webhooks**: assumi o header `x-linkedstore-hmac-sha256` (HMAC-SHA256 do corpo bruto com o client secret; aceita hex ou base64).
    Também a forma exata do payload de LGPD (usei apenas `store_id`) e se esses webhooks vêm assinados. `store-redact` falha fechado (401) sem assinatura válida.
 8. **Endpoint de dados da loja** (nome/URL) — não consumido ainda; `stores.name` e `stores.url` ficam vazios.

@@ -14,3 +14,10 @@ export const createImage = async (
 ): Promise<ProductImage> => imageSchema.parse(await c.post(`/products/${productId}/images`, input));
 export const deleteImage = (c: NuvemshopClient, productId: number, imageId: number) =>
   c.delete(`/products/${productId}/images/${imageId}`);
+/** Reordena (e/ou troca a origem de) uma imagem. A semântica de `position` ao reordenar é a confirmar na documentação. */
+export const updateImage = async (
+  c: NuvemshopClient,
+  productId: number,
+  imageId: number,
+  input: { position?: number; src?: string },
+): Promise<ProductImage> => imageSchema.parse(await c.put(`/products/${productId}/images/${imageId}`, input));
