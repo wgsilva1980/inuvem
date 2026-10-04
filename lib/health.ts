@@ -19,8 +19,12 @@ export interface EnvReport {
   ok: boolean;
   missing: string[];
   invalid: Array<{ name: string; problem: string }>;
+  /** Variáveis "Sensitive" da Vercel: a CLI não baixa o valor, então não dá para validar por arquivo. */
+  unverifiable: string[];
   warnings: string[];
 }
+
+const SENSITIVE_PLACEHOLDER = /^\[?SENSITIVE\]?$/i;
 
 const PLACEHOLDER = /(SUA_SENHA|USER:PASSWORD|xxx|voce@exemplo|exemplo\.com|seu-app)/i;
 
@@ -28,11 +32,16 @@ export function checkEnv(source: Record<string, string | undefined>): EnvReport 
   const missing: string[] = [];
   const invalid: EnvReport["invalid"] = [];
   const warnings: string[] = [];
+  const unverifiable: string[] = [];
 
   for (const [name, rule] of Object.entries(rules)) {
     const value = source[name];
     if (value === undefined || value.trim() === "") {
       missing.push(name);
+      continue;
+    }
+    if (SENSITIVE_PLACEHOLDER.test(value.trim())) {
+      unverifiable.push(name);
       continue;
     }
     // Erro comum: colar o valor com aspas (ou espaços) no painel da Vercel; lá elas viram parte do valor.
@@ -46,7 +55,7 @@ export function checkEnv(source: Record<string, string | undefined>): EnvReport 
   }
 
   // A chave de criptografia precisa realmente funcionar (32 bytes em base64).
-  if (source.ENCRYPTION_KEY && !invalid.some((i) => i.name === "ENCRYPTION_KEY")) {
+  if (source.ENCRYPTION_KEY && !invalid.some((i) => i.name === "ENCRYPTION_KEY") && !unverifiable.includes("ENCRYPTION_KEY")) {
     try {
       if (decrypt(encrypt("teste", source.ENCRYPTION_KEY), source.ENCRYPTION_KEY) !== "teste") throw new Error();
     } catch {
@@ -63,5 +72,5 @@ export function checkEnv(source: Record<string, string | undefined>): EnvReport 
     warnings.push("NUVEMSHOP_CLIENT_ID difere do APP_ID; confira no Portal de Parceiros (normalmente são iguais).");
   }
 
-  return { ok: missing.length === 0 && invalid.length === 0, missing, invalid, warnings };
+  return { ok: missing.length === 0 && invalid.length === 0 && unverifiable.length === 0, missing, invalid, unverifiable, warnings };
 }

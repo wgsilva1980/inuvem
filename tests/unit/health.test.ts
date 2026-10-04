@@ -45,6 +45,12 @@ describe("checkEnv", () => {
     expect(r.invalid.map((i) => i.name).sort()).toEqual(["APP_URL", "ENCRYPTION_KEY", "NUVEMSHOP_CONTACT_EMAIL"]);
     expect(r.invalid.every((i) => i.problem.includes("SEM aspas"))).toBe(true);
   });
+  it("marca variáveis Sensitive da Vercel como não verificáveis (nunca como OK)", () => {
+    const r = checkEnv({ ...good, NUVEMSHOP_CLIENT_SECRET: "[SENSITIVE]", ENCRYPTION_KEY: "[SENSITIVE]", CRON_SECRET: "SENSITIVE" });
+    expect(r.ok).toBe(false);
+    expect(r.invalid).toEqual([]);
+    expect(r.unverifiable.sort()).toEqual(["CRON_SECRET", "ENCRYPTION_KEY", "NUVEMSHOP_CLIENT_SECRET"]);
+  });
   it("avisa sobre connection string não pooled, http em produção e client id diferente", () => {
     const r = checkEnv({
       ...good,
