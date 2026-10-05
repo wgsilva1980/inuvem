@@ -8,6 +8,7 @@ import { query } from "@/lib/db";
 import { PROBLEMA_LABEL, auditarProdutos, proporcaoTexto, resumirAuditoria, type Problema, type ProdutoAuditado } from "@/lib/images/audit";
 import { getActiveStore } from "@/lib/stores";
 import { AuditRunner } from "./runner";
+import { StorageCheck } from "./storage-check";
 
 export const dynamic = "force-dynamic";
 const POR_PAGINA = 25;
@@ -62,6 +63,11 @@ export default async function ImagensPage({ searchParams }: { searchParams: Prom
           {resumo.medidas} de {resumo.imagens} imagens analisadas. A análise baixa cada foto da loja para medir; leva alguns minutos para o catálogo todo e pode ser interrompida e retomada.
         </p>
         <AuditRunner total={resumo.imagens} medidas={resumo.medidas} />
+      </Card>
+
+      <Card className="flex flex-col gap-2">
+        <p className="text-sm">Para padronizar as fotos já existentes guardamos uma cópia de cada original (permite desfazer). Esse teste confere se o armazenamento está ligado; não toca na loja.</p>
+        <StorageCheck />
       </Card>
 
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
