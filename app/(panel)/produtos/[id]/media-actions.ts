@@ -13,17 +13,14 @@ import {
   validateImageUpload,
   type ImageApi,
 } from "@/lib/catalog/images";
-import { DuplicateVariantError, InvalidVariantImageError, InvalidVariantValuesError, VariantConflictError, VariantNotFoundError, updateVariant } from "@/lib/catalog/update-variant";
-import { formValues, variantEditSchema } from "@/lib/catalog/variants";
+import { DuplicateVariantError, InvalidVariantImageError, InvalidVariantValuesError, VariantConflictError, VariantNotFoundError } from "@/lib/catalog/update-variant";
 import { query } from "@/lib/db";
 import {
   NuvemshopError,
   createImage,
   deleteImage,
   getProduct,
-  getVariant,
   updateImage,
-  updateVariant as apiUpdateVariant,
 } from "@/lib/nuvemshop";
 import { clientForStore, getActiveStore } from "@/lib/stores";
 
@@ -44,50 +41,6 @@ const fail = (err: unknown, event: string): ActionState => {
 };
 
 const validId = (n: number) => Number.isInteger(n) && n > 0;
-
-export async function saveVariant(productId: number, variantId: number, _prev: ActionState | null, formData: FormData): Promise<ActionState> {
-  const admin = await requireAdmin();
-  if (!validId(productId) || !validId(variantId)) return { message: "Variante inválida." };
-
-  const parsed = variantEditSchema.safeParse({
-    sku: formData.get("sku") ?? "",
-    price: formData.get("price") ?? "",
-    promotional_price: formData.get("promotional_price") ?? "",
-    stock_management: formData.get("stock_management") === "on",
-    stock: formData.get("stock") ?? "",
-    image_id: formData.get("image_id") ?? "",
-    weight: formData.get("weight") ?? "",
-    values: formValues(formData),
-  });
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path[0] === "values" ? `value_${String(issue.path[1] ?? 0)}` : String(issue.path[0]);
-      fieldErrors[key] ??= issue.message;
-    }
-    return { message: "Corrija os campos destacados.", fieldErrors };
-  }
-
-  const store = await getActiveStore();
-  if (!store) return { message: "Nenhuma loja conectada." };
-  try {
-    const client = await clientForStore(store);
-    const result = await updateVariant(
-      { query },
-      {
-        get: (pid, vid) => getVariant(client, pid, vid),
-        put: (pid, vid, input) => apiUpdateVariant(client, pid, vid, input),
-      },
-      { storeId: store.id, actor: admin.email, productId, variantId, after: parsed.data },
-    );
-    revalidatePath(`/produtos/${productId}`);
-    revalidatePath("/produtos");
-    return { ok: true, message: result.changed ? "Variante atualizada na Nuvemshop." : "Nada foi alterado." };
-  } catch (err) {
-    if (err instanceof VariantConflictError) revalidatePath(`/produtos/${productId}`);
-    return fail(err, "variant.update.failed");
-  }
-}
 
 async function withImages<T>(productId: number, fn: (ctx: { storeId: string; actor: string; api: ImageApi }) => Promise<T>): Promise<T | ActionState> {
   const admin = await requireAdmin();

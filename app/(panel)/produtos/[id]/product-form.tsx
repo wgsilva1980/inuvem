@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
@@ -8,15 +8,17 @@ import type { CategoryOption, ProductDetail } from "@/lib/catalog/query";
 import { saveProduct, type SaveState } from "./actions";
 import { fieldClass } from "@/components/ui/field";
 import { Alert } from "@/components/ui/alert";
+import { FieldErrorsContext } from "./save-context";
 
-export function ProductForm({ product, categories }: { product: ProductDetail; categories: CategoryOption[] }) {
+export function ProductForm({ product, categories, children }: { product: ProductDetail; categories: CategoryOption[]; children?: ReactNode }) {
   const [state, action, pending] = useActionState<SaveState | null, FormData>(saveProduct.bind(null, Number(product.id)), null);
   const selected = new Set(product.categories.map((c) => c.id));
   const err = (name: string) => state?.fieldErrors?.[name];
 
   // Alterações ainda não salvas: avisa ao fechar/recarregar a aba. Volta a "limpo" quando o espelho é atualizado (salvou ou recarregou).
+  const formKey = `${product.updated_at_remote ?? product.id}|${product.variants.map((v) => [v.id, v.sku, v.price, v.promotional_price, v.stock, v.stock_management, v.image_id, v.weight, JSON.stringify(v.values)].join("¦")).join("|")}|${product.attributes.join("¦")}`;
   const [dirty, setDirty] = useState(false);
-  useEffect(() => setDirty(false), [product.updated_at_remote, product.id]);
+  useEffect(() => setDirty(false), [formKey]);
   useEffect(() => {
     if (!dirty || pending) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -26,7 +28,7 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
 
   return (
     // `key` recria o formulário com os valores novos quando o espelho é atualizado (conflito ou salvamento).
-    <form key={product.updated_at_remote ?? product.id} action={action} onChange={() => setDirty(true)} className="flex flex-col gap-4">
+    <form key={formKey} action={action} onChange={() => setDirty(true)} className="flex flex-col gap-4">
       <Card className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Nome</span>
@@ -83,6 +85,8 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
         )}
       </Card>
 
+      <FieldErrorsContext.Provider value={state?.fieldErrors}>{children}</FieldErrorsContext.Provider>
+
       {/* Fixa no rodapé da janela durante toda a página (não só enquanto o formulário está à vista). */}
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-card px-4 py-3 shadow-lg">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -92,9 +96,9 @@ export function ProductForm({ product, categories }: { product: ProductDetail; c
                 {state.message}
               </Alert>
             ) : dirty ? (
-              <span className="text-warning">Dados do produto: alterações não salvas</span>
+              <span className="text-warning">Alterações não salvas</span>
             ) : (
-              <span className="text-muted">Dados do produto: nenhuma alteração pendente</span>
+              <span className="text-muted">Nenhuma alteração pendente</span>
             )}
           </div>
           <Button type="submit" disabled={pending} className="min-h-11">
