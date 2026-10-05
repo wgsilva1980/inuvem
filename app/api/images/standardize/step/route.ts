@@ -1,7 +1,7 @@
 import { requireAdminApi } from "@/lib/auth/admin";
 import { isSameOrigin } from "@/lib/security";
 import { query } from "@/lib/db";
-import { baixarImagem, desfazerProduto, padronizarPendentes, type ReplaceDeps } from "@/lib/images/replace";
+import { baixarImagem, desfazerProduto, padronizarPendentes, verificarImagemNaLoja, type ReplaceDeps } from "@/lib/images/replace";
 import { blobStorage } from "@/lib/images/storage";
 import { NuvemshopError, createImage, deleteImage, getProduct, updateImage, updateVariant } from "@/lib/nuvemshop";
 import { clientForStore, getActiveStore } from "@/lib/stores";
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       db: { query },
       storage: blobStorage,
       baixar: baixarImagem,
+      verificar: verificarImagemNaLoja,
       api: {
         getProduct: (pid) => getProduct(client, pid),
         create: (pid, input) => createImage(client, pid, input),
