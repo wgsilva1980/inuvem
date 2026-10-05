@@ -15,6 +15,7 @@ const FIXED: Record<string, string> = {
   "lote.iniciar": "Lote iniciado",
   "lote.cancelar": "Lote cancelado",
   "lote.reverter": "Lote de reversão criado",
+  "lote.propriedades": "Lote: propriedades padronizadas no produto",
 };
 
 const LOTE_OP: Record<string, string> = {

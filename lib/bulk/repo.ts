@@ -1,4 +1,5 @@
 import type { Db } from "@/lib/sync/repo";
+import { pt, type I18n } from "@/lib/nuvemshop/types";
 import type { BulkOperation, ItemChanges, MirrorProduct, Plan, Skipped } from "./operations";
 
 export type JobStatus = "preview" | "running" | "completed" | "cancelled";
@@ -60,9 +61,10 @@ export async function loadMirrorProducts(db: Db, storeId: string, ids: number[])
     name: string;
     published: boolean;
     categories: Array<{ id: number }>;
+    attributes: unknown;
     variants: Array<{ id: string; sku: string | null; values: Array<Record<string, string | null>>; price: string | null; promotional_price: string | null; stock_management: boolean; stock: number | null }>;
   }>(
-    `SELECT p.id::text AS id, p.name, p.published, p.categories,
+    `SELECT p.id::text AS id, p.name, p.published, p.categories, coalesce(p.raw_json->'attributes', '[]'::jsonb) AS attributes,
             coalesce(jsonb_agg(jsonb_build_object('id', v.id::text, 'sku', v.sku, 'values', v.values, 'price', v.price::text,
                      'promotional_price', v.promotional_price::text, 'stock_management', v.stock_management, 'stock', v.stock)
                      ORDER BY v.position NULLS LAST, v.id) FILTER (WHERE v.id IS NOT NULL), '[]'::jsonb) AS variants
@@ -78,6 +80,7 @@ export async function loadMirrorProducts(db: Db, storeId: string, ids: number[])
     name: r.name,
     published: r.published,
     categoryIds: (r.categories ?? []).map((c) => Number(c.id)),
+    attributes: Array.isArray(r.attributes) ? r.attributes.map((a) => pt(a as I18n)) : [],
     variants: r.variants.map((v) => ({
       id: Number(v.id),
       sku: v.sku,

@@ -183,3 +183,9 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    excluir a última variante (o painel já impede), e se renomear uma propriedade pelo produto mantém os valores das variantes. Depois de
    cada operação o painel rebusca o produto e regrava o espelho, então a tela sempre mostra o estado real. **Fora de escopo por enquanto:**
    adicionar ou remover uma propriedade (ex.: passar a ter Cor e Tam), pois isso exige reescrever os valores de todas as variantes de uma vez.
+16. **Lote "Padronizar propriedades (COR e TAMANHO)" (não testado na loja real).** Usa o mesmo `PUT /products/{id}` com `attributes`
+   do item 15, em lote: renomeia as duas propriedades para COR e TAMANHO (reconhece "Cor", "COR", "Tam", "Tamanho", "CORES", "TAMAMHO"
+   etc., ignorando caixa, acento e vírgula sobrando). Cada produto é conferido contra a loja antes de aplicar e o lote pode ser revertido
+   (volta aos nomes anteriores). Ficam de fora, com o motivo na pré-visualização: produtos já no padrão, com a ordem invertida (TAMANHO
+   antes de COR, pois os valores das variantes seguem a ordem das propriedades), com uma só propriedade, sem propriedades, com três ou
+   mais, ou com nomes não reconhecidos. Na auditoria de 04/10/2026: 111 de 188 produtos seriam renomeados e 77 ficariam de fora.

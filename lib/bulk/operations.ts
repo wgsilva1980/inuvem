@@ -41,8 +41,31 @@ export const operationSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("publicar"), published: z.boolean() }),
   z.object({ type: z.literal("categoria"), mode: z.enum(["adicionar", "remover"]), categoryId: z.number().int().positive() }),
+  /** Padroniza os nomes das propriedades das variações para COR e TAMANHO (só renomeia; não mexe nos valores das variantes). */
+  z.object({ type: z.literal("propriedades") }),
 ]);
 export type BulkOperation = z.infer<typeof operationSchema>;
+
+/** Nomes padrão das propriedades das variações, na ordem. */
+export const PROPRIEDADES_PADRAO = ["COR", "TAMANHO"] as const;
+
+const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+/** "Cor", "COR,", " cores " -> "cor": para reconhecer o que a propriedade significa, ignorando caixa, acento e vírgula sobrando. */
+const chave = (nome: string) => semAcento(nome).toLowerCase().replace(/[\s,;.:]+$/g, "").replace(/^[\s,;.:]+/g, "");
+const ehCor = (nome: string) => ["cor", "cores"].includes(chave(nome));
+const ehTamanho = (nome: string) => ["tam", "tamanho", "tamanhos", "tamamho"].includes(chave(nome));
+
+/** O que fazer com as propriedades de um produto: renomear (e para quê), ou deixar de fora (com o motivo). */
+export function planAtributos(atuais: string[]): { depois: string[] } | { motivo: string } {
+  if (atuais.length === PROPRIEDADES_PADRAO.length && atuais.every((n, i) => n === PROPRIEDADES_PADRAO[i])) return { motivo: "já está com COR e TAMANHO" };
+  if (atuais.length === 0) return { motivo: "não tem propriedades (variante única)" };
+  if (atuais.length === 1) return { motivo: `só tem uma propriedade (${atuais[0]})` };
+  if (atuais.length !== 2) return { motivo: `tem ${atuais.length} propriedades (${atuais.join(" | ")})` };
+  const [a, b] = atuais as [string, string];
+  if (ehCor(a) && ehTamanho(b)) return { depois: [...PROPRIEDADES_PADRAO] };
+  if (ehTamanho(a) && ehCor(b)) return { motivo: `ordem invertida (${atuais.join(" | ")}): renomear não basta, porque os valores das variantes seguem a ordem das propriedades` };
+  return { motivo: `nomes não reconhecidos (${atuais.join(" | ")})` };
+}
 
 /** Valida cada combinação que o schema sozinho não pega. Devolve a mensagem de erro, ou null. */
 export function validateOperation(op: BulkOperation): string | null {
@@ -76,6 +99,8 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
       return op.mode === "definir" ? `Definir o estoque para ${op.value}` : `${op.value > 0 ? "Somar" : "Subtrair"} ${Math.abs(op.value)} ${Math.abs(op.value) === 1 ? "unidade" : "unidades"} do estoque`;
     case "publicar":
       return op.published ? "Publicar os produtos na loja" : "Despublicar os produtos (ocultar da loja)";
+    case "propriedades":
+      return `Padronizar as propriedades das variações para ${PROPRIEDADES_PADRAO.join(" e ")}`;
     case "categoria": {
       const nome = categoryName?.(op.categoryId) ?? `#${op.categoryId}`;
       return op.mode === "adicionar" ? `Adicionar à categoria "${nome}"` : `Remover da categoria "${nome}"`;
@@ -100,6 +125,8 @@ export interface MirrorProduct {
   name: string;
   published: boolean;
   categoryIds: number[];
+  /** Nomes das propriedades das variações (ex.: ["Cor", "Tam"]). */
+  attributes: string[];
   variants: MirrorVariant[];
 }
 
@@ -116,6 +143,7 @@ export interface ItemChanges {
   product?: {
     published?: { antes: boolean; depois: boolean };
     categories?: { antes: number[]; depois: number[] };
+    attributes?: { antes: string[]; depois: string[] };
   };
   variants: VariantChange[];
 }
@@ -199,6 +227,13 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[]): Pla
     if (op.type === "publicar") {
       if (p.published === op.published) skip(op.published ? "já está publicado" : "já está despublicado");
       else items.push({ productId: p.id, productName: p.name, changes: { product: { published: { antes: p.published, depois: op.published } }, variants: [] } });
+      continue;
+    }
+
+    if (op.type === "propriedades") {
+      const r = planAtributos(p.attributes);
+      if ("motivo" in r) skip(r.motivo);
+      else items.push({ productId: p.id, productName: p.name, changes: { product: { attributes: { antes: [...p.attributes], depois: r.depois } }, variants: [] } });
       continue;
     }
 

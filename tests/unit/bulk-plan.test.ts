@@ -25,6 +25,7 @@ const product = (id: number, over: Partial<MirrorProduct> = {}): MirrorProduct =
   name: `Produto ${id}`,
   published: true,
   categoryIds: [1],
+  attributes: ["COR", "TAMANHO"],
   variants: [v(id * 10), v(id * 10 + 1)],
   ...over,
 });

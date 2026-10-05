@@ -1,5 +1,5 @@
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
-import type { Product, ProductInput, Variant, VariantInput } from "@/lib/nuvemshop/types";
+import { pt, type Product, type ProductInput, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
 import { mapVariant, toNumber } from "@/lib/sync/mappers";
 import { upsertProducts, upsertVariantRows, type Db } from "@/lib/sync/repo";
 import { fromCents, toCents, type ItemChanges, type Plan, type PlanItem, type VariantChange } from "./operations";
@@ -45,6 +45,10 @@ export function findMismatches(remote: Product, changes: ItemChanges): string[] 
   const p = changes.product;
   if (p?.published && (remote.published ?? false) !== p.published.antes) out.push("situação (publicado)");
   if (p?.categories && !sameIds((remote.categories ?? []).map((c) => c.id), p.categories.antes)) out.push("categorias");
+  if (p?.attributes) {
+    const now = (remote.attributes ?? []).map((a) => pt(a));
+    if (now.length !== p.attributes.antes.length || now.some((n, i) => n !== p.attributes!.antes[i])) out.push("propriedades das variações");
+  }
   for (const vc of changes.variants) {
     const rv = (remote.variants ?? []).find((v) => v.id === vc.id);
     if (!rv) {
@@ -69,10 +73,12 @@ const variantInput = (vc: VariantChange): VariantInput => {
   return input;
 };
 
-const productInput = (c: ItemChanges["product"]): ProductInput => {
+/** Corpo do PUT do produto. `remote` é o produto na loja agora: serve para manter outros idiomas dos nomes das propriedades. */
+const productInput = (c: ItemChanges["product"], remote: Product): ProductInput => {
   const input: ProductInput = {};
   if (c?.published) input.published = c.published.depois;
   if (c?.categories) input.categories = c.categories.depois;
+  if (c?.attributes) input.attributes = c.attributes.depois.map((nome, i) => ({ ...(remote.attributes?.[i] ?? {}), pt: nome }));
   return input;
 };
 
@@ -81,6 +87,7 @@ function sides(changes: ItemChanges, side: "antes" | "depois") {
   const out: Record<string, unknown> = {};
   if (changes.product?.published) out.publicado = changes.product.published[side];
   if (changes.product?.categories) out.categorias = changes.product.categories[side];
+  if (changes.product?.attributes) out.propriedades = changes.product.attributes[side];
   for (const v of changes.variants) {
     const fields: Record<string, unknown> = {};
     if (v.price) fields.preco = v.price[side];
@@ -159,7 +166,7 @@ export async function runItem(db: Db, api: BulkApi, ctx: { storeId: string; acto
     }
   };
 
-  const pInput = productInput(item.changes.product);
+  const pInput = productInput(item.changes.product, remote);
   if (Object.keys(pInput).length > 0) await attempt("produto", undefined, () => api.updateProduct(productId, pInput));
   for (const vc of item.changes.variants) {
     await attempt("variante", vc.id, async () => {
@@ -227,6 +234,7 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
     out.product = {};
     if (changes.product.published) out.product.published = { antes: changes.product.published.depois, depois: changes.product.published.antes };
     if (changes.product.categories) out.product.categories = { antes: changes.product.categories.depois, depois: changes.product.categories.antes };
+    if (changes.product.attributes) out.product.attributes = { antes: changes.product.attributes.depois, depois: changes.product.attributes.antes };
   }
   for (const v of changes.variants) {
     if (!okVariants.has(v.id)) continue;
