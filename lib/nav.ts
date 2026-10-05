@@ -4,6 +4,7 @@ export const NAV_LINKS = [
   { href: "/categorias", label: "Categorias" },
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
+  { href: "/usuarios", label: "Usuários" },
 ] as const;
 
 /** A página atual é a do link ou qualquer subpágina dele (ex.: /produtos/123 ativa "Produtos"). */

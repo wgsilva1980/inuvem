@@ -7,6 +7,8 @@ const FIXED: Record<string, string> = {
   "produto.propriedades": "Propriedades do produto editadas",
   "produto.apagar": "Produto excluído",
   "lote.excluir": "Lote: produto excluído",
+  "usuario.adicionar": "Usuário adicionado",
+  "usuario.remover": "Usuário removido",
   "imagem.adicionar": "Imagem adicionada (por endereço)",
   "imagem.enviar": "Imagem enviada (arquivo)",
   "imagem.remover": "Imagem removida",
