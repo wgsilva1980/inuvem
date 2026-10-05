@@ -84,7 +84,7 @@ export default async function RevisaoPage({ searchParams }: { searchParams: Prom
         <Card className="text-sm">
           <p className="font-medium">Falta configurar a chave da API da Anthropic.</p>
           <p className="text-muted">
-            Crie uma chave em console.anthropic.com e cadastre na Vercel (Settings → Environment Variables) como <code>ANTHROPIC_API_KEY</code>, nos ambientes Production e Preview, e faça um novo deploy. Nunca cole a chave no chat ou no código.
+            Crie uma chave em console.anthropic.com e cadastre na Vercel (Settings → Environment Variables) como <code>ANTHROPIC_API_KEY</code>, nos ambientes Production e Preview, e faça um novo deploy. Se a Anthropic responder que a chave não está ligada a um workspace, cadastre também <code>ANTHROPIC_WORKSPACE_ID</code> com o ID do workspace. Nunca cole a chave no chat ou no código.
           </p>
         </Card>
       )}

@@ -9,6 +9,7 @@ import {
   _resetFormaAltParaTeste,
   altDaImagem,
   aplicarAltPendentes,
+  clienteAnthropic,
   criarRevisor,
   estimarCustoUsd,
   fotosPendentes,
@@ -153,6 +154,21 @@ describe("revisor (Claude)", () => {
     const r = await revisor(foto, ctx);
     expect(r.alt).toHaveLength(125);
     expect(r).toMatchObject({ qualidade: 3, problemas: ["escura"], entrada: 900, saida: 80 });
+  });
+
+  it("erro de workspace vira erro de configuração com orientação (e interrompe a revisão)", async () => {
+    const Anthropic = (await import("@anthropic-ai/sdk")).default;
+    const falha = new Anthropic.BadRequestError(400, { type: "error", error: { type: "invalid_request_error", message: "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header" } }, "400 workspace", new Headers());
+    const revisor = criarRevisor({ beta: { messages: { create: async () => { throw falha; } } } } as never);
+    await expect(revisor(foto, ctx)).rejects.toBeInstanceOf(RevisaoConfigError);
+    await expect(revisor(foto, ctx)).rejects.toThrow("ANTHROPIC_WORKSPACE_ID");
+  });
+
+  it("envia o cabeçalho do workspace só quando a variável existe", () => {
+    const com = clienteAnthropic({ ANTHROPIC_API_KEY: "k", ANTHROPIC_WORKSPACE_ID: " wrkspc_123 " }) as unknown as { _options: { defaultHeaders?: Record<string, string> } };
+    const sem = clienteAnthropic({ ANTHROPIC_API_KEY: "k" }) as unknown as { _options: { defaultHeaders?: Record<string, string> } };
+    expect(com._options.defaultHeaders).toEqual({ "anthropic-workspace-id": "wrkspc_123" });
+    expect(sem._options.defaultHeaders ?? {}).not.toHaveProperty("anthropic-workspace-id");
   });
 
   it("recusa do Claude vira erro da foto", async () => {
