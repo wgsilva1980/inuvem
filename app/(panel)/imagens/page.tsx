@@ -58,6 +58,9 @@ export default async function ImagensPage({ searchParams }: { searchParams: Prom
     <main className="flex max-w-5xl flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Imagens</h1>
+        <Link href="/imagens/revisao" className="text-sm underline">
+          Revisão das fotos com o Claude (texto alternativo e qualidade) →
+        </Link>
         <p className="text-sm text-muted">
           Auditoria das fotos atuais em relação ao padrão (lado maior 1024 px, 1:1 para peças e 4:5 para modelo, até ~600 KB, JPEG). Esta tela só lê: não altera nada na loja.
         </p>
