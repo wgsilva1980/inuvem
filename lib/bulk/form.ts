@@ -50,6 +50,16 @@ export function operationFromForm(get: (name: string) => string): FormResult {
     candidate = { type, published: modo === "publicar" };
   } else if (type === "propriedades" || type === "valores" || type === "ordem") {
     candidate = { type };
+  } else if (type === "completar") {
+    const ids = get("completar_ids").split(",").map((x) => x.trim()).filter((x) => /^\d{1,15}$/.test(x));
+    const valores: Record<string, { cor?: string; tamanho?: string }> = {};
+    for (const id of ids) {
+      const cor = get(`cor_${id}`).trim();
+      const tamanho = get(`tam_${id}`).trim();
+      if (cor || tamanho) valores[id] = { ...(cor ? { cor } : {}), ...(tamanho ? { tamanho } : {}) };
+    }
+    if (Object.keys(valores).length === 0) return fail("Preencha a cor ou o tamanho de pelo menos um produto.");
+    candidate = { type, valores };
   } else if (type === "categoria") {
     const modo = get("categoria_modo");
     const id = Number(get("categoria_id"));

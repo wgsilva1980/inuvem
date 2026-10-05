@@ -203,3 +203,12 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    mostra o resultado. Se nem o desfazer for aceito, o item mostra "ATENÇÃO" com o que ficou para conferir na loja. Na auditoria de
    04/10/2026: 14 produtos e 43 variantes, e em todos o primeiro valor de cada variante é um tamanho e o segundo uma cor. Ponto a confirmar:
    se a loja aceita reordenar `attributes` e trocar `values` em sequência (ver itens 15 a 17).
+19. **Lote "Completar COR e TAMANHO" (não testado na loja real).** Para produtos com só uma das propriedades, ou nenhuma: acrescenta COR
+   e/ou TAMANHO (sempre nessa ordem) e coloca o valor que **o usuário digita na tela** em todas as variantes do produto (a loja não tem como
+   saber a cor ou o tamanho). O que o produto já tinha é mantido, com os outros idiomas. Usa `PUT /products/{id}` com `attributes` e
+   `PUT .../variants/{id}` com `values`, no mesmo esquema tudo ou nada do item 18 (confere depois de aplicar e desfaz se algo falhar). A
+   reversão volta ao estado anterior, inclusive a "sem propriedades" (`attributes: []` e `values: []`). Pontos a confirmar: se a loja aceita
+   acrescentar uma propriedade com a lista de valores das variantes ainda com o tamanho antigo entre uma chamada e outra (se recusar na
+   primeira chamada, nada muda e o item mostra o motivo), e se `attributes: []` é aceito ao desfazer. Produtos sem nome na loja (o painel
+   mostra "Produto <id>") ficam fora da lista da tela. Na auditoria de 04/10/2026: 10 produtos (3 sem propriedades, 6 só com tamanho,
+   1 só com cor), 11 variantes.

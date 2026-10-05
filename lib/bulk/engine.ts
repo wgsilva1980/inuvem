@@ -2,7 +2,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import { pt, type I18n, type Product, type ProductInput, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
 import { mapVariant, toNumber } from "@/lib/sync/mappers";
 import { upsertProducts, upsertVariantRows, type Db } from "@/lib/sync/repo";
-import { valuesToI18n, valuesToStrings } from "@/lib/catalog/variants";
+import { valuesToStrings } from "@/lib/catalog/variants";
 import { fromCents, toCents, type ItemChanges, type Plan, type PlanItem, type VariantChange } from "./operations";
 import {
   claimItems,
@@ -75,8 +75,9 @@ const variantInput = (vc: VariantChange, current?: Variant): VariantInput => {
   const input: VariantInput = {};
   if (vc.values) {
     const atuais = Array.isArray(current?.values) ? (current!.values as I18n[]) : [];
-    // ao trocar a ordem, os objetos multi-idioma andam junto com o valor
-    input.values = valuesToI18n(vc.values.depois, vc.values.trocar ? [...atuais].reverse() : atuais);
+    // os objetos multi-idioma andam junto com o valor, mesmo quando a ordem muda ou uma propriedade é acrescentada
+    const vals = vc.values;
+    input.values = vals.depois.map((valor, i) => ({ ...(fonteDe(atuais, i, vals) ?? {}), pt: valor }));
   }
   if (vc.price) input.price = vc.price.depois;
   if (vc.promotional_price) input.promotional_price = vc.promotional_price.depois;
@@ -84,15 +85,26 @@ const variantInput = (vc: VariantChange, current?: Variant): VariantInput => {
   return input;
 };
 
+/** Quem veio de uma posição antiga leva o objeto multi-idioma dela; posições novas começam vazias. */
+function fonteDe<T>(base: T[], i: number, c: { trocar?: boolean; de?: Array<number | null> }): T | undefined {
+  if (c.de) {
+    const j = c.de[i];
+    return j === null || j === undefined ? undefined : base[j];
+  }
+  if (c.trocar) return [...base].reverse()[i];
+  return base[i];
+}
+
 /** Corpo do PUT do produto. `remote` é o produto na loja agora: serve para manter outros idiomas dos nomes das propriedades. */
 const productInput = (c: ItemChanges["product"], remote: Product): ProductInput => {
   const input: ProductInput = {};
   if (c?.published) input.published = c.published.depois;
   if (c?.categories) input.categories = c.categories.depois;
   if (c?.attributes) {
-    // ao trocar a ordem, os objetos multi-idioma andam junto com o nome (o 1º vira o 2º e vice-versa)
-    const base = c.attributes.trocar ? [...(remote.attributes ?? [])].reverse() : (remote.attributes ?? []);
-    input.attributes = c.attributes.depois.map((nome, i) => ({ ...(base[i] ?? {}), pt: nome }));
+    // os objetos multi-idioma andam junto com o nome, mesmo quando a ordem muda ou uma propriedade é acrescentada
+    const base = remote.attributes ?? [];
+    const attrs = c.attributes;
+    input.attributes = attrs.depois.map((nome, i) => ({ ...(fonteDe(base, i, attrs) ?? {}), pt: nome }));
   }
   return input;
 };
@@ -254,9 +266,9 @@ async function desfazerPartes(api: BulkApi, original: Product, productId: number
     try {
       if (parte.tipo === "variante") {
         const antes = (original.variants ?? []).find((v) => v.id === parte.id);
-        if (antes?.values) await api.updateVariant(productId, parte.id as number, { values: antes.values });
-      } else if (original.attributes) {
-        await api.updateProduct(productId, { attributes: original.attributes });
+        await api.updateVariant(productId, parte.id as number, { values: antes?.values ?? [] });
+      } else {
+        await api.updateProduct(productId, { attributes: original.attributes ?? [] });
       }
       parte.ok = false;
       parte.erro = "desfeita (houve um problema depois)";
@@ -309,6 +321,13 @@ export async function stepJob(
 
 /* ---------- reverter ---------- */
 
+/** Mapa de volta: para cada posição antiga, de qual posição nova ela veio (null se foi removida ao reverter). */
+const inverterDe = (de: Array<number | null>, nAntes: number): Array<number | null> =>
+  Array.from({ length: nAntes }, (_, i) => {
+    const j = de.indexOf(i);
+    return j >= 0 ? j : null;
+  });
+
 /** Troca "antes" e "depois", só das partes que foram de fato aplicadas. */
 export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult | null): ItemChanges | null {
   const partes = resultado?.partes ?? [];
@@ -322,7 +341,7 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
     if (changes.product.categories) out.product.categories = { antes: changes.product.categories.depois, depois: changes.product.categories.antes };
     if (changes.product.attributes) {
       const a = changes.product.attributes;
-      out.product.attributes = { antes: a.depois, depois: a.antes, ...(a.trocar ? { trocar: true } : {}) };
+      out.product.attributes = { antes: a.depois, depois: a.antes, ...(a.trocar ? { trocar: true } : {}), ...(a.de ? { de: inverterDe(a.de, a.antes.length) } : {}) };
     }
   }
   for (const v of changes.variants) {
@@ -330,7 +349,7 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
     const inv: VariantChange = { id: v.id, label: v.label, sku: v.sku };
     if (v.price) inv.price = { antes: v.price.depois, depois: v.price.antes };
     if (v.promotional_price) inv.promotional_price = { antes: v.promotional_price.depois, depois: v.promotional_price.antes };
-    if (v.values) inv.values = { antes: v.values.depois, depois: v.values.antes, ...(v.values.trocar ? { trocar: true } : {}) };
+    if (v.values) inv.values = { antes: v.values.depois, depois: v.values.antes, ...(v.values.trocar ? { trocar: true } : {}), ...(v.values.de ? { de: inverterDe(v.values.de, v.values.antes.length) } : {}) };
     if (v.stock) {
       // o estoque original pode ser "sem quantidade" (null): ao reverter, volta para 0, o mais próximo possível
       inv.stock = { antes: v.stock.depois, depois: v.stock.antes ?? 0 };
