@@ -14,6 +14,7 @@ import {
   type ImageApi,
 } from "@/lib/catalog/images";
 import { DuplicateVariantError, InvalidVariantImageError, InvalidVariantValuesError, VariantConflictError, VariantNotFoundError } from "@/lib/catalog/update-variant";
+import { padronizarImagem, type Enquadramento, type PadronizarOpcoes, type Tipo } from "@/lib/images/standardize";
 import { query } from "@/lib/db";
 import {
   NuvemshopError,
@@ -83,9 +84,11 @@ export async function moveProductImage(productId: number, imageId: number, direc
   });
 }
 
-/** Upload de arquivo (já reduzido no navegador quando grande). Valida tipo e tamanho de novo aqui: o navegador não é confiável. */
-export async function uploadProductImage(productId: number, formData: FormData): Promise<ActionState> {
-  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
+const TIPOS = new Set(["auto", "peca", "modelo"]);
+const ENQUADRAMENTOS = new Set(["auto", "ajustar", "cortar"]);
+
+/** Lê o arquivo do formulário e confere tipo, tamanho e conteúdo (o navegador não é confiável). */
+async function lerArquivo(formData: FormData): Promise<{ file: File; bytes: Buffer; real: string } | ActionState> {
   const file = formData.get("file");
   if (!(file instanceof File)) return { message: "Escolha um arquivo de imagem." };
   const problem = validateImageUpload(file);
@@ -93,8 +96,83 @@ export async function uploadProductImage(productId: number, formData: FormData):
   const bytes = Buffer.from(await file.arrayBuffer());
   const real = sniffImageType(bytes);
   if (!real) return { message: "O conteúdo do arquivo não é uma imagem JPEG, PNG, WEBP ou GIF." };
+  return { file, bytes, real };
+}
+
+function opcoesDoFormulario(formData: FormData): PadronizarOpcoes {
+  const tipo = String(formData.get("tipo") ?? "auto");
+  const enquadramento = String(formData.get("enquadramento") ?? "auto");
+  return { tipo: TIPOS.has(tipo) ? (tipo as PadronizarOpcoes["tipo"]) : "auto", enquadramento: ENQUADRAMENTOS.has(enquadramento) ? (enquadramento as PadronizarOpcoes["enquadramento"]) : "auto" };
+}
+
+export interface PreviewState {
+  ok?: boolean;
+  message?: string;
+  /** GIF (ou "sem padronizar"): vai como está. */
+  semPadronizar?: boolean;
+  dataUrl?: string;
+  largura?: number;
+  altura?: number;
+  bytes?: number;
+  tipo?: Tipo;
+  enquadramento?: Enquadramento;
+  fundo?: string;
+  fundoUniforme?: boolean;
+  avisos?: string[];
+  original?: { largura: number; altura: number; bytes: number };
+}
+
+/** Mostra como a foto ficará no padrão (1024×1024 ou 820×1024, JPEG) sem enviar nada à loja. */
+export async function previewProductImage(formData: FormData): Promise<PreviewState> {
+  await requireAdmin();
+  const lido = await lerArquivo(formData);
+  if (!("bytes" in lido)) return lido;
+  if (lido.real === "image/gif") return { ok: true, semPadronizar: true, message: "GIF é enviado como está (padronizar perderia a animação)." };
+  try {
+    const r = await padronizarImagem(lido.bytes, opcoesDoFormulario(formData));
+    return {
+      ok: true,
+      dataUrl: `data:image/jpeg;base64,${r.bytes.toString("base64")}`,
+      largura: r.largura,
+      altura: r.altura,
+      bytes: r.bytes.length,
+      tipo: r.tipo,
+      enquadramento: r.enquadramento,
+      fundo: r.fundo,
+      fundoUniforme: r.fundoUniforme,
+      avisos: r.avisos,
+      original: r.original,
+    };
+  } catch {
+    return { message: "Não foi possível ler esta imagem. Tente outro arquivo." };
+  }
+}
+
+/**
+ * Envia a foto à loja. Por padrão ela é padronizada aqui no servidor (as mesmas opções da prévia) antes de seguir; `padronizar=0`
+ * (ou GIF) envia o arquivo como está.
+ */
+export async function uploadProductImage(productId: number, formData: FormData): Promise<ActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer leitura do corpo ou validação
+  const lido = await lerArquivo(formData);
+  if (!("bytes" in lido)) return lido;
+  const { file, real } = lido;
+  let { bytes } = lido;
+  let filename = safeFilename(file.name, real);
+  let detalhes: Record<string, unknown> | undefined;
+
+  if (real !== "image/gif" && formData.get("padronizar") !== "0") {
+    try {
+      const r = await padronizarImagem(bytes, opcoesDoFormulario(formData));
+      bytes = r.bytes;
+      filename = safeFilename(file.name, "image/jpeg");
+      detalhes = { padronizada: true, tipo: r.tipo, enquadramento: r.enquadramento, largura: r.largura, altura: r.altura, original: r.original };
+    } catch {
+      return { message: "Não foi possível padronizar esta imagem. Tente outro arquivo." };
+    }
+  }
   return withImages(productId, async ({ storeId, actor, api }) => {
-    await uploadImage({ query }, api, { storeId, actor, productId, filename: safeFilename(file.name, real), bytes });
+    await uploadImage({ query }, api, { storeId, actor, productId, filename, bytes, detalhes });
     return { ok: true, message: "Imagem enviada à Nuvemshop." } satisfies ActionState;
   });
 }
