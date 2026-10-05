@@ -7,9 +7,7 @@ import { buildVariantInput, changedVariantFields, parseMoney, variantEditSchema,
 import { InvalidVariantImageError, VariantConflictError, VariantNotFoundError, updateVariant, type VariantApi } from "@/lib/catalog/update-variant";
 import {
   MAX_UPLOAD_BYTES,
-  addImage,
   getProductImages,
-  imageUrlSchema,
   moveImage,
   moveImageTo,
   removeImage,
@@ -233,10 +231,10 @@ describe("imagens", () => {
     api = {
       getProduct: async () => structuredClone(remote),
       create: async (_p, input) => {
-        calls.push(`create ${"src" in input ? input.src : `arquivo ${input.filename}`}`);
+        calls.push(`create arquivo ${input.filename}`);
         remote.images = [
           ...(remote.images ?? []),
-          { id: 14, product_id: 1, src: "src" in input ? input.src : "https://cdn/arquivo.jpg", position: (remote.images?.length ?? 0) + 1 },
+          { id: 14, product_id: 1, src: "https://cdn/arquivo.jpg", position: (remote.images?.length ?? 0) + 1 },
         ];
         return remote.images[remote.images.length - 1] as ProductImage;
       },
@@ -263,18 +261,11 @@ describe("imagens", () => {
     expect(list.map((i) => [i.id, i.position, i.alt])).toEqual([["11", 1, ""], ["12", 2, "Frente"], ["13", 3, ""]]);
   });
 
-  it("valida a URL (https obrigatório)", () => {
-    expect(imageUrlSchema.safeParse("https://x.com/a.jpg").success).toBe(true);
-    expect(imageUrlSchema.safeParse("http://x.com/a.jpg").success).toBe(false);
-    expect(imageUrlSchema.safeParse("javascript:alert(1)").success).toBe(false);
-    expect(imageUrlSchema.safeParse("não é url").success).toBe(false);
-  });
-
-  it("adiciona, atualiza o espelho (inclui image_count) e registra", async () => {
-    await addImage(db, api, { storeId, actor, productId: 1, src: "https://cdn/novo.jpg" });
+  it("envia a imagem, atualiza o espelho (inclui image_count) e registra", async () => {
+    await uploadImage(db, api, { storeId, actor, productId: 1, filename: "novo.jpg", bytes: Buffer.from("x") });
     expect(await ids()).toEqual(["11", "12", "13", "14"]);
     expect((await pg.query("SELECT image_count FROM products WHERE id = 1")).rows[0]).toEqual({ image_count: 4 });
-    expect(await audits()).toMatchObject([{ acao: "imagem.adicionar", sucesso: true, depois: { src: "https://cdn/novo.jpg" } }]);
+    expect(await audits()).toMatchObject([{ acao: "imagem.enviar", sucesso: true, depois: { filename: "novo.jpg" } }]);
   });
 
   it("remove e reflete a loja", async () => {
@@ -295,9 +286,9 @@ describe("imagens", () => {
     api.create = async () => {
       throw new NuvemshopError("422", 422, null, "não foi possível baixar a imagem");
     };
-    await expect(addImage(db, api, { storeId, actor, productId: 1, src: "https://cdn/x.jpg" })).rejects.toBeInstanceOf(NuvemshopError);
+    await expect(uploadImage(db, api, { storeId, actor, productId: 1, filename: "x.jpg", bytes: Buffer.from("x") })).rejects.toBeInstanceOf(NuvemshopError);
     expect(await ids()).toEqual(["11", "12", "13"]);
-    expect(await audits()).toMatchObject([{ acao: "imagem.adicionar", sucesso: false }]);
+    expect(await audits()).toMatchObject([{ acao: "imagem.enviar", sucesso: false }]);
   });
 
   it("valida o arquivo enviado (tipo e tamanho) e saneia o nome", () => {

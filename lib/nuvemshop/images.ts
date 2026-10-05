@@ -6,8 +6,8 @@ export const listImages = async (c: NuvemshopClient, productId: number) =>
   z.array(imageSchema).parse(await c.get(`/products/${productId}/images`));
 export const getImage = async (c: NuvemshopClient, productId: number, imageId: number): Promise<ProductImage> =>
   imageSchema.parse(await c.get(`/products/${productId}/images/${imageId}`));
-/** Envia uma imagem por URL pública (`src`) ou pelo arquivo em base64 (`attachment` + `filename`). Ambos a confirmar na documentação. */
-export type ImageUpload = { src: string; position?: number } | { attachment: string; filename: string; position?: number };
+/** Envia uma imagem como arquivo em base64 (`attachment` + `filename`). O formato exato é a confirmar na documentação. */
+export type ImageUpload = { attachment: string; filename: string; position?: number };
 export const createImage = async (
   c: NuvemshopClient,
   productId: number,

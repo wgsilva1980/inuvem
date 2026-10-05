@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { ImageUpload } from "@/lib/nuvemshop/images";
 import type { Product, ProductImage } from "@/lib/nuvemshop/types";
@@ -11,14 +10,6 @@ export interface ImageApi {
   remove(productId: number, imageId: number): Promise<void>;
   setPosition(productId: number, imageId: number, position: number): Promise<ProductImage>;
 }
-
-/** A Nuvemshop baixa a imagem a partir da URL: precisa ser pública e https. */
-export const imageUrlSchema = z
-  .string()
-  .trim()
-  .max(2000, "URL longa demais.")
-  .url("Informe uma URL válida.")
-  .refine((u) => u.startsWith("https://"), "A URL deve começar com https://");
 
 /** Limite do arquivo enviado ao painel: o corpo de uma requisição na Vercel é de no máximo 4,5 MB. */
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
@@ -124,13 +115,6 @@ async function current(db: Db, base: Base): Promise<ImageRow[]> {
   const exists = await db.query("SELECT 1 FROM products WHERE store_id = $1::uuid AND id = $2::bigint", [base.storeId, base.productId]);
   if (exists.length === 0) throw new ProductMissingError();
   return images;
-}
-
-export async function addImage(db: Db, api: ImageApi, base: Base & { src: string }): Promise<void> {
-  const images = await current(db, base);
-  await run(db, api, { ...base, acao: "adicionar", antes: { total: images.length }, depois: { src: base.src } }, () =>
-    api.create(base.productId, { src: base.src }),
-  );
 }
 
 /** Envia o arquivo (já validado) à Nuvemshop em base64. O conteúdo não vai para o histórico, só o nome e o tamanho. */
