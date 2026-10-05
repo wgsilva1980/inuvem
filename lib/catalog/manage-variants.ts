@@ -2,6 +2,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import { pt, type I18n, type Product, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
 import { upsertProducts, type Db } from "@/lib/sync/repo";
 import { ProductMissingError } from "./images";
+import { FAIXA_ETARIA_PADRAO, SEXO_PADRAO } from "./google-defaults";
 import { proximosSkus } from "./sku";
 import { VariantNotFoundError, assertValidValues } from "./update-variant";
 import { valuesToI18n, type VariantEdit } from "./variants";
@@ -77,7 +78,9 @@ export async function createNewVariant(db: Db, api: ManageApi, args: Base & { va
     ...(variant.promotional_price !== null ? { promotional_price: variant.promotional_price } : {}),
     ...(variant.stock_management && variant.stock !== null ? { stock: variant.stock } : {}),
     ...(variant.weight !== null && variant.weight !== undefined ? { weight: variant.weight } : {}),
-    ...Object.fromEntries((["depth", "width", "height", "mpn", "age_group", "gender"] as const).flatMap((f) => (variant[f] ? [[f, variant[f]]] : []))),
+    ...Object.fromEntries((["depth", "width", "height", "mpn"] as const).flatMap((f) => (variant[f] ? [[f, variant[f]]] : []))),
+    age_group: variant.age_group ?? FAIXA_ETARIA_PADRAO,
+    gender: variant.gender ?? SEXO_PADRAO,
   };
   await run(db, api, base, "variante.criar", { total: await variantCount(db, base) }, { values: variant.values, sku, price: variant.price, stock: variant.stock }, () =>
     api.createVariant(base.productId, input),

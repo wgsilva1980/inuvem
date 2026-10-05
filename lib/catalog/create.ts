@@ -2,6 +2,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Product, ProductInput, VariantInput } from "@/lib/nuvemshop/types";
 import { padronizarCor, padronizarTamanho, PROPRIEDADES_PADRAO } from "@/lib/bulk/operations";
 import { upsertProducts, type Db } from "@/lib/sync/repo";
+import { FAIXA_ETARIA_PADRAO, SEXO_PADRAO } from "./google-defaults";
 import { proximosSkus } from "./sku";
 import { sanitizeDescription } from "./description";
 import type { ProductEdit } from "./edit";
@@ -69,6 +70,8 @@ export function buildCreateInput(product: ProductEdit, variants: NewVariantInput
       ...(v.sku !== null ? { sku: v.sku } : {}),
       ...(v.stock_management && v.stock !== null ? { stock: v.stock } : {}),
       ...(v.weight !== null ? { weight: v.weight } : {}),
+      age_group: FAIXA_ETARIA_PADRAO,
+      gender: SEXO_PADRAO,
       ...(v.values.length > 0 ? { values: v.values.map((valor) => ({ pt: valor })) } : {}),
     })),
   };

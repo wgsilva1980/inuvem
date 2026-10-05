@@ -169,7 +169,7 @@ describe("criar variante", () => {
   it("cria na loja, regrava o espelho e registra no histórico", async () => {
     await createNewVariant(db, api, { storeId, actor, productId: 1, variant: novo });
     expect(creates).toEqual([
-      { values: [{ pt: "Preta" }, { pt: "M" }], price: "120.00", stock_management: true, sku: "SKU-102", stock: 4, weight: "0.250" },
+      { values: [{ pt: "Preta" }, { pt: "M" }], price: "120.00", stock_management: true, sku: "SKU-102", stock: 4, weight: "0.250", age_group: "adult", gender: "female" },
     ]);
     expect(await mirrorValues()).toEqual([["100", ["Branca", "PP"]], ["101", ["Branca", "P"]], ["102", ["Preta", "M"]]]);
     expect(await audits()).toMatchObject([{ acao: "variante.criar", entidade: "produto", entidade_id: "1", sucesso: true, antes: { total: 2 }, depois: { values: ["Preta", "M"], price: "120.00" } }]);
@@ -178,7 +178,7 @@ describe("criar variante", () => {
   it("não manda campos vazios (promocional, peso, estoque sem controle) e numera o SKU em branco automaticamente", async () => {
     await createNewVariant(db, api, { storeId, actor, productId: 1, variant: { ...novo, sku: null, weight: null, stock_management: false, stock: null } });
     // os SKUs do espelho (SKU-100…) não são numéricos: a numeração começa em 1
-    expect(creates).toEqual([{ values: [{ pt: "Preta" }, { pt: "M" }], price: "120.00", stock_management: false, sku: "1" }]);
+    expect(creates).toEqual([{ values: [{ pt: "Preta" }, { pt: "M" }], price: "120.00", stock_management: false, sku: "1", age_group: "adult", gender: "female" }]);
   });
 
   it("recusa combinação repetida e quantidade errada de valores, sem chamar a API", async () => {

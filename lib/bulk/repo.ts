@@ -62,11 +62,11 @@ export async function loadMirrorProducts(db: Db, storeId: string, ids: number[])
     published: boolean;
     categories: Array<{ id: number }>;
     attributes: unknown;
-    variants: Array<{ id: string; sku: string | null; values: Array<Record<string, string | null>>; price: string | null; promotional_price: string | null; stock_management: boolean; stock: number | null }>;
+    variants: Array<{ id: string; sku: string | null; values: Array<Record<string, string | null>>; price: string | null; promotional_price: string | null; stock_management: boolean; stock: number | null; age_group: string | null; gender: string | null }>;
   }>(
     `SELECT p.id::text AS id, p.name, p.published, p.categories, coalesce(p.raw_json->'attributes', '[]'::jsonb) AS attributes,
             coalesce(jsonb_agg(jsonb_build_object('id', v.id::text, 'sku', v.sku, 'values', v.values, 'price', v.price::text,
-                     'promotional_price', v.promotional_price::text, 'stock_management', v.stock_management, 'stock', v.stock)
+                     'promotional_price', v.promotional_price::text, 'stock_management', v.stock_management, 'stock', v.stock, 'age_group', v.raw_json->>'age_group', 'gender', v.raw_json->>'gender')
                      ORDER BY v.position NULLS LAST, v.id) FILTER (WHERE v.id IS NOT NULL), '[]'::jsonb) AS variants
      FROM products p
      LEFT JOIN variants v ON v.store_id = p.store_id AND v.product_id = p.id
@@ -89,6 +89,8 @@ export async function loadMirrorProducts(db: Db, storeId: string, ids: number[])
       promotional_price: v.promotional_price === null ? null : Number(v.promotional_price),
       stock_management: v.stock_management,
       stock: v.stock,
+      age_group: v.age_group,
+      gender: v.gender,
       values: (v.values ?? []).map((x) => pt(x as I18n)),
     })),
   }));
