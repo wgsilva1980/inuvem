@@ -196,3 +196,10 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    inicial maiúscula para não virar "Pp"/"Gg". Outras propriedades não mudam. O produto inteiro fica de fora se duas variantes ficariam com a
    mesma combinação de valores. Cada produto é conferido contra a loja e o lote pode ser revertido. Na auditoria de 04/10/2026: 409
    variantes em 130 produtos mudariam, e nenhum produto teria variantes repetidas.
+18. **Lote "Corrigir a ordem das propriedades" (não testado na loja real).** Para produtos com TAMANHO antes de COR: coloca COR e depois
+   TAMANHO (`PUT /products/{id}` com `attributes`) e troca os dois valores de cada variante (`PUT .../variants/{id}` com `values`), levando
+   junto os outros idiomas. Como são várias chamadas por produto, este lote é **tudo ou nada**: se uma etapa falhar, ou se, depois de
+   aplicar, o painel reler o produto e a loja não estiver como esperado, ele desfaz o que já aplicou com os objetos originais da loja e
+   mostra o resultado. Se nem o desfazer for aceito, o item mostra "ATENÇÃO" com o que ficou para conferir na loja. Na auditoria de
+   04/10/2026: 14 produtos e 43 variantes, e em todos o primeiro valor de cada variante é um tamanho e o segundo uma cor. Ponto a confirmar:
+   se a loja aceita reordenar `attributes` e trocar `values` em sequência (ver itens 15 a 17).

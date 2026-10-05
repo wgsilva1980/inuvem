@@ -31,6 +31,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             <option value="categoria">Adicionar ou remover de uma categoria</option>
             <option value="propriedades">Padronizar propriedades (COR e TAMANHO)</option>
             <option value="valores">Padronizar grafia dos valores (cores e tamanhos)</option>
+            <option value="ordem">Corrigir a ordem das propriedades (COR antes de TAMANHO)</option>
           </select>
         </label>
 
@@ -137,6 +138,17 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             </ul>
             <p className="text-muted">
               Outras propriedades não são alteradas. Ficam de fora, com o motivo na pré-visualização, os produtos já padronizados e os que ficariam com duas variantes iguais (por exemplo “Azul” e “AZUL” no mesmo tamanho).
+            </p>
+          </div>
+        )}
+
+        {tipo === "ordem" && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p>
+              Em produtos que têm <strong>TAMANHO antes de COR</strong>, coloca <strong>COR antes de TAMANHO</strong> e troca também os dois valores de cada variante, para cada valor continuar sob a propriedade certa (“P / Preta” vira “Preta / P”).
+            </p>
+            <p className="text-muted">
+              Cada produto é alterado em várias etapas na loja. Se uma etapa falhar, ou se a loja não ficar como esperado, o painel desfaz sozinho o que já tinha aplicado e mostra o resultado. Produtos que já estão na ordem certa, ou que não têm exatamente duas propriedades reconhecidas, ficam de fora com o motivo na pré-visualização.
             </p>
           </div>
         )}

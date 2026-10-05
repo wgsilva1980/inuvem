@@ -45,6 +45,8 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("propriedades") }),
   /** Padroniza a grafia dos valores das propriedades COR (inicial maiúscula em cada palavra) e TAMANHO (maiúsculas; ÚNICO). */
   z.object({ type: z.literal("valores") }),
+  /** Corrige a ordem das propriedades para COR e TAMANHO, trocando também os dois valores de cada variante. */
+  z.object({ type: z.literal("ordem") }),
 ]);
 export type BulkOperation = z.infer<typeof operationSchema>;
 
@@ -139,6 +141,8 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
       return op.published ? "Publicar os produtos na loja" : "Despublicar os produtos (ocultar da loja)";
     case "propriedades":
       return `Padronizar as propriedades das variações para ${PROPRIEDADES_PADRAO.join(" e ")}`;
+    case "ordem":
+      return "Corrigir a ordem das propriedades para COR e TAMANHO (troca também os valores de cada variante)";
     case "valores":
       return "Padronizar a grafia dos valores: cores com inicial maiúscula em cada palavra, tamanhos em maiúsculas (ÚNICO)";
     case "categoria": {
@@ -179,14 +183,16 @@ export interface VariantChange {
   price?: { antes: string; depois: string };
   promotional_price?: { antes: string | null; depois: string | null };
   stock?: { antes: number | null; depois: number };
-  values?: { antes: string[]; depois: string[] };
+  /** `trocar`: os dois valores trocam de lugar (os objetos multi-idioma andam junto). */
+  values?: { antes: string[]; depois: string[]; trocar?: boolean };
 }
 
 export interface ItemChanges {
   product?: {
     published?: { antes: boolean; depois: boolean };
     categories?: { antes: number[]; depois: number[] };
-    attributes?: { antes: string[]; depois: string[] };
+    /** `trocar`: as duas propriedades trocam de lugar (os objetos multi-idioma andam junto com o nome). */
+    attributes?: { antes: string[]; depois: string[]; trocar?: boolean };
   };
   variants: VariantChange[];
 }
@@ -260,6 +266,26 @@ function planVariant(op: BulkOperation, v: MirrorVariant): { change?: VariantCha
 }
 
 /**
+ * Correção de ordem de um produto: TAMANHO antes de COR vira COR antes de TAMANHO, trocando também os dois valores de cada variante
+ * (os valores seguem a ordem das propriedades, então só renomear deixaria cada valor sob a propriedade errada).
+ */
+function planOrdem(p: MirrorProduct): { attributes: { antes: string[]; depois: string[]; trocar: true }; variants: VariantChange[] } | { motivo: string } {
+  const atuais = p.attributes;
+  if (atuais.length !== 2) return { motivo: atuais.length === 0 ? "não tem propriedades" : `tem ${atuais.length} propriedade${atuais.length === 1 ? "" : "s"} (${atuais.join(" | ")}); só corrijo produtos com duas` };
+  const [a, b] = atuais as [string, string];
+  if (ehCor(a) && ehTamanho(b)) return { motivo: "já está na ordem COR, TAMANHO" };
+  if (!(ehTamanho(a) && ehCor(b))) return { motivo: `nomes não reconhecidos (${atuais.join(" | ")})` };
+  if (p.variants.some((v) => v.values.length !== 2)) return { motivo: "a quantidade de valores das variantes não bate com a de propriedades" };
+  const variants: VariantChange[] = p.variants.map((v) => ({
+    id: v.id,
+    label: v.label,
+    sku: v.sku,
+    values: { antes: [...v.values], depois: [v.values[1] as string, v.values[0] as string], trocar: true },
+  }));
+  return { attributes: { antes: [...atuais], depois: [...PROPRIEDADES_PADRAO], trocar: true }, variants };
+}
+
+/**
  * Padronização dos valores de um produto. O produto inteiro fica de fora se a padronização deixasse duas variantes
  * com a mesma combinação de valores (a loja não distingue "Azul" de "AZUL" ao comparar, e isso viraria variante repetida).
  */
@@ -293,6 +319,13 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[]): Pla
     if (op.type === "publicar") {
       if (p.published === op.published) skip(op.published ? "já está publicado" : "já está despublicado");
       else items.push({ productId: p.id, productName: p.name, changes: { product: { published: { antes: p.published, depois: op.published } }, variants: [] } });
+      continue;
+    }
+
+    if (op.type === "ordem") {
+      const r = planOrdem(p);
+      if ("motivo" in r) skip(r.motivo);
+      else items.push({ productId: p.id, productName: p.name, changes: { product: { attributes: r.attributes }, variants: r.variants } });
       continue;
     }
 

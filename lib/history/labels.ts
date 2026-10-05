@@ -17,6 +17,7 @@ const FIXED: Record<string, string> = {
   "lote.reverter": "Lote de reversão criado",
   "lote.propriedades": "Lote: propriedades padronizadas no produto",
   "lote.valores": "Lote: grafia dos valores padronizada no produto",
+  "lote.ordem": "Lote: ordem das propriedades corrigida no produto",
 };
 
 const LOTE_OP: Record<string, string> = {

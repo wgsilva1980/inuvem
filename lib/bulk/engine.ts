@@ -1,5 +1,5 @@
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
-import { pt, type Product, type ProductInput, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
+import { pt, type I18n, type Product, type ProductInput, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
 import { mapVariant, toNumber } from "@/lib/sync/mappers";
 import { upsertProducts, upsertVariantRows, type Db } from "@/lib/sync/repo";
 import { valuesToI18n, valuesToStrings } from "@/lib/catalog/variants";
@@ -73,7 +73,11 @@ export function findMismatches(remote: Product, changes: ItemChanges): string[] 
 /** `current` é a variante na loja agora: serve para manter outros idiomas dos valores. */
 const variantInput = (vc: VariantChange, current?: Variant): VariantInput => {
   const input: VariantInput = {};
-  if (vc.values) input.values = valuesToI18n(vc.values.depois, current?.values);
+  if (vc.values) {
+    const atuais = Array.isArray(current?.values) ? (current!.values as I18n[]) : [];
+    // ao trocar a ordem, os objetos multi-idioma andam junto com o valor
+    input.values = valuesToI18n(vc.values.depois, vc.values.trocar ? [...atuais].reverse() : atuais);
+  }
   if (vc.price) input.price = vc.price.depois;
   if (vc.promotional_price) input.promotional_price = vc.promotional_price.depois;
   if (vc.stock) input.stock = vc.stock.depois;
@@ -85,7 +89,11 @@ const productInput = (c: ItemChanges["product"], remote: Product): ProductInput 
   const input: ProductInput = {};
   if (c?.published) input.published = c.published.depois;
   if (c?.categories) input.categories = c.categories.depois;
-  if (c?.attributes) input.attributes = c.attributes.depois.map((nome, i) => ({ ...(remote.attributes?.[i] ?? {}), pt: nome }));
+  if (c?.attributes) {
+    // ao trocar a ordem, os objetos multi-idioma andam junto com o nome (o 1º vira o 2º e vice-versa)
+    const base = c.attributes.trocar ? [...(remote.attributes ?? [])].reverse() : (remote.attributes ?? []);
+    input.attributes = c.attributes.depois.map((nome, i) => ({ ...(base[i] ?? {}), pt: nome }));
+  }
   return input;
 };
 
@@ -182,11 +190,81 @@ export async function runItem(db: Db, api: BulkApi, ctx: { storeId: string; acto
       await upsertVariantRows(db, storeId, [mapVariant(updated, productId)]);
     });
   }
+
+  // Alterações em várias etapas que só fazem sentido juntas (ordem das propriedades + valores das variantes):
+  // se algo falhar, ou a loja não ficar como esperado, desfaz o que já foi aplicado.
+  let mensagemAtomica: string | undefined;
+  if (precisaDeTudoOuNada(item.changes)) {
+    let motivo: string | null = failed ? (partes.find((p) => !p.ok && p.erro && !p.erro.startsWith("não executado"))?.erro ?? "uma das etapas falhou") : null;
+    if (!failed) {
+      motivo = await conferirAplicado(api, productId, item.changes);
+      if (motivo) failed = true;
+    }
+    // frase sem ponto final repetido e com a primeira letra maiúscula
+    const frase = (motivo ?? "").replace(/[.\s]+$/, "").replace(/^./, (c) => c.toLocaleUpperCase("pt-BR"));
+    if (failed && partes.some((p) => p.ok)) {
+      const falhas = await desfazerPartes(api, remote, productId, partes);
+      mensagemAtomica =
+        falhas.length === 0
+          ? `${frase}. A alteração foi desfeita: o produto ficou como estava.`
+          : `ATENÇÃO: ${frase}. Não foi possível desfazer tudo (${falhas.join("; ")}). Confira este produto na loja.`;
+    } else if (failed) {
+      mensagemAtomica = `${frase}. Nada foi alterado neste produto.`;
+    }
+  }
   await refreshMirror(db, api, storeId, productId);
 
   const resultado: ItemResult = { partes };
-  if (failed) resultado.mensagem = partes.find((p) => !p.ok && p.erro && !p.erro.startsWith("não executado"))?.erro;
+  if (failed) resultado.mensagem = mensagemAtomica ?? partes.find((p) => !p.ok && p.erro && !p.erro.startsWith("não executado"))?.erro;
   return finish(failed ? "error" : "ok", resultado);
+}
+
+/* ---------- alterações de tudo ou nada ---------- */
+
+/** Propriedades e valores das variantes mudam juntos: um sem o outro deixa cada valor sob a propriedade errada. */
+export const precisaDeTudoOuNada = (changes: ItemChanges): boolean => Boolean(changes.product?.attributes) && changes.variants.some((v) => v.values);
+
+/** Depois de aplicar, relê o produto e confere nomes e valores. Devolve o que não bate, ou null se está como esperado. */
+async function conferirAplicado(api: BulkApi, productId: number, changes: ItemChanges): Promise<string | null> {
+  let atual: Product;
+  try {
+    atual = await api.getProduct(productId);
+  } catch (err) {
+    return `não foi possível reler o produto para conferir (${errorText(err)})`;
+  }
+  const esperadosAttrs = changes.product?.attributes?.depois;
+  if (esperadosAttrs) {
+    const nomes = (atual.attributes ?? []).map((a) => pt(a));
+    if (nomes.length !== esperadosAttrs.length || nomes.some((n, i) => n !== esperadosAttrs[i])) return `a loja ficou com as propriedades "${nomes.join(" | ")}" em vez de "${esperadosAttrs.join(" | ")}"`;
+  }
+  for (const vc of changes.variants) {
+    if (!vc.values) continue;
+    const rv = (atual.variants ?? []).find((v) => v.id === vc.id);
+    const agora = valuesToStrings(rv?.values);
+    if (!rv || agora.length !== vc.values.depois.length || agora.some((x, i) => x !== vc.values!.depois[i])) return `a variante "${vc.label}" ficou com valores diferentes do esperado`;
+  }
+  return null;
+}
+
+/** Restaura o que foi aplicado (do último para o primeiro), usando os objetos originais da loja. Devolve o que não conseguiu desfazer. */
+async function desfazerPartes(api: BulkApi, original: Product, productId: number, partes: NonNullable<ItemResult["partes"]>): Promise<string[]> {
+  const falhas: string[] = [];
+  for (const parte of [...partes].reverse()) {
+    if (!parte.ok) continue;
+    try {
+      if (parte.tipo === "variante") {
+        const antes = (original.variants ?? []).find((v) => v.id === parte.id);
+        if (antes?.values) await api.updateVariant(productId, parte.id as number, { values: antes.values });
+      } else if (original.attributes) {
+        await api.updateProduct(productId, { attributes: original.attributes });
+      }
+      parte.ok = false;
+      parte.erro = "desfeita (houve um problema depois)";
+    } catch (err) {
+      falhas.push(`${parte.tipo === "variante" ? `variante ${parte.id}` : "propriedades"}: ${errorText(err)}`);
+    }
+  }
+  return falhas;
 }
 
 /* ---------- passo do lote (chamado repetidamente pela tela) ---------- */
@@ -242,14 +320,17 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
     out.product = {};
     if (changes.product.published) out.product.published = { antes: changes.product.published.depois, depois: changes.product.published.antes };
     if (changes.product.categories) out.product.categories = { antes: changes.product.categories.depois, depois: changes.product.categories.antes };
-    if (changes.product.attributes) out.product.attributes = { antes: changes.product.attributes.depois, depois: changes.product.attributes.antes };
+    if (changes.product.attributes) {
+      const a = changes.product.attributes;
+      out.product.attributes = { antes: a.depois, depois: a.antes, ...(a.trocar ? { trocar: true } : {}) };
+    }
   }
   for (const v of changes.variants) {
     if (!okVariants.has(v.id)) continue;
     const inv: VariantChange = { id: v.id, label: v.label, sku: v.sku };
     if (v.price) inv.price = { antes: v.price.depois, depois: v.price.antes };
     if (v.promotional_price) inv.promotional_price = { antes: v.promotional_price.depois, depois: v.promotional_price.antes };
-    if (v.values) inv.values = { antes: v.values.depois, depois: v.values.antes };
+    if (v.values) inv.values = { antes: v.values.depois, depois: v.values.antes, ...(v.values.trocar ? { trocar: true } : {}) };
     if (v.stock) {
       // o estoque original pode ser "sem quantidade" (null): ao reverter, volta para 0, o mais próximo possível
       inv.stock = { antes: v.stock.depois, depois: v.stock.antes ?? 0 };
