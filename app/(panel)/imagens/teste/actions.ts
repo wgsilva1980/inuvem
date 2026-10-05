@@ -19,7 +19,7 @@ async function probe(url: string): Promise<ProbeResult> {
     const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(10_000) });
     base.status = res.status;
     base.contentType = res.headers.get("content-type");
-    if (!res.ok) return base;
+    if (!res.ok || !(base.contentType ?? "").startsWith("image/")) return base; // erro da CDN vem como XML com status 403
     const buf = Buffer.from(await res.arrayBuffer());
     base.bytes = buf.length;
     try {
@@ -58,6 +58,7 @@ export async function runImageFormatTest(_prev: FormatTestState | null, _formDat
         },
         uploadImage: async (pid, file) => (await createImage(client, pid, { attachment: file.bytes.toString("base64"), filename: file.filename })).src,
         probe,
+        esperar: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         deleteProduct: async (pid) => {
           await deleteProduct(client, pid);
           await query("DELETE FROM products WHERE store_id = $1::uuid AND id = $2::bigint", [store.id, pid]); // o webhook pode ter espelhado o produto de teste

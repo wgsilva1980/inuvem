@@ -38,12 +38,18 @@ export function FormatTestRunner() {
       {result?.relatorios.map((r) => {
         const v = veredito(r);
         return (
-          <Card key={r.formato} className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold">{r.formato === "webp" ? "WebP" : "JPEG"} · enviado com {kb(r.enviadoBytes)}</h2>
+          <Card key={r.rotulo} className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold">
+              {r.rotulo} · enviado com {kb(r.enviadoBytes)}
+            </h2>
             <p className={`text-sm font-medium ${v.bom ? "text-success" : "text-danger"}`}>{v.texto}</p>
-            {r.original && (
+            <p className="text-sm text-muted">
+              Enviado: {r.enviadoLargura}×{r.enviadoAltura}
+              {r.original?.ok ? ` · na loja: ${tipo(r.original)} · ${dims(r.original)} · ${kb(r.original.bytes)}` : " · na loja: não foi possível baixar"}
+            </p>
+            {r.alternativas.length > 0 && (
               <p className="text-sm text-muted">
-                Original na loja: {tipo(r.original)} · {dims(r.original)} · {kb(r.original.bytes)}
+                Outras extensões do mesmo endereço: {r.alternativas.map((a) => `${a.url.split(".").pop()} → ${a.ok ? `existe (${tipo(a)}, ${dims(a)}, ${kb(a.bytes)})` : "não existe"}`).join(" · ")}
               </p>
             )}
             {r.tamanhos.length > 0 && (
@@ -53,6 +59,7 @@ export function FormatTestRunner() {
                     <tr>
                       <th className="py-1 pr-3 font-medium">Versão</th>
                       <th className="py-1 pr-3 font-medium">Resultado</th>
+                      <th className="py-1 pr-3 font-medium">Final do endereço</th>
                       <th className="py-1 pr-3 font-medium">Formato</th>
                       <th className="py-1 pr-3 font-medium">Dimensões</th>
                       <th className="py-1 font-medium">Peso</th>
@@ -63,6 +70,7 @@ export function FormatTestRunner() {
                       <tr key={t.tamanho} className="border-t border-border">
                         <td className="py-1 pr-3">{t.tamanho} px</td>
                         <td className={`py-1 pr-3 ${t.resultado.ok ? "text-success" : "text-danger"}`}>{t.resultado.ok ? "existe" : `não existe${t.resultado.status ? ` (${t.resultado.status})` : ""}`}</td>
+                        <td className="py-1 pr-3">{t.padrao ?? "—"}</td>
                         <td className="py-1 pr-3">{tipo(t.resultado)}</td>
                         <td className="py-1 pr-3">{dims(t.resultado)}</td>
                         <td className="py-1">{kb(t.resultado.bytes)}</td>

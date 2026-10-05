@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
 import { FormatTestRunner } from "./runner";
 
+export const maxDuration = 60;
+
 export default async function TesteImagensPage() {
   await requireAdmin();
   return (
