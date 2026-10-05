@@ -80,6 +80,12 @@ export async function createProductVariant(productId: number, _prev: ManageState
     stock: formData.get("stock") ?? "",
     image_id: "",
     weight: formData.get("weight") ?? "",
+    depth: formData.get("depth") ?? "",
+    width: formData.get("width") ?? "",
+    height: formData.get("height") ?? "",
+    mpn: formData.get("mpn") ?? "",
+    age_group: formData.get("age_group") ?? "",
+    gender: formData.get("gender") ?? "",
     values: formValues(formData) ?? [],
   });
   if (!parsed.success) {
@@ -96,7 +102,7 @@ export async function createProductVariant(productId: number, _prev: ManageState
       storeId,
       actor,
       productId,
-      variant: { sku: v.sku, price: v.price, promotional_price: v.promotional_price, stock_management: v.stock_management, stock: v.stock, weight: v.weight ?? null, values: v.values ?? [] },
+      variant: { sku: v.sku, price: v.price, promotional_price: v.promotional_price, stock_management: v.stock_management, stock: v.stock, weight: v.weight ?? null, depth: v.depth ?? null, width: v.width ?? null, height: v.height ?? null, mpn: v.mpn ?? null, age_group: v.age_group ?? null, gender: v.gender ?? null, values: v.values ?? [] },
     });
     return { ok: true, message: "Variante criada na Nuvemshop." } satisfies ManageState;
   });

@@ -22,6 +22,10 @@ export const variantSchema = z
     depth: decimal.optional(),
     values: z.array(i18nSchema).optional(),
     position: z.number().nullable().optional(),
+    /** Código do fabricante e dados para Instagram/Google Shopping. */
+    mpn: z.string().nullable().optional(),
+    age_group: z.string().nullable().optional(),
+    gender: z.string().nullable().optional(),
     /** Imagem escolhida para a variação (uma das imagens do produto). */
     image_id: z.number().nullable().optional(),
   })
@@ -106,9 +110,12 @@ export type VariantInput = Partial<{
   stock_management: boolean;
   stock: number | null;
   weight: string | number | null;
-  width: string | number;
-  height: string | number;
-  depth: string | number;
+  width: string | number | null;
+  height: string | number | null;
+  depth: string | number | null;
+  mpn: string | null;
+  age_group: string | null;
+  gender: string | null;
   values: I18n[];
   image_id: number | null;
 }>;
