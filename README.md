@@ -203,3 +203,11 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    mostra o resultado. Se nem o desfazer for aceito, o item mostra "ATENÇÃO" com o que ficou para conferir na loja. Na auditoria de
    04/10/2026: 14 produtos e 43 variantes, e em todos o primeiro valor de cada variante é um tamanho e o segundo uma cor. Ponto a confirmar:
    se a loja aceita reordenar `attributes` e trocar `values` em sequência (ver itens 15 a 17).
+20. **Cadastrar produtos (não testado na loja real).** Tela "Novo produto" (botão na lista de Produtos): nome, descrição (editor, limpa como na
+   edição), tags, categorias, SEO e "Publicar na loja agora" (desmarcado = rascunho). Dois modos: **produto simples** (uma variante com preço,
+   promocional, SKU, peso e estoque) ou **cores e tamanhos** (o usuário digita as cores e os tamanhos; o painel monta uma variante por
+   combinação, com as propriedades COR e TAMANHO, grafia padronizada, e preço/estoque padrão ajustáveis por variante; até 60 variantes). Envia
+   `POST /products` com `attributes` e `variants` (cada uma com `values`) numa chamada só. Pontos a confirmar: se a loja aceita `attributes`
+   e `variants` aninhados na criação, e se gera o `handle` sozinha a partir do nome. As **fotos** não vão na criação: depois de criar, o painel
+   abre a tela do produto, onde o painel de imagens já existe. Depois de criar, o espelho é gravado com a resposta da loja, e o histórico
+   registra "Produto criado" (também quando a loja recusa).
