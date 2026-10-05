@@ -106,6 +106,9 @@ class FakeStore implements BulkApi {
     if (input.attributes && !this.ignoreAttributes) p.attributes = structuredClone(input.attributes);
     return structuredClone(p);
   }
+  async deleteProduct(id: number) {
+    this.products.delete(id);
+  }
   async updateVariant(pid: number, vid: number, input: VariantInput) {
     this.calls.push(`variante ${vid} ${JSON.stringify(input.values?.map((v) => v.pt))}`);
     if (this.broken || this.failVariantId === vid) this.refuse();

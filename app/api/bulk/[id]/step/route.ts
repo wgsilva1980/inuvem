@@ -4,7 +4,7 @@ import { getEnv } from "@/lib/env";
 import { query } from "@/lib/db";
 import { stepJob } from "@/lib/bulk/engine";
 import { JobStateError, getJobCounts } from "@/lib/bulk/repo";
-import { NuvemshopError, getProduct, updateProduct, updateVariant } from "@/lib/nuvemshop";
+import { NuvemshopError, deleteProduct, getProduct, updateProduct, updateVariant } from "@/lib/nuvemshop";
 import { clientForStore, getActiveStore } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       {
         getProduct: (pid) => getProduct(client, pid),
         updateProduct: (pid, input) => updateProduct(client, pid, input),
+        deleteProduct: (pid) => deleteProduct(client, pid),
         updateVariant: (pid, vid, input) => updateVariant(client, pid, vid, input),
       },
       { storeId: store.id, actor: admin.email, jobId: id, budgetMs: Math.min(getEnv().SYNC_TIME_BUDGET_MS, 30_000) },

@@ -49,6 +49,9 @@ class FakeStore implements BulkApi {
     if (input.categories) p.categories = input.categories.map((c) => ({ id: c, name: { pt: `Cat ${c}` } }));
     return structuredClone(p);
   }
+  async deleteProduct(id: number) {
+    this.products.delete(id);
+  }
   async updateVariant(pid: number, vid: number, input: VariantInput) {
     this.calls.push(`PUT variant ${vid} ${JSON.stringify(input)}`);
     if (this.failOn.variantId === vid) throw new NuvemshopError("422", 422, null, "recusado");
@@ -362,5 +365,40 @@ describe("runItem isolado", () => {
     const [item] = await claimItems(db, jobId, 1);
     expect(await runItem(db, api, { storeId, actor, job }, item!)).toBe("error");
     expect(api.products.get(1)!.published).toBe(true);
+  });
+});
+
+describe("excluir produtos em lote", () => {
+  it("exclui na loja, tira do espelho, registra e não tem reversão", async () => {
+    const api = await setup([product(1), product(2), product(3)]);
+    const { jobId, plan } = await newJob({ type: "excluir" }, [1, 2]);
+    expect(plan.items.map((i) => i.productId)).toEqual([1, 2]);
+    await startJob(db, storeId, jobId);
+    expect(await run(api, jobId)).toMatchObject({ done: true, status: "completed" });
+    expect([...api.products.keys()]).toEqual([3]);
+    expect((await pg.query("SELECT id FROM products")).rows).toEqual([{ id: 3 }]);
+    expect((await pg.query("SELECT count(*)::int AS n FROM variants WHERE product_id IN (1, 2)")).rows[0]).toEqual({ n: 0 });
+    expect((await audits()).filter((a) => a.acao === "lote.excluir")).toHaveLength(2);
+    await expect(createRevertJob(db, { storeId, actor, jobId })).rejects.toThrow(/não podem ser restaurados/);
+  });
+
+  it("produto renomeado na loja depois da pré-visualização fica de fora (conflito)", async () => {
+    const api = await setup([product(1, { name: { pt: "Vestido" } })]);
+    const { jobId } = await newJob({ type: "excluir" }, [1]);
+    api.products.get(1)!.name = { pt: "Outro nome" };
+    await startJob(db, storeId, jobId);
+    await run(api, jobId);
+    expect(api.products.has(1)).toBe(true);
+    expect(await getJobCounts(db, jobId)).toMatchObject({ conflict: 1, ok: 0 });
+  });
+
+  it("produto que já não existe na loja conta como excluído e sai do espelho", async () => {
+    const api = await setup([product(1)]);
+    const { jobId } = await newJob({ type: "excluir" }, [1]);
+    api.notFound.add(1);
+    await startJob(db, storeId, jobId);
+    await run(api, jobId);
+    expect(await getJobCounts(db, jobId)).toMatchObject({ ok: 1 });
+    expect((await pg.query("SELECT id FROM products")).rows).toEqual([]);
   });
 });

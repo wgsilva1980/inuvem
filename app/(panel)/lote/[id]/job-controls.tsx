@@ -78,6 +78,7 @@ export function JobControls({
   variantes,
   canRevert,
   descricao,
+  destrutivo = false,
 }: {
   jobId: string;
   status: "preview" | "running" | "completed" | "cancelled";
@@ -86,10 +87,13 @@ export function JobControls({
   variantes: number;
   canRevert: boolean;
   descricao: string;
+  /** Exclusão: pede para digitar EXCLUIR antes de aplicar. */
+  destrutivo?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
 
   const act = (task: () => Promise<{ ok: boolean; message?: string }>) =>
     startTransition(async () => {
@@ -105,16 +109,30 @@ export function JobControls({
     <div className="flex flex-col gap-3">
       {status === "running" && <Runner jobId={jobId} initial={counts} />}
 
+      {status === "preview" && destrutivo && (
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium text-danger">
+            Isto exclui {produtos} {produtos === 1 ? "produto" : "produtos"} da loja para sempre. Digite EXCLUIR para liberar o botão.
+          </span>
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" className="min-h-10 rounded-md border border-border-strong bg-card px-3 sm:max-w-xs" />
+        </label>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {status === "preview" && (
           <Button
             type="button"
-            disabled={pending}
+            variant={destrutivo ? "danger" : "primary"}
+            disabled={pending || (destrutivo && typed.trim() !== "EXCLUIR")}
             onClick={() => {
+              if (destrutivo) {
+                act(() => startBulk(jobId));
+                return;
+              }
               if (window.confirm(`Aplicar na loja agora?\n\n${descricao}\n${produtos} produto(s), ${variantes} variante(s) alterada(s).\n\nVocê poderá reverter depois, desde que a loja não mude nesse intervalo.`)) act(() => startBulk(jobId));
             }}
           >
-            Aplicar na loja
+            {destrutivo ? "Excluir da loja" : "Aplicar na loja"}
           </Button>
         )}
         {(status === "preview" || status === "running") && (
