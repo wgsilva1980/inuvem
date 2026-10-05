@@ -212,3 +212,11 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    primeira chamada, nada muda e o item mostra o motivo), e se `attributes: []` é aceito ao desfazer. Produtos sem nome na loja (o painel
    mostra "Produto <id>") ficam fora da lista da tela. Na auditoria de 04/10/2026: 10 produtos (3 sem propriedades, 6 só com tamanho,
    1 só com cor), 11 variantes.
+20. **Cadastrar produtos (não testado na loja real).** Tela "Novo produto" (botão na lista de Produtos): nome, descrição (editor, limpa como na
+   edição), tags, categorias, SEO e "Publicar na loja agora" (desmarcado = rascunho). Dois modos: **produto simples** (uma variante com preço,
+   promocional, SKU, peso e estoque) ou **cores e tamanhos** (o usuário digita as cores e os tamanhos; o painel monta uma variante por
+   combinação, com as propriedades COR e TAMANHO, grafia padronizada, e preço/estoque padrão ajustáveis por variante; até 60 variantes). Envia
+   `POST /products` com `attributes` e `variants` (cada uma com `values`) numa chamada só. Pontos a confirmar: se a loja aceita `attributes`
+   e `variants` aninhados na criação, e se gera o `handle` sozinha a partir do nome. As **fotos** não vão na criação: depois de criar, o painel
+   abre a tela do produto, onde o painel de imagens já existe. Depois de criar, o espelho é gravado com a resposta da loja, e o histórico
+   registra "Produto criado" (também quando a loja recusa).

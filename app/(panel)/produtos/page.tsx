@@ -39,8 +39,13 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
   return (
     <main className="flex flex-col gap-4 pb-20">
       <div className="flex items-end justify-between gap-3">
-        <h1 className="text-xl font-semibold">Produtos</h1>
-        <p className="text-sm text-muted">{result.total} {result.total === 1 ? "produto" : "produtos"}</p>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold">Produtos</h1>
+          <p className="text-sm text-muted">{result.total} {result.total === 1 ? "produto" : "produtos"}</p>
+        </div>
+        <Link href="/produtos/novo" className={buttonClass("primary")}>
+          Novo produto
+        </Link>
       </div>
 
       <Card>

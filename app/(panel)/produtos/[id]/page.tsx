@@ -5,13 +5,15 @@ import { getProductImages } from "@/lib/catalog/images";
 import { getProductDetail, listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
+import { Alert } from "@/components/ui/alert";
 import { ImagesPanel } from "./images-panel";
 import { ProductForm } from "./product-form";
 import { VariantsEditor } from "./variants-editor";
 
-export default async function ProdutoPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProdutoPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ criado?: string }> }) {
   await requireAdmin();
   const { id } = await params;
+  const { criado } = await searchParams;
   const productId = Number(id);
   if (!Number.isInteger(productId) || productId <= 0) notFound();
 
@@ -36,6 +38,12 @@ export default async function ProdutoPage({ params }: { params: Promise<{ id: st
           Ver histórico deste produto
         </Link>
       </div>
+
+      {criado === "1" && (
+        <Alert tone="success">
+          Produto criado na Nuvemshop {product.published ? "e publicado" : "como rascunho (não aparece na vitrine)"}. Falta adicionar as fotos, na seção “Imagens” mais abaixo{product.published ? "" : ", e depois marcar “Publicado na loja” quando estiver pronto"}.
+        </Alert>
+      )}
 
       <ProductForm product={product} categories={categories} />
 

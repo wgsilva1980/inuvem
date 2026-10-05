@@ -1,5 +1,6 @@
 const FIXED: Record<string, string> = {
   "produto.atualizar": "Produto editado",
+  "produto.criar": "Produto criado",
   "variante.atualizar": "Variante editada",
   "variante.criar": "Variante criada",
   "variante.apagar": "Variante excluída",
