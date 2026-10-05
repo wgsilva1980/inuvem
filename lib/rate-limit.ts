@@ -39,6 +39,14 @@ export async function checkMagicLinkLimits(db: Db, ip: string): Promise<LimitRes
   return { ok: true };
 }
 
+/** Tentativas de digitar o código de acesso: por IP, para não dar para adivinhar os 6 números (o serviço de login também limita por código). */
+export const OTP_VERIFY_LIMIT = { max: 15, windowSeconds: 15 * 60 } as const;
+
+export async function checkOtpVerifyLimit(db: Db, ip: string): Promise<LimitResult> {
+  if ((await hit(db, `otp:ip:${ip}`, OTP_VERIFY_LIMIT.windowSeconds)) > OTP_VERIFY_LIMIT.max) return { ok: false, retryAfterSeconds: OTP_VERIFY_LIMIT.windowSeconds };
+  return { ok: true };
+}
+
 /** IP do cliente atrás da Vercel (o primeiro de x-forwarded-for é o do cliente; a Vercel sobrescreve o cabeçalho enviado de fora). */
 export function clientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
