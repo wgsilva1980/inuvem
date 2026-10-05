@@ -6,8 +6,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { query } from "@/lib/db";
 import { PROBLEMA_LABEL, auditarProdutos, proporcaoTexto, resumirAuditoria, type Problema, type ProdutoAuditado } from "@/lib/images/audit";
+import { produtosComCopia, produtosPendentes } from "@/lib/images/replace";
 import { getActiveStore } from "@/lib/stores";
 import { AuditRunner } from "./runner";
+import { StandardizeRunner } from "./standardize-runner";
 import { StorageCheck } from "./storage-check";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +19,8 @@ type Filtro = Problema | "mistas" | "sem-imagem" | "todos";
 
 const kb = (n: number | null) => (n === null ? "—" : `${Math.round(n / 1024)} KB`);
 
-function filtrar(produtos: ProdutoAuditado[], filtro: Filtro): ProdutoAuditado[] {
-  if (filtro === "todos") return produtos.filter((p) => p.imagens.some((i) => i.problemas.length > 0) || p.proporcoesMisturadas || p.imagens.length === 0);
+function filtrar(produtos: ProdutoAuditado[], filtro: Filtro, comCopia: Set<string>): ProdutoAuditado[] {
+  if (filtro === "todos") return produtos.filter((p) => p.imagens.some((i) => i.problemas.length > 0) || p.proporcoesMisturadas || p.imagens.length === 0 || comCopia.has(p.id));
   if (filtro === "mistas") return produtos.filter((p) => p.proporcoesMisturadas);
   if (filtro === "sem-imagem") return produtos.filter((p) => p.imagens.length === 0);
   return produtos.filter((p) => p.imagens.some((i) => i.problemas.includes(filtro)));
@@ -32,7 +34,10 @@ export default async function ImagensPage({ searchParams }: { searchParams: Prom
 
   const produtos = store ? await auditarProdutos({ query }, store.id) : [];
   const resumo = resumirAuditoria(produtos);
-  const lista = filtrar(produtos, filtro);
+  const pendentes = store ? await produtosPendentes({ query }, store.id) : [];
+  const pendentesIds = new Set(pendentes.map((p) => String(p.id)));
+  const comCopia = store ? await produtosComCopia({ query }, store.id) : new Set<string>();
+  const lista = filtrar(produtos, filtro, comCopia);
   const pages = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const page = Math.min(Math.max(1, Number(sp.page) || 1), pages);
   const visiveis = lista.slice((page - 1) * POR_PAGINA, page * POR_PAGINA);
@@ -68,6 +73,14 @@ export default async function ImagensPage({ searchParams }: { searchParams: Prom
       <Card className="flex flex-col gap-2">
         <p className="text-sm">Para padronizar as fotos já existentes guardamos uma cópia de cada original (permite desfazer). Esse teste confere se o armazenamento está ligado; não toca na loja.</p>
         <StorageCheck />
+      </Card>
+
+      <Card className="flex flex-col gap-2">
+        <h2 className="text-base font-semibold">Padronizar fotos</h2>
+        <p className="text-sm">
+          {pendentes.length} produto(s) com fotos que dá para corrigir (fora de 1:1/4:5, pesadas ou não JPEG): {pendentes.reduce((n, p) => n + p.imagens.length, 0)} foto(s). Cada original é copiado para o armazenamento privado, a versão padrão é enviada no mesmo lugar (as variações acompanham) e a antiga é apagada da loja. Fotos pequenas (&lt; 800 px) e GIFs ficam como estão. Recomendo testar primeiro em um produto (botão em cada produto abaixo) e conferir na loja.
+        </p>
+        <StandardizeRunner pendentes={pendentes.length} rotulo={`Padronizar todos (${pendentes.length})`} />
       </Card>
 
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -113,11 +126,17 @@ export default async function ImagensPage({ searchParams }: { searchParams: Prom
                   <Link href={`/produtos/${p.id}`} className="font-medium hover:underline">
                     {p.name}
                   </Link>
-                  <span className="flex gap-2">
+                  <span className="flex flex-wrap items-center gap-2">
                     {p.proporcoesMisturadas && <Badge tone="warning">Proporções misturadas</Badge>}
                     {p.imagens.length === 0 && <Badge tone="danger">Sem imagem</Badge>}
                   </span>
                 </div>
+                {(pendentesIds.has(p.id) || comCopia.has(p.id)) && (
+                  <div className="flex flex-wrap gap-2">
+                    {pendentesIds.has(p.id) && <StandardizeRunner produtoId={Number(p.id)} pendentes={1} rotulo="Padronizar este produto" />}
+                    {comCopia.has(p.id) && <StandardizeRunner produtoId={Number(p.id)} pendentes={1} rotulo="Desfazer padronização" desfazer />}
+                  </div>
+                )}
                 {p.imagens.length > 0 && (
                   <ul className="flex flex-col divide-y divide-border text-sm">
                     {p.imagens.map((i, n) => (
