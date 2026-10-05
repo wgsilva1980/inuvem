@@ -60,7 +60,7 @@ describe("prepareDescription", () => {
 
 describe("quebras de linha não geram falsa alteração", () => {
   const detail = (description: string): ProductDetail => ({
-    id: "1", name: "A", description, tags: "", published: true, categories: [], seo_title: "", seo_description: "", updated_at_remote: null, variants: [],
+    id: "1", name: "A", description, tags: "", published: true, categories: [], seo_title: "", seo_description: "", updated_at_remote: null, attributes: [], variants: [],
   });
   const form = (description: string) =>
     productEditSchema.parse({ name: "A", description, tags: "", published: true, seo_title: "", seo_description: "", categories: [] });

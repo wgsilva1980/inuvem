@@ -1,3 +1,4 @@
+import { pt, type I18n } from "@/lib/nuvemshop/types";
 import type { Db } from "@/lib/sync/repo";
 
 export const PAGE_SIZE = 25;
@@ -134,25 +135,30 @@ export interface ProductDetail {
   seo_title: string;
   seo_description: string;
   updated_at_remote: string | null;
-  variants: Array<{ id: string; sku: string | null; price: string | null; promotional_price: string | null; stock: number | null; stock_management: boolean; values: Array<Record<string, string | null>>; image_id: string | null }>;
+  /** Nomes das propriedades das variações (ex.: Cor, Tam). */
+  attributes: string[];
+  variants: Array<{ id: string; sku: string | null; price: string | null; promotional_price: string | null; weight: string | null; stock: number | null; stock_management: boolean; values: Array<Record<string, string | null>>; image_id: string | null }>;
 }
 
 export async function getProductDetail(db: Db, storeId: string, id: number): Promise<ProductDetail | null> {
-  const rows = await db.query<Omit<ProductDetail, "variants">>(
+  const rows = await db.query<Omit<ProductDetail, "variants" | "attributes"> & { attributes_raw: unknown }>(
     `SELECT id::text AS id, name, description, tags, published, categories, updated_at_remote,
             coalesce(raw_json->'seo_title'->>'pt', '') AS seo_title,
-            coalesce(raw_json->'seo_description'->>'pt', '') AS seo_description
+            coalesce(raw_json->'seo_description'->>'pt', '') AS seo_description,
+            coalesce(raw_json->'attributes', '[]'::jsonb) AS attributes_raw
      FROM products WHERE store_id = $1::uuid AND id = $2::bigint`,
     [storeId, id],
   );
   const product = rows[0];
   if (!product) return null;
   const variants = await db.query<ProductDetail["variants"][number]>(
-    `SELECT id::text AS id, sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management, values, nullif(raw_json->>'image_id', '') AS image_id
+    `SELECT id::text AS id, sku, price::text AS price, promotional_price::text AS promotional_price, weight::text AS weight, stock, stock_management, values, nullif(raw_json->>'image_id', '') AS image_id
      FROM variants WHERE store_id = $1::uuid AND product_id = $2::bigint ORDER BY position NULLS LAST, id`,
     [storeId, id],
   );
-  return { ...product, variants };
+  const { attributes_raw, ...rest } = product;
+  const attributes = Array.isArray(attributes_raw) ? attributes_raw.map((a) => pt(a as I18n)) : [];
+  return { ...rest, attributes, variants };
 }
 
 /** IDs dos produtos que casam com os filtros (para operações em massa). Pede um a mais que o limite para saber se estourou. */

@@ -176,3 +176,10 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    Se todas as entregas forem recusadas com 401, o nome do header de assinatura está errado (o log `webhook.rejected` mostra se ele veio).
 14. **Magic link no servidor** (`auth.signIn.magicLink`) existe nos tipos do SDK `@neondatabase/auth@0.5.0-beta`
    (versão beta), mas o envio real do e-mail não foi testado fora do seu ambiente.
+15. **Gerenciar variações (não testado na loja real).** O painel edita os valores de cada variante (`PUT /products/{id}/variants/{id}`
+   com `values`, uma lista de `{ pt }` com um item por propriedade, na ordem de `attributes`) e o peso (`weight`, em kg; esvaziar envia
+   `null`), cria variantes (`POST /products/{id}/variants`) e exclui (`DELETE`), e renomeia as propriedades (`PUT /products/{id}` com
+   `attributes`). A confirmar: se `values` pode ser trocado por `PUT` numa variante existente, se `weight: null` é aceito, se a loja recusa
+   excluir a última variante (o painel já impede), e se renomear uma propriedade pelo produto mantém os valores das variantes. Depois de
+   cada operação o painel rebusca o produto e regrava o espelho, então a tela sempre mostra o estado real. **Fora de escopo por enquanto:**
+   adicionar ou remover uma propriedade (ex.: passar a ter Cor e Tam), pois isso exige reescrever os valores de todas as variantes de uma vez.

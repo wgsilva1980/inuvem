@@ -39,7 +39,7 @@ export default async function ProdutoPage({ params }: { params: Promise<{ id: st
 
       <ProductForm product={product} categories={categories} />
 
-      <VariantsEditor productId={productId} variants={product.variants} images={images} />
+      <VariantsEditor productId={productId} variants={product.variants} images={images} attributes={product.attributes} />
 
       <ImagesPanel productId={productId} images={images} />
     </main>
