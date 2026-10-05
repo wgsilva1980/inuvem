@@ -59,7 +59,7 @@ async function run(db: Db, api: ManageApi, base: Base, acao: string, antes: unkn
 }
 
 /** Dados de uma variante nova: um valor por propriedade do produto, mais preço e estoque. */
-export type NewVariant = Pick<VariantEdit, "sku" | "price" | "promotional_price" | "stock_management" | "stock" | "weight"> & { values: string[] };
+export type NewVariant = Pick<VariantEdit, "sku" | "price" | "promotional_price" | "stock_management" | "stock" | "weight" | "depth" | "width" | "height" | "mpn" | "age_group" | "gender"> & { values: string[] };
 
 /** Cria uma variante. A combinação de valores precisa ser nova e ter um valor para cada propriedade. */
 export async function createNewVariant(db: Db, api: ManageApi, args: Base & { variant: NewVariant }): Promise<void> {
@@ -77,6 +77,7 @@ export async function createNewVariant(db: Db, api: ManageApi, args: Base & { va
     ...(variant.promotional_price !== null ? { promotional_price: variant.promotional_price } : {}),
     ...(variant.stock_management && variant.stock !== null ? { stock: variant.stock } : {}),
     ...(variant.weight !== null && variant.weight !== undefined ? { weight: variant.weight } : {}),
+    ...Object.fromEntries((["depth", "width", "height", "mpn", "age_group", "gender"] as const).flatMap((f) => (variant[f] ? [[f, variant[f]]] : []))),
   };
   await run(db, api, base, "variante.criar", { total: await variantCount(db, base) }, { values: variant.values, sku, price: variant.price, stock: variant.stock }, () =>
     api.createVariant(base.productId, input),

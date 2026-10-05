@@ -50,6 +50,12 @@ interface MirrorRow {
   stock_management: boolean;
   image_id: string | null;
   weight: string | null;
+  depth: string | null;
+  width: string | null;
+  height: string | null;
+  mpn: string | null;
+  age_group: string | null;
+  gender: string | null;
   values: unknown;
 }
 
@@ -102,7 +108,9 @@ export async function updateVariant(
   const { storeId, actor, productId, variantId, after } = args;
   const rows = await db.query<MirrorRow>(
     `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management,
-            nullif(raw_json->>'image_id', '') AS image_id, weight::text AS weight, values
+            nullif(raw_json->>'image_id', '') AS image_id, weight::text AS weight,
+            depth::text AS depth, width::text AS width, height::text AS height,
+            raw_json->>'mpn' AS mpn, raw_json->>'age_group' AS age_group, raw_json->>'gender' AS gender, values
      FROM variants WHERE store_id = $1::uuid AND product_id = $2::bigint AND id = $3::bigint`,
     [storeId, productId, variantId],
   );

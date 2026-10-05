@@ -56,6 +56,41 @@ const weightValue = z.string().transform((value, ctx) => {
   return parsed;
 });
 
+/** Medida em cm: "12,5" e "12.5" -> "12.50" (até 2 casas). Vazio -> null; inválido -> undefined. */
+export function parseDimension(raw: string): string | null | undefined {
+  const s = raw.trim().replace(/\s/g, "").replace(",", ".");
+  if (s === "") return null;
+  if (!/^\d{1,5}(\.\d{1,2})?$/.test(s)) return undefined;
+  return Number(s).toFixed(2);
+}
+
+const dimensionValue = (nome: string) =>
+  z.string().transform((value, ctx) => {
+    const parsed = parseDimension(value);
+    if (parsed === undefined) {
+      ctx.addIssue({ code: "custom", message: `Use ${nome} em cm como 12,5 (até 2 casas decimais).` });
+      return z.NEVER;
+    }
+    return parsed;
+  });
+
+/** Faixa etária e sexo aceitos pela Nuvemshop (Instagram e Google Shopping). */
+export const FAIXAS_ETARIAS = ["newborn", "infant", "toddler", "kids", "adult"] as const;
+export const SEXOS = ["female", "male", "unisex"] as const;
+export const FAIXA_ETARIA_LABEL: Record<(typeof FAIXAS_ETARIAS)[number], string> = { newborn: "Recém-nascido", infant: "Bebê", toddler: "Criança pequena", kids: "Criança", adult: "Adulto" };
+export const SEXO_LABEL: Record<(typeof SEXOS)[number], string> = { female: "Feminino", male: "Masculino", unisex: "Unissex" };
+
+const oneOf = <T extends readonly string[]>(options: T, message: string) =>
+  z.string().transform((value, ctx) => {
+    const s = value.trim();
+    if (s === "") return null;
+    if (!(options as readonly string[]).includes(s)) {
+      ctx.addIssue({ code: "custom", message });
+      return z.NEVER;
+    }
+    return s;
+  });
+
 /** Valor de uma propriedade da variante (ex.: "Azul Claro", "P"). */
 const propertyValue = z
   .string()
@@ -90,6 +125,17 @@ export const variantEditSchema = z
     stock: stockValue,
     image_id: imageId,
     weight: weightValue.optional(),
+    depth: dimensionValue("o comprimento").optional(),
+    width: dimensionValue("a largura").optional(),
+    height: dimensionValue("a altura").optional(),
+    mpn: z
+      .string()
+      .trim()
+      .max(255, "No máximo 255 caracteres.")
+      .transform((v) => (v === "" ? null : v))
+      .optional(),
+    age_group: oneOf(FAIXAS_ETARIAS, "Escolha uma faixa etária da lista.").optional(),
+    gender: oneOf(SEXOS, "Escolha um sexo da lista.").optional(),
     values: z.array(propertyValue).optional(),
   })
   .superRefine((v, ctx) => {
@@ -109,12 +155,23 @@ export const variantEditSchema = z
     stock: v.stock_management ? v.stock : null,
     image_id: v.image_id,
     ...(v.weight !== undefined ? { weight: v.weight } : {}),
+    ...(v.depth !== undefined ? { depth: v.depth } : {}),
+    ...(v.width !== undefined ? { width: v.width } : {}),
+    ...(v.height !== undefined ? { height: v.height } : {}),
+    ...(v.mpn !== undefined ? { mpn: v.mpn } : {}),
+    ...(v.age_group !== undefined ? { age_group: v.age_group } : {}),
+    ...(v.gender !== undefined ? { gender: v.gender } : {}),
     ...(v.values !== undefined ? { values: v.values } : {}),
   }));
 export type VariantEdit = z.infer<typeof variantEditSchema>;
 export type VariantField = keyof VariantEdit;
 
 const money2 = (value: unknown): string | null => {
+  const n = toNumber(value);
+  return n === null ? null : n.toFixed(2);
+};
+
+const dim2 = (value: unknown): string | null => {
   const n = toNumber(value);
   return n === null ? null : n.toFixed(2);
 };
@@ -138,6 +195,12 @@ export function variantToEdit(v: {
   stock?: number | null;
   image_id?: number | null;
   weight?: unknown;
+  depth?: unknown;
+  width?: unknown;
+  height?: unknown;
+  mpn?: string | null;
+  age_group?: string | null;
+  gender?: string | null;
   values?: unknown;
 }): VariantEdit {
   const management = v.stock_management ?? false;
@@ -149,6 +212,12 @@ export function variantToEdit(v: {
     stock: management ? (v.stock ?? null) : null,
     image_id: v.image_id ?? null,
     weight: weight3(v.weight),
+    depth: dim2(v.depth),
+    width: dim2(v.width),
+    height: dim2(v.height),
+    mpn: v.mpn ? v.mpn : null,
+    age_group: v.age_group ? v.age_group : null,
+    gender: v.gender ? v.gender : null,
     values: valuesToStrings(v.values),
   };
 }
@@ -169,6 +238,12 @@ export function changedVariantFields(before: VariantEdit, after: VariantEdit): V
   if (before.stock !== after.stock) fields.push("stock");
   if (before.image_id !== after.image_id) fields.push("image_id");
   if (after.weight !== undefined && !sameWeight(before.weight ?? null, after.weight)) fields.push("weight");
+  for (const f of ["depth", "width", "height"] as const) {
+    if (after[f] !== undefined && !sameWeight(before[f] ?? null, after[f])) fields.push(f);
+  }
+  for (const f of ["mpn", "age_group", "gender"] as const) {
+    if (after[f] !== undefined && (before[f] ?? null) !== after[f]) fields.push(f);
+  }
   if (after.values !== undefined && !sameValues(before.values ?? [], after.values)) fields.push("values");
   return fields;
 }
@@ -194,6 +269,7 @@ export function buildVariantInput(after: VariantEdit, fields: VariantField[], cu
   if (has("stock") || (has("stock_management") && after.stock_management)) input.stock = after.stock;
   if (has("image_id")) input.image_id = after.image_id;
   if (has("weight")) input.weight = after.weight ?? null;
+  for (const f of ["depth", "width", "height", "mpn", "age_group", "gender"] as const) if (has(f)) input[f] = after[f] ?? null;
   if (has("values") && after.values) input.values = valuesToI18n(after.values, currentValues);
   return input;
 }
@@ -226,6 +302,12 @@ export function variantFormInput(formData: FormData, id: number): Record<string,
     stock: formData.get(`${p}stock`) ?? "",
     image_id: formData.get(`${p}image_id`) ?? "",
     weight: formData.get(`${p}weight`) ?? "",
+    depth: formData.get(`${p}depth`) ?? "",
+    width: formData.get(`${p}width`) ?? "",
+    height: formData.get(`${p}height`) ?? "",
+    mpn: formData.get(`${p}mpn`) ?? "",
+    age_group: formData.get(`${p}age_group`) ?? "",
+    gender: formData.get(`${p}gender`) ?? "",
     values: keys.length === 0 ? undefined : keys.map((k) => String(formData.get(k) ?? "")),
   };
 }

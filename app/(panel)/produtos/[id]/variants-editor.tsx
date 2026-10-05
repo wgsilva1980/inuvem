@@ -7,12 +7,72 @@ import type { ImageRow } from "@/lib/catalog/images";
 import type { ProductDetail } from "@/lib/catalog/query";
 import { createProductVariant, deleteVariantAction, type ManageState } from "./variant-actions";
 import { useFieldErrors } from "./save-context";
+import { FAIXAS_ETARIAS, FAIXA_ETARIA_LABEL, SEXOS, SEXO_LABEL } from "@/lib/catalog/variants";
 import { fieldClass } from "@/components/ui/field";
 
 const ptWeight = (value: string | null) => (value === null ? "" : String(Number(value)).replace(".", ","));
 const ptMoney = (value: string | null) => (value === null ? "" : Number(value).toFixed(2).replace(".", ","));
 
 type Variant = ProductDetail["variants"][number];
+
+const ptDim = (value: string | null | undefined) => (value == null ? "" : Number(value).toFixed(2).replace(".", ","));
+
+/** Medidas de envio e dados do Instagram / Google Shopping. `prefix` casa com os nomes dos campos do formulário em que está. */
+function ExtraFields({ prefix, variant, err }: { prefix: string; variant?: Variant; err: (name: string) => string | undefined }) {
+  const medida = (campo: "depth" | "width" | "height", rotulo: string) => (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-muted">{rotulo} (cm)</span>
+      <input name={`${prefix}${campo}`} defaultValue={ptDim(variant?.[campo])} inputMode="decimal" placeholder="0,00" className={fieldClass} />
+      {err(campo) && <span className="text-danger">{err(campo)}</span>}
+    </label>
+  );
+  return (
+    <>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm text-muted">Dimensões para o cálculo do frete (o peso fica acima)</legend>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {medida("depth", "Comprimento")}
+          {medida("width", "Largura")}
+          {medida("height", "Altura")}
+        </div>
+      </fieldset>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm text-muted">Instagram e Google Shopping</legend>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted">MPN</span>
+            <input name={`${prefix}mpn`} defaultValue={variant?.mpn ?? ""} maxLength={255} placeholder="Definir" className={fieldClass} />
+            {err("mpn") && <span className="text-danger">{err("mpn")}</span>}
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted">Faixa etária</span>
+            <select name={`${prefix}age_group`} defaultValue={variant?.age_group ?? ""} className={fieldClass}>
+              <option value="">Selecione a faixa etária</option>
+              {FAIXAS_ETARIAS.map((f) => (
+                <option key={f} value={f}>
+                  {FAIXA_ETARIA_LABEL[f]}
+                </option>
+              ))}
+            </select>
+            {err("age_group") && <span className="text-danger">{err("age_group")}</span>}
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted">Sexo</span>
+            <select name={`${prefix}gender`} defaultValue={variant?.gender ?? ""} className={fieldClass}>
+              <option value="">Selecione o sexo</option>
+              {SEXOS.map((s) => (
+                <option key={s} value={s}>
+                  {SEXO_LABEL[s]}
+                </option>
+              ))}
+            </select>
+            {err("gender") && <span className="text-danger">{err("gender")}</span>}
+          </label>
+        </div>
+      </fieldset>
+    </>
+  );
+}
 
 function VariantRow({
   productId,
@@ -97,6 +157,7 @@ function VariantRow({
           <span>Controlar estoque</span>
         </label>
       </div>
+      <ExtraFields prefix={p} variant={variant} err={err} />
       {images.length > 0 && (
         <fieldset className="flex flex-col gap-2">
           <legend className="text-sm text-muted">Foto da variação</legend>
@@ -206,6 +267,7 @@ function NewVariantForm({ productId, attributes }: { productId: number; attribut
             <span>Controlar estoque</span>
           </label>
         </div>
+        <ExtraFields prefix="" err={err} />
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={pending}>
             {pending ? "Criando…" : "Criar variante"}
