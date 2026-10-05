@@ -47,6 +47,8 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("valores") }),
   /** Dá SKU às variantes sem código e renumera os códigos repetidos (o primeiro dono fica com o dele). Segue a numeração da loja. */
   z.object({ type: z.literal("sku") }),
+  /** Preenche faixa etária (Adulto) e sexo (Feminino) onde estão vazios, para Instagram e Google Shopping. Não mexe no que já está preenchido. */
+  z.object({ type: z.literal("google") }),
   /** Exclui os produtos da loja (irreversível: o lote de exclusão não pode ser revertido). */
   z.object({ type: z.literal("excluir") }),
   /** Corrige a ordem das propriedades para COR e TAMANHO, trocando também os dois valores de cada variante. */
@@ -162,6 +164,8 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
     }
     case "sku":
       return "Ajustar os SKUs: numerar as variantes sem código e renumerar os códigos repetidos (os demais ficam como estão)";
+    case "google":
+      return "Preencher faixa etária (Adulto) e sexo (Feminino) onde estão vazios, para Instagram e Google Shopping";
     case "excluir":
       return "EXCLUIR os produtos da loja (não dá para desfazer)";
     case "ordem":
@@ -185,6 +189,8 @@ export interface MirrorVariant {
   promotional_price: number | null;
   stock_management: boolean;
   stock: number | null;
+  age_group?: string | null;
+  gender?: string | null;
   /** Valor de cada propriedade, na ordem das propriedades do produto (ex.: ["AZUL CLARO", "P"]). */
   values: string[];
 }
@@ -208,6 +214,8 @@ export interface VariantChange {
   stock?: { antes: number | null; depois: number };
   /** Novo código (SKU). `antes` null = estava sem código. */
   skuNovo?: { antes: string | null; depois: string };
+  /** Faixa etária e sexo (Instagram / Google Shopping): só os campos que mudam. */
+  google?: { age_group?: { antes: string | null; depois: string | null }; gender?: { antes: string | null; depois: string | null } };
   /** `trocar`: os dois valores trocam de lugar (os objetos multi-idioma andam junto). */
   values?: { antes: string[]; depois: string[]; trocar?: boolean; de?: Array<number | null> };
 }
@@ -420,6 +428,19 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[], sku?
     if (op.type === "publicar") {
       if (p.published === op.published) skip(op.published ? "já está publicado" : "já está despublicado");
       else items.push({ productId: p.id, productName: p.name, changes: { product: { published: { antes: p.published, depois: op.published } }, variants: [] } });
+      continue;
+    }
+
+    if (op.type === "google") {
+      const variants: VariantChange[] = [];
+      for (const v of p.variants) {
+        const google: NonNullable<VariantChange["google"]> = {};
+        if (!v.age_group) google.age_group = { antes: v.age_group ?? null, depois: "adult" };
+        if (!v.gender) google.gender = { antes: v.gender ?? null, depois: "female" };
+        if (google.age_group || google.gender) variants.push({ id: v.id, label: v.label, sku: v.sku, google });
+      }
+      if (variants.length === 0) skip("faixa etária e sexo já estão preenchidos");
+      else items.push({ productId: p.id, productName: p.name, changes: { variants } });
       continue;
     }
 

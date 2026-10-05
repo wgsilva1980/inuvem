@@ -55,8 +55,8 @@ describe("buildCreateInput", () => {
     expect(input.categories).toEqual([10, 20]);
     expect(input.tags).toBe("blusa,verão");
     expect(input.variants).toEqual([
-      { price: "199.90", stock_management: false, values: [{ pt: "Preta" }, { pt: "P" }] },
-      { price: "199.90", stock_management: true, promotional_price: "149.90", sku: "B-PM", stock: 3, weight: "0.250", values: [{ pt: "Preta" }, { pt: "M" }] },
+      { price: "199.90", stock_management: false, age_group: "adult", gender: "female", values: [{ pt: "Preta" }, { pt: "P" }] },
+      { price: "199.90", stock_management: true, promotional_price: "149.90", sku: "B-PM", stock: 3, weight: "0.250", age_group: "adult", gender: "female", values: [{ pt: "Preta" }, { pt: "M" }] },
     ]);
   });
 
@@ -66,7 +66,7 @@ describe("buildCreateInput", () => {
     expect(input.tags).toBeUndefined();
     expect(input.categories).toBeUndefined();
     expect(input.seo_title).toBeUndefined();
-    expect(input.variants).toEqual([{ price: "199.90", stock_management: false }]);
+    expect(input.variants).toEqual([{ price: "199.90", stock_management: false, age_group: "adult", gender: "female" }]);
   });
 
   it("limpa o HTML da descrição (nada de script)", () => {

@@ -18,6 +18,8 @@ export function describeChanges(changes: ItemChanges, categoryName: (id: number)
     if (v.price) parts.push(`preço ${brl(v.price.antes)} → ${brl(v.price.depois)}`);
     if (v.promotional_price) parts.push(`promocional ${brl(v.promotional_price.antes)} → ${brl(v.promotional_price.depois)}`);
     if (v.stock) parts.push(`estoque ${v.stock.antes ?? "sem quantidade"} → ${v.stock.depois}`);
+    if (v.google?.age_group) parts.push(`faixa etária ${v.google.age_group.antes || "(vazio)"} → ${v.google.age_group.depois}`);
+    if (v.google?.gender) parts.push(`sexo ${v.google.gender.antes || "(vazio)"} → ${v.google.gender.depois}`);
     if (v.skuNovo) parts.push(`SKU ${v.skuNovo.antes || "(vazio)"} → ${v.skuNovo.depois}`);
     if (v.values) parts.push(`valores ${v.values.antes.join(" / ") || "nenhum"} → ${v.values.depois.join(" / ")}`);
     lines.push(`${v.label}${v.sku ? ` (${v.sku})` : ""}: ${parts.join(", ")}`);

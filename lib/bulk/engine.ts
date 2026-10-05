@@ -63,6 +63,8 @@ export function findMismatches(remote: Product, changes: ItemChanges): string[] 
       const agora = valuesToStrings(rv.values);
       if (agora.length !== vc.values.antes.length || agora.some((x, i) => x !== vc.values!.antes[i])) out.push(`valores de "${vc.label}"`);
     }
+    if (vc.google?.age_group && (rv.age_group ?? "") !== (vc.google.age_group.antes ?? "")) out.push(`faixa etária de "${vc.label}"`);
+    if (vc.google?.gender && (rv.gender ?? "") !== (vc.google.gender.antes ?? "")) out.push(`sexo de "${vc.label}"`);
     if (vc.skuNovo && (rv.sku ?? "").trim() !== (vc.skuNovo.antes ?? "").trim()) out.push(`SKU de "${vc.label}"`);
     if (vc.stock) {
       if (!(rv.stock_management ?? false)) out.push(`estoque de "${vc.label}" (controle desligado)`);
@@ -85,6 +87,8 @@ const variantInput = (vc: VariantChange, current?: Variant): VariantInput => {
   if (vc.promotional_price) input.promotional_price = vc.promotional_price.depois;
   if (vc.stock) input.stock = vc.stock.depois;
   if (vc.skuNovo) input.sku = vc.skuNovo.depois;
+  if (vc.google?.age_group) input.age_group = vc.google.age_group.depois;
+  if (vc.google?.gender) input.gender = vc.google.gender.depois;
   return input;
 };
 
@@ -125,6 +129,8 @@ function sides(changes: ItemChanges, side: "antes" | "depois") {
     if (v.promotional_price) fields.preco_promocional = v.promotional_price[side];
     if (v.stock) fields.estoque = v.stock[side];
     if (v.skuNovo) fields.sku = v.skuNovo[side];
+    if (v.google?.age_group) fields.faixa_etaria = v.google.age_group[side];
+    if (v.google?.gender) fields.sexo = v.google.gender[side];
     if (v.values) fields.valores = v.values[side];
     (out.variantes ??= {} as Record<string, unknown>) as Record<string, unknown>;
     (out.variantes as Record<string, unknown>)[String(v.id)] = fields;
@@ -392,6 +398,11 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
     if (v.price) inv.price = { antes: v.price.depois, depois: v.price.antes };
     if (v.promotional_price) inv.promotional_price = { antes: v.promotional_price.depois, depois: v.promotional_price.antes };
     if (v.values) inv.values = { antes: v.values.depois, depois: v.values.antes, ...(v.values.trocar ? { trocar: true } : {}), ...(v.values.de ? { de: inverterDe(v.values.de, v.values.antes.length) } : {}) };
+    if (v.google) {
+      inv.google = {};
+      if (v.google.age_group) inv.google.age_group = { antes: v.google.age_group.depois, depois: v.google.age_group.antes };
+      if (v.google.gender) inv.google.gender = { antes: v.google.gender.depois, depois: v.google.gender.antes };
+    }
     if (v.skuNovo) inv.skuNovo = { antes: v.skuNovo.depois, depois: v.skuNovo.antes ?? "" };
     if (v.stock) {
       // o estoque original pode ser "sem quantidade" (null): ao reverter, volta para 0, o mais próximo possível

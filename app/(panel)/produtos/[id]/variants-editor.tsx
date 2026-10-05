@@ -7,6 +7,7 @@ import type { ImageRow } from "@/lib/catalog/images";
 import type { ProductDetail } from "@/lib/catalog/query";
 import { createProductVariant, deleteVariantAction, type ManageState } from "./variant-actions";
 import { useFieldErrors } from "./save-context";
+import { FAIXA_ETARIA_PADRAO, SEXO_PADRAO } from "@/lib/catalog/google-defaults";
 import { FAIXAS_ETARIAS, FAIXA_ETARIA_LABEL, SEXOS, SEXO_LABEL } from "@/lib/catalog/variants";
 import { fieldClass } from "@/components/ui/field";
 
@@ -46,7 +47,7 @@ function ExtraFields({ prefix, variant, err }: { prefix: string; variant?: Varia
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Faixa etária</span>
-            <select name={`${prefix}age_group`} defaultValue={variant?.age_group ?? ""} className={fieldClass}>
+            <select name={`${prefix}age_group`} defaultValue={variant ? (variant.age_group ?? "") : FAIXA_ETARIA_PADRAO} className={fieldClass}>
               <option value="">Selecione a faixa etária</option>
               {FAIXAS_ETARIAS.map((f) => (
                 <option key={f} value={f}>
@@ -58,7 +59,7 @@ function ExtraFields({ prefix, variant, err }: { prefix: string; variant?: Varia
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Sexo</span>
-            <select name={`${prefix}gender`} defaultValue={variant?.gender ?? ""} className={fieldClass}>
+            <select name={`${prefix}gender`} defaultValue={variant ? (variant.gender ?? "") : SEXO_PADRAO} className={fieldClass}>
               <option value="">Selecione o sexo</option>
               {SEXOS.map((s) => (
                 <option key={s} value={s}>

@@ -35,6 +35,7 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
             <option value="ordem">Corrigir a ordem das propriedades (COR antes de TAMANHO)</option>
             <option value="completar">Completar COR e TAMANHO que faltam (você informa os valores)</option>
             <option value="sku">Ajustar SKUs (numerar os vazios e corrigir repetidos)</option>
+            <option value="google">Preencher faixa etária e sexo (Instagram e Google Shopping)</option>
             <option value="excluir">Excluir produtos (não dá para desfazer)</option>
           </select>
         </label>
@@ -192,6 +193,15 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
                 </ul>
               </>
             )}
+          </div>
+        )}
+
+        {tipo === "google" && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p>
+              Preenche <strong>Faixa etária = Adulto</strong> e <strong>Sexo = Feminino</strong> nas variantes em que esses campos estão vazios, para os anúncios do Instagram e do Google Shopping.
+            </p>
+            <p className="text-muted">Quem já tem faixa etária ou sexo preenchido não muda. O lote pode ser revertido.</p>
           </div>
         )}
 

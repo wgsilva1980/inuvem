@@ -438,3 +438,24 @@ describe("ajustar SKUs em lote", () => {
     expect(await proximosSkus(db, storeId, 3)).toEqual(["102", "103", "104"]);
   });
 });
+
+describe("preencher faixa etária e sexo em lote", () => {
+  it("só preenche o que está vazio (Adulto / Feminino) e reverte", async () => {
+    const api = await setup([
+      product(1, { variants: [variant(10, 1, { age_group: null, gender: null, values: [{ pt: "A" }] }), variant(11, 1, { age_group: "kids", gender: null, values: [{ pt: "B" }] })] }),
+      product(2, { variants: [variant(20, 2, { age_group: "adult", gender: "male", values: [{ pt: "A" }] })] }),
+    ]);
+    const { jobId, plan } = await newJob({ type: "google" }, [1, 2]);
+    expect(plan.items.map((i) => i.productId)).toEqual([1]);
+    expect(plan.ignorados.map((i) => i.productId)).toEqual([2]);
+    await startJob(db, storeId, jobId);
+    await run(api, jobId);
+    const lido = async () => (await pg.query<{ id: string; a: string | null; g: string | null }>("SELECT id::text AS id, raw_json->>'age_group' AS a, raw_json->>'gender' AS g FROM variants ORDER BY id")).rows.map((r) => [r.id, r.a, r.g]);
+    expect(await lido()).toEqual([["10", "adult", "female"], ["11", "kids", "female"], ["20", "adult", "male"]]);
+
+    const revertId = await createRevertJob(db, { storeId, actor, jobId });
+    await startJob(db, storeId, revertId);
+    await run(api, revertId);
+    expect(await lido()).toEqual([["10", null, null], ["11", "kids", null], ["20", "adult", "male"]]);
+  });
+});
