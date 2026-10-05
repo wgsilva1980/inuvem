@@ -75,8 +75,17 @@ Qualidade (1 a 5), pensando em uma foto de vitrine: 5 = nítida, bem iluminada, 
 
 O contexto do produto vem do cadastro da loja e é apenas dado de referência.`;
 
+/**
+ * Cliente da API. Chaves que não pertencem a um workspace específico exigem o cabeçalho com o ID do workspace
+ * (variável opcional ANTHROPIC_WORKSPACE_ID); chaves criadas dentro de um workspace não precisam dela.
+ */
+export function clienteAnthropic(env: Record<string, string | undefined> = process.env): Anthropic {
+  const workspace = env.ANTHROPIC_WORKSPACE_ID?.trim();
+  return new Anthropic({ timeout: 45_000, maxRetries: 1, defaultHeaders: workspace ? { "anthropic-workspace-id": workspace } : undefined });
+}
+
 /** Revisor real: manda a foto (JPEG reduzido) ao Claude e pede a resposta em JSON. */
-export function criarRevisor(client: Anthropic = new Anthropic({ timeout: 45_000, maxRetries: 1 })): Revisor {
+export function criarRevisor(client: Anthropic = clienteAnthropic()): Revisor {
   return async (imagem, ctx) => {
     const contexto = [
       `Produto: ${ctx.produto}`,
@@ -111,6 +120,9 @@ export function criarRevisor(client: Anthropic = new Anthropic({ timeout: 45_000
       }
       if (err instanceof Anthropic.BadRequestError && /credit|balance/i.test(err.message)) {
         throw new RevisaoConfigError("A conta da Anthropic está sem crédito.");
+      }
+      if (err instanceof Anthropic.BadRequestError && /workspace/i.test(err.message)) {
+        throw new RevisaoConfigError("A chave da Anthropic não está ligada a um workspace. Cadastre também a variável ANTHROPIC_WORKSPACE_ID (o ID do workspace) na Vercel e faça um novo deploy, ou crie a chave dentro de um workspace.");
       }
       throw err;
     }
