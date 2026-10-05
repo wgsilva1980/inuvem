@@ -9,6 +9,7 @@ import { listCatalog, listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import { fieldBase } from "@/components/ui/field";
+import { Alert } from "@/components/ui/alert";
 
 export default async function ProdutosPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireAdmin();
@@ -21,7 +22,9 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const sp = catalogParamsSchema.parse(await searchParams);
+  const raw = await searchParams;
+  const excluido = raw.excluido === "1";
+  const sp = catalogParamsSchema.parse(raw);
   const filters = paramsToFilters(sp);
   const db = { query };
   const [result, categories] = await Promise.all([listCatalog(db, store.id, filters), listCategoryOptions(db, store.id)]);
@@ -47,6 +50,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
           Novo produto
         </Link>
       </div>
+      {excluido && <Alert tone="success">Produto excluído da Nuvemshop.</Alert>}
 
       <Card>
         <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-6">

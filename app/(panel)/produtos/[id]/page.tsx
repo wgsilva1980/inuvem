@@ -8,7 +8,8 @@ import { getActiveStore } from "@/lib/stores";
 import { Alert } from "@/components/ui/alert";
 import { ImagesPanel } from "./images-panel";
 import { ProductForm } from "./product-form";
-import { VariantsEditor } from "./variants-editor";
+import { DeleteProduct } from "./delete-product";
+import { VariantFields, VariantsManage } from "./variants-editor";
 
 export default async function ProdutoPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ criado?: string }> }) {
   await requireAdmin();
@@ -45,11 +46,15 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
         </Alert>
       )}
 
-      <ProductForm product={product} categories={categories} />
+      <ProductForm product={product} categories={categories}>
+        <VariantFields productId={productId} variants={product.variants} images={images} attributes={product.attributes} />
+      </ProductForm>
 
-      <VariantsEditor productId={productId} variants={product.variants} images={images} attributes={product.attributes} />
+      <VariantsManage productId={productId} attributes={product.attributes} />
 
       <ImagesPanel productId={productId} images={images} />
+
+      <DeleteProduct productId={productId} name={product.name} />
     </main>
   );
 }

@@ -8,7 +8,6 @@ import {
   LastVariantError,
   createNewVariant,
   deleteProductVariant,
-  renameAttributes,
   type ManageApi,
 } from "@/lib/catalog/manage-variants";
 import { ProductMissingError } from "@/lib/catalog/images";
@@ -110,16 +109,5 @@ export async function deleteVariantAction(productId: number, variantId: number):
   return withManage(productId, "variant.delete.failed", async ({ storeId, actor, api }) => {
     await deleteProductVariant({ query }, api, { storeId, actor, productId, variantId });
     return { ok: true, message: "Variante excluída da Nuvemshop." } satisfies ManageState;
-  });
-}
-
-/** Renomeia as propriedades (campos name_0, name_1… na ordem em que o produto as tem). */
-export async function saveAttributes(productId: number, _prev: ManageState | null, formData: FormData): Promise<ManageState> {
-  await requireAdmin();
-  const keys = [...formData.keys()].filter((k) => /^name_\d{1,2}$/.test(k)).sort((a, b) => Number(a.slice(5)) - Number(b.slice(5)));
-  const names = keys.map((k) => String(formData.get(k) ?? ""));
-  return withManage(productId, "attributes.update.failed", async ({ storeId, actor, api }) => {
-    const r = await renameAttributes({ query }, api, { storeId, actor, productId, names });
-    return { ok: true, message: r.changed ? "Propriedades atualizadas na Nuvemshop." : "Nada foi alterado." } satisfies ManageState;
   });
 }

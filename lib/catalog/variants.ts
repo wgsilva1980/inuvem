@@ -207,3 +207,25 @@ export function formValues(formData: FormData): string[] | undefined {
   const keys = [...formData.keys()].filter((k) => /^value_\d{1,2}$/.test(k)).sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
   return keys.length === 0 ? undefined : keys.map((k) => String(formData.get(k) ?? ""));
 }
+
+/** Ids das variantes presentes no formulário do produto (campos ocultos `variant_ids`). */
+export function formVariantIds(formData: FormData): number[] {
+  const ids = formData.getAll("variant_ids").map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0);
+  return [...new Set(ids)];
+}
+
+/** Campos de uma variante dentro do formulário do produto: `v{id}_sku`, `v{id}_value_0`… */
+export function variantFormInput(formData: FormData, id: number): Record<string, unknown> {
+  const p = `v${id}_`;
+  const keys = [...formData.keys()].filter((k) => new RegExp(`^${p}value_\\d{1,2}$`).test(k)).sort((a, b) => Number(a.slice(p.length + 6)) - Number(b.slice(p.length + 6)));
+  return {
+    sku: formData.get(`${p}sku`) ?? "",
+    price: formData.get(`${p}price`) ?? "",
+    promotional_price: formData.get(`${p}promotional_price`) ?? "",
+    stock_management: formData.get(`${p}stock_management`) === "on",
+    stock: formData.get(`${p}stock`) ?? "",
+    image_id: formData.get(`${p}image_id`) ?? "",
+    weight: formData.get(`${p}weight`) ?? "",
+    values: keys.length === 0 ? undefined : keys.map((k) => String(formData.get(k) ?? "")),
+  };
+}

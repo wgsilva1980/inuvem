@@ -220,3 +220,5 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    e `variants` aninhados na criação, e se gera o `handle` sozinha a partir do nome. As **fotos** não vão na criação: depois de criar, o painel
    abre a tela do produto, onde o painel de imagens já existe. Depois de criar, o espelho é gravado com a resposta da loja, e o histórico
    registra "Produto criado" (também quando a loja recusa).
+
+21. **Salvar tudo junto e excluir produto (não verificado na loja real).** O botão “Salvar na Nuvemshop” salva dados do produto, nomes das propriedades e todas as variantes alteradas (cada uma com a própria checagem de conflito; falhas aparecem por item e o que deu certo fica salvo). Criar e excluir variante continuam imediatos. “Excluir produto” usa `DELETE /products/{id}` (irreversível, exige digitar o nome); um 404 da loja só limpa o espelho. Confirme em um produto de teste que a exclusão remove variantes e imagens.
