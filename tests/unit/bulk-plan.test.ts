@@ -18,6 +18,7 @@ const v = (id: number, over: Partial<MirrorProduct["variants"][number]> = {}) =>
   promotional_price: null as number | null,
   stock_management: true,
   stock: 10 as number | null,
+  values: [] as string[],
   ...over,
 });
 const product = (id: number, over: Partial<MirrorProduct> = {}): MirrorProduct => ({

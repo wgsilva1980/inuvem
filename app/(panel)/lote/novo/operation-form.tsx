@@ -30,6 +30,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             <option value="publicar">Publicar ou despublicar</option>
             <option value="categoria">Adicionar ou remover de uma categoria</option>
             <option value="propriedades">Padronizar propriedades (COR e TAMANHO)</option>
+            <option value="valores">Padronizar grafia dos valores (cores e tamanhos)</option>
           </select>
         </label>
 
@@ -119,6 +120,23 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             </p>
             <p className="text-muted">
               Ficam de fora, com o motivo na pré-visualização: produtos que já estão certos, com a ordem invertida (TAMANHO antes de COR), com uma só propriedade, sem propriedades ou com nomes que o painel não reconhece.
+            </p>
+          </div>
+        )}
+
+        {tipo === "valores" && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p>Padroniza como os valores são escritos nas propriedades <strong>COR</strong> e <strong>TAMANHO</strong> (reconhecidas pelo nome, inclusive “Cor”, “Tam”, “Tamanho”):</p>
+            <ul className="list-disc pl-5">
+              <li>
+                <strong>Cores</strong> com inicial maiúscula em cada palavra: “AZUL CLARO” e “Azul claro” viram “Azul Claro”.
+              </li>
+              <li>
+                <strong>Tamanhos</strong> em maiúsculas: “pp” vira “PP”. O tamanho único fica numa grafia só: “UNICO”, “Único” e “único” viram “ÚNICO”.
+              </li>
+            </ul>
+            <p className="text-muted">
+              Outras propriedades não são alteradas. Ficam de fora, com o motivo na pré-visualização, os produtos já padronizados e os que ficariam com duas variantes iguais (por exemplo “Azul” e “AZUL” no mesmo tamanho).
             </p>
           </div>
         )}
