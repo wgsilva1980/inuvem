@@ -77,12 +77,18 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
       {images.length === 0 ? (
         <p className="mt-3 text-sm text-muted">Este produto não tem imagens.</p>
       ) : (
-        <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {images.map((img, i) => (
-            <li key={img.id} className="flex flex-col gap-2 rounded-md border border-border p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.src} alt={img.alt || `Imagem ${i + 1}`} loading="lazy" className="aspect-square w-full rounded object-cover" />
-              <div className="flex items-center justify-between gap-1">
+            <li key={img.id} className="flex min-w-0 flex-col gap-2 rounded-md border border-border p-2">
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.src} alt={img.alt || `Imagem ${i + 1}`} loading="lazy" className="aspect-square w-full rounded object-cover" />
+                <span className="absolute left-1 top-1 rounded bg-card/90 px-1.5 text-xs font-medium text-foreground shadow-sm" aria-hidden>
+                  {i + 1}
+                </span>
+              </div>
+              {/* Linha própria para o rótulo e outra para os botões: no celular, 2 colunas não comportam tudo lado a lado. */}
+              <div className="flex min-h-6 items-center">
                 {i === 0 ? (
                   <span className="text-xs font-medium text-primary">★ Principal</span>
                 ) : (
@@ -95,26 +101,26 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
                     Tornar principal
                   </button>
                 )}
-                <div className="flex gap-1">
-                  <Button type="button" variant="outline" className="min-h-8 px-2 py-1" disabled={busy || i === 0} aria-label="Mover para cima" onClick={() => run(() => moveProductImage(productId, Number(img.id), -1))}>
-                    ←
-                  </Button>
-                  <Button type="button" variant="outline" className="min-h-8 px-2 py-1" disabled={busy || i === images.length - 1} aria-label="Mover para baixo" onClick={() => run(() => moveProductImage(productId, Number(img.id), 1))}>
-                    →
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    className="min-h-8 px-2 py-1"
-                    disabled={busy}
-                    aria-label="Remover imagem"
-                    onClick={() => {
-                      if (window.confirm("Remover esta imagem da Nuvemshop? Isso não pode ser desfeito.")) run(() => removeProductImage(productId, Number(img.id)));
-                    }}
-                  >
-                    ✕
-                  </Button>
-                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <Button type="button" variant="outline" className="min-h-10 px-0" disabled={busy || i === 0} aria-label="Mover para antes" onClick={() => run(() => moveProductImage(productId, Number(img.id), -1))}>
+                  ←
+                </Button>
+                <Button type="button" variant="outline" className="min-h-10 px-0" disabled={busy || i === images.length - 1} aria-label="Mover para depois" onClick={() => run(() => moveProductImage(productId, Number(img.id), 1))}>
+                  →
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  className="min-h-10 px-0"
+                  disabled={busy}
+                  aria-label="Remover imagem"
+                  onClick={() => {
+                    if (window.confirm("Remover esta imagem da Nuvemshop? Isso não pode ser desfeito.")) run(() => removeProductImage(productId, Number(img.id)));
+                  }}
+                >
+                  ✕
+                </Button>
               </div>
             </li>
           ))}
