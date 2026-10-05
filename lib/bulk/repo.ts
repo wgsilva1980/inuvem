@@ -89,6 +89,7 @@ export async function loadMirrorProducts(db: Db, storeId: string, ids: number[])
       promotional_price: v.promotional_price === null ? null : Number(v.promotional_price),
       stock_management: v.stock_management,
       stock: v.stock,
+      values: (v.values ?? []).map((x) => pt(x as I18n)),
     })),
   }));
 }

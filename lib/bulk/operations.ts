@@ -43,6 +43,8 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("categoria"), mode: z.enum(["adicionar", "remover"]), categoryId: z.number().int().positive() }),
   /** Padroniza os nomes das propriedades das variações para COR e TAMANHO (só renomeia; não mexe nos valores das variantes). */
   z.object({ type: z.literal("propriedades") }),
+  /** Padroniza a grafia dos valores das propriedades COR (inicial maiúscula em cada palavra) e TAMANHO (maiúsculas; ÚNICO). */
+  z.object({ type: z.literal("valores") }),
 ]);
 export type BulkOperation = z.infer<typeof operationSchema>;
 
@@ -54,6 +56,42 @@ const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, 
 const chave = (nome: string) => semAcento(nome).toLowerCase().replace(/[\s,;.:]+$/g, "").replace(/^[\s,;.:]+/g, "");
 const ehCor = (nome: string) => ["cor", "cores"].includes(chave(nome));
 const ehTamanho = (nome: string) => ["tam", "tamanho", "tamanhos", "tamamho"].includes(chave(nome));
+
+/** Conectivos que ficam em minúsculas no meio do nome de uma cor ("Verde de Água"). */
+const CONECTIVOS = new Set(["de", "da", "do", "das", "dos", "e", "com", "em"]);
+const SEPARADORES = /([\s/()-]+)/;
+
+/** Cor com inicial maiúscula em cada palavra: "AZUL CLARO", "azul claro" e "Azul claro" viram "Azul Claro". */
+export function padronizarCor(valor: string): string {
+  const texto = valor.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+  let primeira = true;
+  return texto
+    .split(SEPARADORES)
+    .map((parte) => {
+      if (parte === "" || SEPARADORES.test(parte)) return parte;
+      const ficaMinuscula = !primeira && CONECTIVOS.has(parte);
+      primeira = false;
+      return ficaMinuscula ? parte : parte.charAt(0).toLocaleUpperCase("pt-BR") + parte.slice(1);
+    })
+    .join("");
+}
+
+/** Tamanho sempre em maiúsculas ("pp" → "PP"), e o tamanho único numa grafia só: UNICO, Único, único → "ÚNICO". */
+export function padronizarTamanho(valor: string): string {
+  const texto = valor.trim().replace(/\s+/g, " ");
+  if (chave(texto) === "unico") return "ÚNICO";
+  return texto.toLocaleUpperCase("pt-BR");
+}
+
+/** Aplica a padronização a cada valor de uma variante, conforme a propriedade (por nome) em que ele está. Outras propriedades ficam como estão. */
+export function padronizarValores(atributos: string[], valores: string[]): string[] {
+  return valores.map((valor, i) => {
+    const nome = atributos[i] ?? "";
+    if (ehCor(nome)) return padronizarCor(valor);
+    if (ehTamanho(nome)) return padronizarTamanho(valor);
+    return valor;
+  });
+}
 
 /** O que fazer com as propriedades de um produto: renomear (e para quê), ou deixar de fora (com o motivo). */
 export function planAtributos(atuais: string[]): { depois: string[] } | { motivo: string } {
@@ -101,6 +139,8 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
       return op.published ? "Publicar os produtos na loja" : "Despublicar os produtos (ocultar da loja)";
     case "propriedades":
       return `Padronizar as propriedades das variações para ${PROPRIEDADES_PADRAO.join(" e ")}`;
+    case "valores":
+      return "Padronizar a grafia dos valores: cores com inicial maiúscula em cada palavra, tamanhos em maiúsculas (ÚNICO)";
     case "categoria": {
       const nome = categoryName?.(op.categoryId) ?? `#${op.categoryId}`;
       return op.mode === "adicionar" ? `Adicionar à categoria "${nome}"` : `Remover da categoria "${nome}"`;
@@ -118,6 +158,8 @@ export interface MirrorVariant {
   promotional_price: number | null;
   stock_management: boolean;
   stock: number | null;
+  /** Valor de cada propriedade, na ordem das propriedades do produto (ex.: ["AZUL CLARO", "P"]). */
+  values: string[];
 }
 
 export interface MirrorProduct {
@@ -137,6 +179,7 @@ export interface VariantChange {
   price?: { antes: string; depois: string };
   promotional_price?: { antes: string | null; depois: string | null };
   stock?: { antes: number | null; depois: number };
+  values?: { antes: string[]; depois: string[] };
 }
 
 export interface ItemChanges {
@@ -216,6 +259,29 @@ function planVariant(op: BulkOperation, v: MirrorVariant): { change?: VariantCha
   return {};
 }
 
+/**
+ * Padronização dos valores de um produto. O produto inteiro fica de fora se a padronização deixasse duas variantes
+ * com a mesma combinação de valores (a loja não distingue "Azul" de "AZUL" ao comparar, e isso viraria variante repetida).
+ */
+function planValores(p: MirrorProduct): { variants: VariantChange[] } | { motivo: string } {
+  const algumaCorOuTamanho = p.attributes.some((a) => ehCor(a) || ehTamanho(a));
+  if (!algumaCorOuTamanho) return { motivo: "não tem as propriedades COR ou TAMANHO" };
+  if (p.variants.some((v) => v.values.length !== p.attributes.length)) return { motivo: "a quantidade de valores das variantes não bate com a de propriedades" };
+
+  const variants: VariantChange[] = [];
+  const combinacoes = new Map<string, string>();
+  for (const v of p.variants) {
+    const depois = padronizarValores(p.attributes, v.values);
+    const chaveComb = JSON.stringify(depois.map((x) => x.toLowerCase()));
+    const outra = combinacoes.get(chaveComb);
+    if (outra !== undefined) return { motivo: `duas variantes ficariam iguais depois da padronização (${depois.join(" / ")}); corrija o produto antes` };
+    combinacoes.set(chaveComb, v.label);
+    if (depois.some((x, i) => x !== v.values[i])) variants.push({ id: v.id, label: v.label, sku: v.sku, values: { antes: [...v.values], depois } });
+  }
+  if (variants.length === 0) return { motivo: "a grafia dos valores já está padronizada" };
+  return { variants };
+}
+
 /** Calcula, a partir do espelho, o que cada produto/variante vai receber e o que fica de fora (com o motivo). */
 export function planOperation(op: BulkOperation, products: MirrorProduct[]): Plan {
   const items: PlanItem[] = [];
@@ -227,6 +293,13 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[]): Pla
     if (op.type === "publicar") {
       if (p.published === op.published) skip(op.published ? "já está publicado" : "já está despublicado");
       else items.push({ productId: p.id, productName: p.name, changes: { product: { published: { antes: p.published, depois: op.published } }, variants: [] } });
+      continue;
+    }
+
+    if (op.type === "valores") {
+      const planejado = planValores(p);
+      if ("motivo" in planejado) skip(planejado.motivo);
+      else items.push({ productId: p.id, productName: p.name, changes: { variants: planejado.variants } });
       continue;
     }
 

@@ -17,6 +17,7 @@ export function describeChanges(changes: ItemChanges, categoryName: (id: number)
     if (v.price) parts.push(`preço ${brl(v.price.antes)} → ${brl(v.price.depois)}`);
     if (v.promotional_price) parts.push(`promocional ${brl(v.promotional_price.antes)} → ${brl(v.promotional_price.depois)}`);
     if (v.stock) parts.push(`estoque ${v.stock.antes ?? "sem quantidade"} → ${v.stock.depois}`);
+    if (v.values) parts.push(`valores ${v.values.antes.join(" / ")} → ${v.values.depois.join(" / ")}`);
     lines.push(`${v.label}${v.sku ? ` (${v.sku})` : ""}: ${parts.join(", ")}`);
   }
   return lines;

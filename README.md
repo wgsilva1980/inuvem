@@ -189,3 +189,10 @@ Marcados no código como "a confirmar". Validar com a documentação oficial / u
    (volta aos nomes anteriores). Ficam de fora, com o motivo na pré-visualização: produtos já no padrão, com a ordem invertida (TAMANHO
    antes de COR, pois os valores das variantes seguem a ordem das propriedades), com uma só propriedade, sem propriedades, com três ou
    mais, ou com nomes não reconhecidos. Na auditoria de 04/10/2026: 111 de 188 produtos seriam renomeados e 77 ficariam de fora.
+17. **Lote "Padronizar grafia dos valores" (não testado na loja real).** Reescreve os valores das variantes com `PUT /products/{id}/variants/{id}`
+   e `values` (mesmo ponto do item 15: se a loja aceita trocar `values` numa variante existente). Regras fixas, por nome da propriedade
+   (COR/Cor/CORES e TAM/Tamanho, em qualquer ordem): **cores** com inicial maiúscula em cada palavra, mantendo "de, da, do, e, com, em" em
+   minúsculas ("Verde de Água", "Preto com Branco"); **tamanhos** em maiúsculas, com "UNICO/Único/único" virando "ÚNICO". Tamanhos não usam
+   inicial maiúscula para não virar "Pp"/"Gg". Outras propriedades não mudam. O produto inteiro fica de fora se duas variantes ficariam com a
+   mesma combinação de valores. Cada produto é conferido contra a loja e o lote pode ser revertido. Na auditoria de 04/10/2026: 409
+   variantes em 130 produtos mudariam, e nenhum produto teria variantes repetidas.

@@ -2,6 +2,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import { pt, type Product, type ProductInput, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
 import { mapVariant, toNumber } from "@/lib/sync/mappers";
 import { upsertProducts, upsertVariantRows, type Db } from "@/lib/sync/repo";
+import { valuesToI18n, valuesToStrings } from "@/lib/catalog/variants";
 import { fromCents, toCents, type ItemChanges, type Plan, type PlanItem, type VariantChange } from "./operations";
 import {
   claimItems,
@@ -57,6 +58,10 @@ export function findMismatches(remote: Product, changes: ItemChanges): string[] 
     }
     if (vc.price && !sameMoney(money(rv.price), vc.price.antes)) out.push(`preço de "${vc.label}"`);
     if (vc.promotional_price && !sameMoney(money(rv.promotional_price), vc.promotional_price.antes)) out.push(`preço promocional de "${vc.label}"`);
+    if (vc.values) {
+      const agora = valuesToStrings(rv.values);
+      if (agora.length !== vc.values.antes.length || agora.some((x, i) => x !== vc.values!.antes[i])) out.push(`valores de "${vc.label}"`);
+    }
     if (vc.stock) {
       if (!(rv.stock_management ?? false)) out.push(`estoque de "${vc.label}" (controle desligado)`);
       else if ((rv.stock ?? null) !== vc.stock.antes && !(rv.stock == null && vc.stock.antes == null)) out.push(`estoque de "${vc.label}"`);
@@ -65,8 +70,10 @@ export function findMismatches(remote: Product, changes: ItemChanges): string[] 
   return out;
 }
 
-const variantInput = (vc: VariantChange): VariantInput => {
+/** `current` é a variante na loja agora: serve para manter outros idiomas dos valores. */
+const variantInput = (vc: VariantChange, current?: Variant): VariantInput => {
   const input: VariantInput = {};
+  if (vc.values) input.values = valuesToI18n(vc.values.depois, current?.values);
   if (vc.price) input.price = vc.price.depois;
   if (vc.promotional_price) input.promotional_price = vc.promotional_price.depois;
   if (vc.stock) input.stock = vc.stock.depois;
@@ -93,6 +100,7 @@ function sides(changes: ItemChanges, side: "antes" | "depois") {
     if (v.price) fields.preco = v.price[side];
     if (v.promotional_price) fields.preco_promocional = v.promotional_price[side];
     if (v.stock) fields.estoque = v.stock[side];
+    if (v.values) fields.valores = v.values[side];
     (out.variantes ??= {} as Record<string, unknown>) as Record<string, unknown>;
     (out.variantes as Record<string, unknown>)[String(v.id)] = fields;
   }
@@ -170,7 +178,7 @@ export async function runItem(db: Db, api: BulkApi, ctx: { storeId: string; acto
   if (Object.keys(pInput).length > 0) await attempt("produto", undefined, () => api.updateProduct(productId, pInput));
   for (const vc of item.changes.variants) {
     await attempt("variante", vc.id, async () => {
-      const updated = await api.updateVariant(productId, vc.id, variantInput(vc));
+      const updated = await api.updateVariant(productId, vc.id, variantInput(vc, (remote.variants ?? []).find((x) => x.id === vc.id)));
       await upsertVariantRows(db, storeId, [mapVariant(updated, productId)]);
     });
   }
@@ -241,6 +249,7 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
     const inv: VariantChange = { id: v.id, label: v.label, sku: v.sku };
     if (v.price) inv.price = { antes: v.price.depois, depois: v.price.antes };
     if (v.promotional_price) inv.promotional_price = { antes: v.promotional_price.depois, depois: v.promotional_price.antes };
+    if (v.values) inv.values = { antes: v.values.depois, depois: v.values.antes };
     if (v.stock) {
       // o estoque original pode ser "sem quantidade" (null): ao reverter, volta para 0, o mais próximo possível
       inv.stock = { antes: v.stock.depois, depois: v.stock.antes ?? 0 };
