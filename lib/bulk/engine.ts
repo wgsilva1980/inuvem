@@ -22,6 +22,7 @@ import {
 export interface BulkApi {
   getProduct(id: number): Promise<Product>;
   updateProduct(id: number, input: ProductInput): Promise<Product>;
+  deleteProduct(id: number): Promise<void>;
   updateVariant(productId: number, variantId: number, input: VariantInput): Promise<Variant>;
 }
 
@@ -112,6 +113,7 @@ const productInput = (c: ItemChanges["product"], remote: Product): ProductInput 
 /** O "antes" e o "depois" de um item, num formato enxuto para o histórico. */
 function sides(changes: ItemChanges, side: "antes" | "depois") {
   const out: Record<string, unknown> = {};
+  if (changes.product?.excluir) out.excluido = side === "antes" ? changes.product.excluir : true;
   if (changes.product?.published) out.publicado = changes.product.published[side];
   if (changes.product?.categories) out.categorias = changes.product.categories[side];
   if (changes.product?.attributes) out.propriedades = changes.product.attributes[side];
@@ -164,6 +166,8 @@ export async function runItem(db: Db, api: BulkApi, ctx: { storeId: string; acto
     await audit(db, { storeId, actor, job, item, resultado, sucesso: status === "ok" });
     return status;
   };
+
+  if (item.changes.product?.excluir) return runDelete(db, api, ctx, item, finish);
 
   let remote: Product;
   try {
@@ -229,6 +233,40 @@ export async function runItem(db: Db, api: BulkApi, ctx: { storeId: string; acto
   const resultado: ItemResult = { partes };
   if (failed) resultado.mensagem = mensagemAtomica ?? partes.find((p) => !p.ok && p.erro && !p.erro.startsWith("não executado"))?.erro;
   return finish(failed ? "error" : "ok", resultado);
+}
+
+/** Exclusão do produto: confere que ele ainda é o mesmo da pré-visualização (nome), exclui na loja e tira do espelho. 404 = já excluído. */
+async function runDelete(
+  db: Db,
+  api: BulkApi,
+  ctx: { storeId: string; job: Job },
+  item: JobItem,
+  finish: (status: "ok" | "error" | "conflict", resultado: ItemResult) => Promise<"ok" | "error" | "conflict">,
+): Promise<"ok" | "error" | "conflict"> {
+  const productId = Number(item.product_id);
+  const esperado = item.changes.product?.excluir?.nome ?? "";
+  const removeMirror = () => db.query("DELETE FROM products WHERE store_id = $1::uuid AND id = $2::bigint", [ctx.storeId, productId]);
+  try {
+    const remote = await api.getProduct(productId);
+    const agora = pt(remote.name as I18n);
+    if (esperado !== `Produto ${productId}` && agora !== esperado) {
+      await upsertProducts(db, ctx.storeId, [remote]);
+      return finish("conflict", { mensagem: `O produto foi renomeado na loja desde a pré-visualização (agora “${agora}”). Nada foi excluído.` });
+    }
+  } catch (err) {
+    if (err instanceof NuvemshopError && err.status === 404) {
+      await removeMirror();
+      return finish("ok", { partes: [{ tipo: "produto", ok: true }], mensagem: "O produto já não existia na loja." });
+    }
+    return finish("error", { mensagem: errorText(err) });
+  }
+  try {
+    await api.deleteProduct(productId);
+  } catch (err) {
+    if (!(err instanceof NuvemshopError && err.status === 404)) return finish("error", { mensagem: errorText(err), partes: [{ tipo: "produto", ok: false, erro: errorText(err) }] });
+  }
+  await removeMirror();
+  return finish("ok", { partes: [{ tipo: "produto", ok: true }] });
 }
 
 /* ---------- alterações de tudo ou nada ---------- */
@@ -335,6 +373,7 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
   const okVariants = new Set(partes.filter((p) => p.tipo === "variante" && p.ok).map((p) => p.id));
   const out: ItemChanges = { variants: [] };
 
+  if (changes.product?.excluir) return null; // exclusão não tem volta
   if (okProduct && changes.product) {
     out.product = {};
     if (changes.product.published) out.product.published = { antes: changes.product.published.depois, depois: changes.product.published.antes };
@@ -363,6 +402,7 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
 export async function createRevertJob(db: Db, args: { storeId: string; actor: string; jobId: string }): Promise<string> {
   const job = await getJob(db, args.storeId, args.jobId);
   if (!job) throw new JobStateError("Lote não encontrado.");
+  if (job.operation.type === "excluir") throw new JobStateError("Produtos excluídos não podem ser restaurados pelo painel. Recrie-os em “Novo produto”.");
   if (job.operation.type === "reverter") throw new JobStateError("Um lote de reversão não pode ser revertido; crie uma nova operação.");
   if (job.status !== "completed" && job.status !== "cancelled") throw new JobStateError("Só é possível reverter um lote que já terminou ou foi cancelado.");
 

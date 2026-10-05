@@ -149,6 +149,9 @@ class FakeStore implements BulkApi {
     if (input.attributes) this.products.get(id)!.attributes = structuredClone(input.attributes);
     return structuredClone(this.products.get(id)!);
   }
+  async deleteProduct(id: number) {
+    this.products.delete(id);
+  }
   async updateVariant(pid: number, vid: number, input: VariantInput) {
     this.calls.push(`variante ${vid} ${JSON.stringify(input.values)}`);
     if (this.failVariantId === vid) throw new NuvemshopError("422", 422, null, "recusado");

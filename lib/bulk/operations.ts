@@ -45,6 +45,8 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("propriedades") }),
   /** Padroniza a grafia dos valores das propriedades COR (inicial maiúscula em cada palavra) e TAMANHO (maiúsculas; ÚNICO). */
   z.object({ type: z.literal("valores") }),
+  /** Exclui os produtos da loja (irreversível: o lote de exclusão não pode ser revertido). */
+  z.object({ type: z.literal("excluir") }),
   /** Corrige a ordem das propriedades para COR e TAMANHO, trocando também os dois valores de cada variante. */
   z.object({ type: z.literal("ordem") }),
   /**
@@ -156,6 +158,8 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
       const n = Object.keys(op.valores).length;
       return `Completar COR e TAMANHO em ${n} ${n === 1 ? "produto" : "produtos"} (valores informados por você)`;
     }
+    case "excluir":
+      return "EXCLUIR os produtos da loja (não dá para desfazer)";
     case "ordem":
       return "Corrigir a ordem das propriedades para COR e TAMANHO (troca também os valores de cada variante)";
     case "valores":
@@ -205,6 +209,8 @@ export interface VariantChange {
 export interface ItemChanges {
   product?: {
     published?: { antes: boolean; depois: boolean };
+    /** Exclusão do produto inteiro (com variantes e imagens). `nome` serve para conferir e mostrar. */
+    excluir?: { nome: string; variantes: number };
     categories?: { antes: number[]; depois: number[] };
     /** `trocar`: as duas propriedades trocam de lugar (os objetos multi-idioma andam junto com o nome). */
     attributes?: { antes: string[]; depois: string[]; trocar?: boolean; de?: Array<number | null> };
@@ -400,6 +406,11 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[]): Pla
     if (op.type === "publicar") {
       if (p.published === op.published) skip(op.published ? "já está publicado" : "já está despublicado");
       else items.push({ productId: p.id, productName: p.name, changes: { product: { published: { antes: p.published, depois: op.published } }, variants: [] } });
+      continue;
+    }
+
+    if (op.type === "excluir") {
+      items.push({ productId: p.id, productName: p.name, changes: { product: { excluir: { nome: p.name, variantes: p.variants.length } }, variants: [] } });
       continue;
     }
 

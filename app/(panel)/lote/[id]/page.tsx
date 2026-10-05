@@ -35,7 +35,7 @@ export default async function LotePage({ params, searchParams }: { params: Promi
   const nameOf = (cid: number) => categories.find((c) => c.id === cid)?.name ?? `#${cid}`;
 
   const finished = job.status === "completed" || job.status === "cancelled";
-  const canRevert = finished && job.operation.type !== "reverter" && counts.ok + counts.error > 0 && reverted.length === 0;
+  const canRevert = finished && job.operation.type !== "reverter" && job.operation.type !== "excluir" && counts.ok + counts.error > 0 && reverted.length === 0;
   const ignorados = job.ignorados ?? [];
 
   return (
@@ -102,6 +102,7 @@ export default async function LotePage({ params, searchParams }: { params: Promi
           variantes={counts.variants}
           canRevert={canRevert}
           descricao={job.descricao}
+          destrutivo={job.operation.type === "excluir"}
         />
         {job.status === "preview" && (
           <p className="text-sm text-muted">

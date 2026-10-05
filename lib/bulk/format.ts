@@ -6,6 +6,7 @@ const brl = (v: string | null) => (v === null ? "sem promoção" : Number(v).toL
 export function describeChanges(changes: ItemChanges, categoryName: (id: number) => string): string[] {
   const lines: string[] = [];
   const p = changes.product;
+  if (p?.excluir) lines.push(`Excluir o produto da loja (${p.excluir.variantes} ${p.excluir.variantes === 1 ? "variante" : "variantes"}, com as imagens)`);
   if (p?.published) lines.push(`Situação: ${p.published.antes ? "publicado" : "não publicado"} → ${p.published.depois ? "publicado" : "não publicado"}`);
   if (p?.categories) {
     const names = (ids: number[]) => ids.map(categoryName).join(", ") || "nenhuma";

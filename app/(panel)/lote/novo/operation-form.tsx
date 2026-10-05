@@ -34,6 +34,7 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
             <option value="valores">Padronizar grafia dos valores (cores e tamanhos)</option>
             <option value="ordem">Corrigir a ordem das propriedades (COR antes de TAMANHO)</option>
             <option value="completar">Completar COR e TAMANHO que faltam (você informa os valores)</option>
+            <option value="excluir">Excluir produtos (não dá para desfazer)</option>
           </select>
         </label>
 
@@ -190,6 +191,18 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
                 </ul>
               </>
             )}
+          </div>
+        )}
+
+        {tipo === "excluir" && (
+          <div className="flex flex-col gap-2 rounded-md border border-danger p-3 text-sm">
+            <p className="font-medium text-danger">Atenção: exclusão definitiva.</p>
+            <p>
+              Cada um dos {total} {total === 1 ? "produto selecionado" : "produtos selecionados"} será excluído da Nuvemshop, com as variantes e as imagens. <strong>Este lote não pode ser revertido.</strong>
+            </p>
+            <p className="text-muted">
+              Na pré-visualização você confere a lista inteira e, para aplicar, digita EXCLUIR. Se um produto for renomeado na loja depois da pré-visualização, ele fica de fora. Para só tirar da vitrine, use “Publicar ou despublicar”, que dá para desfazer.
+            </p>
           </div>
         )}
 

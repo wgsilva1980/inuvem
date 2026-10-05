@@ -137,6 +137,9 @@ class FakeStore implements BulkApi {
   async updateProduct(_id: number, _input: ProductInput): Promise<Product> {
     throw new Error("não deveria mexer no produto");
   }
+  async deleteProduct(id: number) {
+    this.products.delete(id);
+  }
   async updateVariant(pid: number, vid: number, input: VariantInput) {
     this.puts.push({ pid, vid, input });
     if (this.failVariant === vid) throw new NuvemshopError("422", 422, null, "recusado");
