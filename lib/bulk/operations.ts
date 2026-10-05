@@ -47,6 +47,17 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("valores") }),
   /** Corrige a ordem das propriedades para COR e TAMANHO, trocando também os dois valores de cada variante. */
   z.object({ type: z.literal("ordem") }),
+  /**
+   * Completa COR e/ou TAMANHO em produtos que só têm uma das duas propriedades, ou nenhuma. Os valores que faltam
+   * vêm digitados pelo usuário (a loja não tem como saber a cor ou o tamanho): chave = id do produto.
+   */
+  z.object({
+    type: z.literal("completar"),
+    valores: z.record(
+      z.string().regex(/^\d{1,15}$/),
+      z.object({ cor: z.string().trim().min(1).max(100).optional(), tamanho: z.string().trim().min(1).max(100).optional() }),
+    ),
+  }),
 ]);
 export type BulkOperation = z.infer<typeof operationSchema>;
 
@@ -141,6 +152,10 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
       return op.published ? "Publicar os produtos na loja" : "Despublicar os produtos (ocultar da loja)";
     case "propriedades":
       return `Padronizar as propriedades das variações para ${PROPRIEDADES_PADRAO.join(" e ")}`;
+    case "completar": {
+      const n = Object.keys(op.valores).length;
+      return `Completar COR e TAMANHO em ${n} ${n === 1 ? "produto" : "produtos"} (valores informados por você)`;
+    }
     case "ordem":
       return "Corrigir a ordem das propriedades para COR e TAMANHO (troca também os valores de cada variante)";
     case "valores":
@@ -184,7 +199,7 @@ export interface VariantChange {
   promotional_price?: { antes: string | null; depois: string | null };
   stock?: { antes: number | null; depois: number };
   /** `trocar`: os dois valores trocam de lugar (os objetos multi-idioma andam junto). */
-  values?: { antes: string[]; depois: string[]; trocar?: boolean };
+  values?: { antes: string[]; depois: string[]; trocar?: boolean; de?: Array<number | null> };
 }
 
 export interface ItemChanges {
@@ -192,7 +207,7 @@ export interface ItemChanges {
     published?: { antes: boolean; depois: boolean };
     categories?: { antes: number[]; depois: number[] };
     /** `trocar`: as duas propriedades trocam de lugar (os objetos multi-idioma andam junto com o nome). */
-    attributes?: { antes: string[]; depois: string[]; trocar?: boolean };
+    attributes?: { antes: string[]; depois: string[]; trocar?: boolean; de?: Array<number | null> };
   };
   variants: VariantChange[];
 }
@@ -265,6 +280,72 @@ function planVariant(op: BulkOperation, v: MirrorVariant): { change?: VariantCha
   return {};
 }
 
+export type Faltando = "COR" | "TAMANHO";
+
+/**
+ * O que falta a um produto para ter COR e TAMANHO. `null` = não se encaixa (já tem as duas, ou tem outras propriedades).
+ * `de` diz de onde vem cada uma das duas posições novas (COR, TAMANHO): índice da propriedade antiga, ou null se é nova.
+ */
+export function faltaCorOuTamanho(atributos: string[]): { faltam: Faltando[]; de: [number | null, number | null] } | null {
+  if (atributos.length === 0) return { faltam: ["COR", "TAMANHO"], de: [null, null] };
+  if (atributos.length === 1 && ehTamanho(atributos[0] as string)) return { faltam: ["COR"], de: [null, 0] };
+  if (atributos.length === 1 && ehCor(atributos[0] as string)) return { faltam: ["TAMANHO"], de: [0, null] };
+  return null;
+}
+
+export interface ProdutoFaltando {
+  id: number;
+  name: string;
+  published: boolean;
+  atributos: string[];
+  variantes: number;
+  faltam: Faltando[];
+}
+
+/**
+ * Produtos que podem ser completados na tela: os que estão sem COR e/ou TAMANHO. Produtos sem nome na loja (o painel
+ * mostra "Produto <id>") ficam de fora e só são contados: antes de dar cor ou tamanho a eles, falta o nome.
+ */
+export function listarFaltando(products: MirrorProduct[]): { faltando: ProdutoFaltando[]; semNome: number } {
+  const faltando: ProdutoFaltando[] = [];
+  let semNome = 0;
+  for (const p of products) {
+    const falta = faltaCorOuTamanho(p.attributes);
+    if (!falta) continue;
+    if (p.name === `Produto ${p.id}`) semNome++;
+    else faltando.push({ id: p.id, name: p.name, published: p.published, atributos: p.attributes, variantes: p.variants.length, faltam: falta.faltam });
+  }
+  return { faltando, semNome };
+}
+
+/** Completa COR/TAMANHO num produto com os valores digitados. O produto fica de fora, com motivo, se algo não fechar. */
+function planCompletar(p: MirrorProduct, entrada: { cor?: string; tamanho?: string } | undefined): { attributes: NonNullable<NonNullable<ItemChanges["product"]>["attributes"]>; variants: VariantChange[] } | { motivo: string } {
+  const falta = faltaCorOuTamanho(p.attributes);
+  if (!falta) return { motivo: p.attributes.length === 0 ? "não precisa" : `já tem COR e TAMANHO ou outras propriedades (${p.attributes.join(" | ")})` };
+  if (!entrada || (!entrada.cor && !entrada.tamanho)) return { motivo: "sem valor informado (deixado de fora)" };
+  const precisa = (qual: Faltando) => falta.faltam.includes(qual);
+  if (precisa("COR") && !entrada.cor) return { motivo: "informe a cor" };
+  if (precisa("TAMANHO") && !entrada.tamanho) return { motivo: "informe o tamanho" };
+  const nAntes = p.attributes.length;
+  if (p.variants.some((v) => v.values.length !== nAntes)) return { motivo: "a quantidade de valores das variantes não bate com a de propriedades" };
+
+  const cor = entrada.cor ? padronizarCor(entrada.cor) : null;
+  const tamanho = entrada.tamanho ? padronizarTamanho(entrada.tamanho) : null;
+  const [deCor, deTam] = falta.de;
+  const novo = (v: string[]): string[] => [deCor === null ? (cor as string) : (v[deCor] as string), deTam === null ? (tamanho as string) : (v[deTam] as string)];
+
+  const combinacoes = new Set<string>();
+  const variants: VariantChange[] = [];
+  for (const v of p.variants) {
+    const depois = novo(v.values);
+    const k = JSON.stringify(depois.map((x) => x.toLowerCase()));
+    if (combinacoes.has(k)) return { motivo: `duas variantes ficariam iguais (${depois.join(" / ")}); corrija o produto antes` };
+    combinacoes.add(k);
+    variants.push({ id: v.id, label: v.label, sku: v.sku, values: { antes: [...v.values], depois, de: [deCor, deTam] } });
+  }
+  return { attributes: { antes: [...p.attributes], depois: [...PROPRIEDADES_PADRAO], de: [deCor, deTam] }, variants };
+}
+
 /**
  * Correção de ordem de um produto: TAMANHO antes de COR vira COR antes de TAMANHO, trocando também os dois valores de cada variante
  * (os valores seguem a ordem das propriedades, então só renomear deixaria cada valor sob a propriedade errada).
@@ -319,6 +400,13 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[]): Pla
     if (op.type === "publicar") {
       if (p.published === op.published) skip(op.published ? "já está publicado" : "já está despublicado");
       else items.push({ productId: p.id, productName: p.name, changes: { product: { published: { antes: p.published, depois: op.published } }, variants: [] } });
+      continue;
+    }
+
+    if (op.type === "completar") {
+      const r = planCompletar(p, op.valores[String(p.id)]);
+      if ("motivo" in r) skip(r.motivo);
+      else items.push({ productId: p.id, productName: p.name, changes: { product: { attributes: r.attributes }, variants: r.variants } });
       continue;
     }
 

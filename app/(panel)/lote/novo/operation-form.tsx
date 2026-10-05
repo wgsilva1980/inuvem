@@ -4,11 +4,12 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { CategoryOption } from "@/lib/catalog/query";
+import type { ProdutoFaltando } from "@/lib/bulk/operations";
 import { createBulk, type BulkFormState } from "../actions";
 import { fieldBase } from "@/components/ui/field";
 const label = "flex flex-col gap-1 text-sm";
 
-export function OperationForm({ selecao, total, categories }: { selecao: string; total: number; categories: CategoryOption[] }) {
+export function OperationForm({ selecao, total, categories, faltando, semNome = 0 }: { selecao: string; total: number; categories: CategoryOption[]; faltando: ProdutoFaltando[]; semNome?: number }) {
   const [state, action, pending] = useActionState<BulkFormState | null, FormData>(createBulk, null);
   const [tipo, setTipo] = useState("preco");
   const [precoModo, setPrecoModo] = useState("aumentar");
@@ -32,6 +33,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             <option value="propriedades">Padronizar propriedades (COR e TAMANHO)</option>
             <option value="valores">Padronizar grafia dos valores (cores e tamanhos)</option>
             <option value="ordem">Corrigir a ordem das propriedades (COR antes de TAMANHO)</option>
+            <option value="completar">Completar COR e TAMANHO que faltam (você informa os valores)</option>
           </select>
         </label>
 
@@ -139,6 +141,55 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             <p className="text-muted">
               Outras propriedades não são alteradas. Ficam de fora, com o motivo na pré-visualização, os produtos já padronizados e os que ficariam com duas variantes iguais (por exemplo “Azul” e “AZUL” no mesmo tamanho).
             </p>
+          </div>
+        )}
+
+        {tipo === "completar" && (
+          <div className="flex flex-col gap-3 text-sm">
+            <p>
+              Para produtos que têm só uma das propriedades (ou nenhuma), acrescenta <strong>COR</strong> e/ou <strong>TAMANHO</strong> e coloca o valor que você digitar em todas as variantes do produto. A loja não sabe a cor nem o tamanho, por isso <strong>quem informa é você</strong>.
+            </p>
+            {semNome > 0 && (
+              <p className="rounded-md border border-border p-3 text-muted">
+                {semNome} {semNome === 1 ? "produto da seleção está sem nome" : "produtos da seleção estão sem nome"} na loja e {semNome === 1 ? "ficou" : "ficaram"} fora desta lista: antes de dar cor ou tamanho, falta dar um nome (ou excluir o produto).
+              </p>
+            )}
+            {faltando.length === 0 ? (
+              <p className="rounded-md border border-border p-3 text-muted">Nenhum dos produtos selecionados está sem COR ou TAMANHO. Volte à lista e selecione os produtos que faltam.</p>
+            ) : (
+              <>
+                <input type="hidden" name="completar_ids" value={faltando.map((p) => p.id).join(",")} />
+                <p className="text-muted">
+                  Deixe os campos de um produto em branco para não mexer nele. Cores ficam com inicial maiúscula (“preta” vira “Preta”) e tamanho em maiúsculas (“unico” vira “ÚNICO”). Você confere tudo na pré-visualização antes de enviar.
+                </p>
+                <ul className="flex flex-col gap-3">
+                  {faltando.map((p) => (
+                    <li key={p.id} className="flex flex-col gap-2 rounded-md border border-border p-3">
+                      <div>
+                        <p className="font-medium">{p.name}</p>
+                        <p className="text-xs text-muted">
+                          Hoje: {p.atributos.length > 0 ? p.atributos.join(" | ") : "sem propriedades"} · {p.variantes} {p.variantes === 1 ? "variante" : "variantes"} · {p.published ? "publicado" : "não publicado"}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {p.faltam.includes("COR") && (
+                          <label className={label}>
+                            <span className="text-muted">COR (falta)</span>
+                            <input name={`cor_${p.id}`} maxLength={100} placeholder="Ex.: Preta" className={fieldBase} />
+                          </label>
+                        )}
+                        {p.faltam.includes("TAMANHO") && (
+                          <label className={label}>
+                            <span className="text-muted">TAMANHO (falta)</span>
+                            <input name={`tam_${p.id}`} maxLength={100} placeholder="Ex.: ÚNICO, M, 38" className={fieldBase} />
+                          </label>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
         )}
 

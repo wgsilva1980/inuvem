@@ -19,6 +19,7 @@ const FIXED: Record<string, string> = {
   "lote.propriedades": "Lote: propriedades padronizadas no produto",
   "lote.valores": "Lote: grafia dos valores padronizada no produto",
   "lote.ordem": "Lote: ordem das propriedades corrigida no produto",
+  "lote.completar": "Lote: COR e TAMANHO completados no produto",
 };
 
 const LOTE_OP: Record<string, string> = {
