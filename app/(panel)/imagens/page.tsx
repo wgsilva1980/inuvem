@@ -78,7 +78,7 @@ export default async function ImagensPage({ searchParams }: { searchParams: Prom
       <Card className="flex flex-col gap-2">
         <h2 className="text-base font-semibold">Padronizar fotos</h2>
         <p className="text-sm">
-          {pendentes.length} produto(s) com fotos que dá para corrigir (fora de 1:1/4:5, pesadas ou não JPEG): {pendentes.reduce((n, p) => n + p.imagens.length, 0)} foto(s). Cada original é copiado para o armazenamento privado, a versão padrão é enviada no mesmo lugar (as variações acompanham) e a antiga é apagada da loja. Fotos pequenas (&lt; 800 px) e GIFs ficam como estão. Recomendo testar primeiro em um produto (botão em cada produto abaixo) e conferir na loja.
+          {pendentes.length} produto(s) com fotos que dá para corrigir (fora de 1:1/4:5, pesadas ou não JPEG): {pendentes.reduce((n, p) => n + p.imagens.length, 0)} foto(s). Cada original é copiado para o armazenamento privado, a versão padrão é enviada no mesmo lugar (as variações acompanham) e a antiga é apagada da loja. Fotos pequenas (&lt; 800 px, mesmo fora de proporção) e GIFs ficam como estão. Recomendo testar primeiro em um produto (botão em cada produto abaixo) e conferir na loja.
         </p>
         <StandardizeRunner pendentes={pendentes.length} rotulo={`Padronizar todos (${pendentes.length})`} />
       </Card>

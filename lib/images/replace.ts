@@ -22,6 +22,8 @@ export interface ReplaceDeps {
   storage: BackupStorage;
   /** Baixa uma foto da loja. */
   baixar: (url: string) => Promise<Buffer>;
+  /** Confere se a foto recém-enviada (e a miniatura) já está disponível na loja; se não, a troca é desfeita. */
+  verificar?: (src: string) => Promise<boolean>;
   /** Padroniza a foto (1024×1024 ou 820×1024, JPEG). */
   padronizar?: (bytes: Buffer) => Promise<{ bytes: Buffer; largura: number; altura: number }>;
   now?: () => number;
@@ -32,6 +34,26 @@ export const baixarImagem = async (url: string): Promise<Buffer> => {
   const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new Error(`a loja respondeu ${res.status} ao baixar a foto`);
   return Buffer.from(await res.arrayBuffer());
+};
+
+/** A foto e uma miniatura (480 px) respondem como imagem? A loja gera as miniaturas depois do envio, então tenta algumas vezes. */
+export const verificarImagemNaLoja = async (src: string): Promise<boolean> => {
+  const miniatura = src.replace(/-\d+-\d+(\.\w+)$/, "-480-0$1");
+  for (const url of [src, miniatura]) {
+    let ok = false;
+    for (let tentativa = 0; tentativa < 4 && !ok; tentativa++) {
+      if (tentativa > 0) await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+        ok = res.ok && (res.headers.get("content-type") ?? "").startsWith("image/");
+        await res.arrayBuffer().catch(() => undefined);
+      } catch {
+        ok = false;
+      }
+    }
+    if (!ok) return false;
+  }
+  return true;
 };
 
 const padronizarPadrao: NonNullable<ReplaceDeps["padronizar"]> = async (bytes) => {
@@ -71,6 +93,7 @@ export async function trocarImagem(
   const criada = await api.create(productId, { attachment: args.bytes.toString("base64"), filename: args.filename });
   const movidas: number[] = [];
   try {
+    if (deps.verificar && !(await deps.verificar(criada.src))) throw new Error("a foto nova não ficou disponível na loja (a imagem ou as miniaturas não abriram); a troca foi cancelada e a foto antiga continua");
     for (const vid of usando) {
       await api.setVariantImage(productId, vid, criada.id);
       movidas.push(vid);
@@ -88,10 +111,10 @@ export async function trocarImagem(
 
 /* ---------- o que padronizar ---------- */
 
-/** Foto medida que foge do padrão de forma corrigível (só “pequena” não se resolve; GIF fica como está). */
+/** Foto medida que foge do padrão de forma corrigível. Pequena (< 800 px) não entra: ampliar só borra, o certo é trocar a foto. GIF fica como está. */
 export function imagemElegivel(i: ImagemAuditada): boolean {
   const m = i.medida;
-  if (!m || m.error || m.format === "gif") return false;
+  if (!m || m.error || m.format === "gif" || i.problemas.includes("pequena")) return false;
   return i.problemas.some((p) => p === "proporcao" || p === "pesada" || p === "formato");
 }
 

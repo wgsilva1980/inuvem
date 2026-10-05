@@ -124,6 +124,14 @@ describe("trocarImagem", () => {
     expect(loja.product.variants!.map((v) => v.image_id)).toEqual([11, 11]);
   });
 
+  it("se a foto nova não abrir na loja, cancela e a antiga continua", async () => {
+    const loja = new FakeStore([img(10, 1), img(11, 2)], [variant(100, 11)]);
+    await expect(trocarImagem({ ...deps(loja), verificar: async () => false }, { storeId, productId: 1, imageId: 11, bytes: JPEG, filename: "a.jpg" })).rejects.toThrow("não ficou disponível");
+    expect(loja.order()).toEqual([10, 11]);
+    expect(loja.product.variants![0]!.image_id).toBe(11);
+    expect(loja.calls.some((c) => c.startsWith("var "))).toBe(false);
+  });
+
   it("se o envio falhar, nada muda", async () => {
     const loja = new FakeStore([img(10, 1)], []);
     loja.failOn = "create";
@@ -157,6 +165,12 @@ describe("padronizar em lote", () => {
       11: { width: 1024, height: 683, bytes: 50_000, format: "gif", error: null },
       12: { width: null, height: null, bytes: null, format: null, error: "x" },
     });
+    expect(await produtosPendentes(db, storeId)).toEqual([]);
+  });
+
+  it("foto pequena fora de proporção também não é ampliada", async () => {
+    const loja = new FakeStore([img(10, 1)], []);
+    await preparar(loja, { 10: { width: 346, height: 388, bytes: 177_000, format: "png", error: null } });
     expect(await produtosPendentes(db, storeId)).toEqual([]);
   });
 
