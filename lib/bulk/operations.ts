@@ -45,6 +45,8 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("propriedades") }),
   /** Padroniza a grafia dos valores das propriedades COR (inicial maiúscula em cada palavra) e TAMANHO (maiúsculas; ÚNICO). */
   z.object({ type: z.literal("valores") }),
+  /** Dá SKU às variantes sem código e renumera os códigos repetidos (o primeiro dono fica com o dele). Segue a numeração da loja. */
+  z.object({ type: z.literal("sku") }),
   /** Exclui os produtos da loja (irreversível: o lote de exclusão não pode ser revertido). */
   z.object({ type: z.literal("excluir") }),
   /** Corrige a ordem das propriedades para COR e TAMANHO, trocando também os dois valores de cada variante. */
@@ -158,6 +160,8 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
       const n = Object.keys(op.valores).length;
       return `Completar COR e TAMANHO em ${n} ${n === 1 ? "produto" : "produtos"} (valores informados por você)`;
     }
+    case "sku":
+      return "Ajustar os SKUs: numerar as variantes sem código e renumerar os códigos repetidos (os demais ficam como estão)";
     case "excluir":
       return "EXCLUIR os produtos da loja (não dá para desfazer)";
     case "ordem":
@@ -202,6 +206,8 @@ export interface VariantChange {
   price?: { antes: string; depois: string };
   promotional_price?: { antes: string | null; depois: string | null };
   stock?: { antes: number | null; depois: number };
+  /** Novo código (SKU). `antes` null = estava sem código. */
+  skuNovo?: { antes: string | null; depois: string };
   /** `trocar`: os dois valores trocam de lugar (os objetos multi-idioma andam junto). */
   values?: { antes: string[]; depois: string[]; trocar?: boolean; de?: Array<number | null> };
 }
@@ -395,8 +401,16 @@ function planValores(p: MirrorProduct): { variants: VariantChange[] } | { motivo
   return { variants };
 }
 
+/** Situação dos SKUs em toda a loja: o próximo número livre e quem é o dono de cada código repetido. */
+export interface SkuContexto {
+  proximo: number;
+  /** código -> id da variante que fica com ele (a primeira, por produto e posição). */
+  donos: Map<string, number>;
+}
+
 /** Calcula, a partir do espelho, o que cada produto/variante vai receber e o que fica de fora (com o motivo). */
-export function planOperation(op: BulkOperation, products: MirrorProduct[]): Plan {
+export function planOperation(op: BulkOperation, products: MirrorProduct[], sku?: SkuContexto): Plan {
+  let proximoSku = sku?.proximo ?? 0;
   const items: PlanItem[] = [];
   const ignorados: Skipped[] = [];
 
@@ -406,6 +420,19 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[]): Pla
     if (op.type === "publicar") {
       if (p.published === op.published) skip(op.published ? "já está publicado" : "já está despublicado");
       else items.push({ productId: p.id, productName: p.name, changes: { product: { published: { antes: p.published, depois: op.published } }, variants: [] } });
+      continue;
+    }
+
+    if (op.type === "sku") {
+      if (!sku) throw new Error("O lote de SKU precisa do contexto de códigos da loja.");
+      const variants: VariantChange[] = [];
+      for (const v of p.variants) {
+        const atual = (v.sku ?? "").trim();
+        if (atual !== "" && sku.donos.get(atual) === v.id) continue;
+        variants.push({ id: v.id, label: v.label, sku: v.sku, skuNovo: { antes: v.sku, depois: String(proximoSku++) } });
+      }
+      if (variants.length === 0) skip("os SKUs já estão corretos");
+      else items.push({ productId: p.id, productName: p.name, changes: { variants } });
       continue;
     }
 

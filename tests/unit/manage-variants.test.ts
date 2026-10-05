@@ -175,9 +175,10 @@ describe("criar variante", () => {
     expect(await audits()).toMatchObject([{ acao: "variante.criar", entidade: "produto", entidade_id: "1", sucesso: true, antes: { total: 2 }, depois: { values: ["Preta", "M"], price: "120.00" } }]);
   });
 
-  it("não manda campos vazios (sku, promocional, peso, estoque sem controle)", async () => {
+  it("não manda campos vazios (promocional, peso, estoque sem controle) e numera o SKU em branco automaticamente", async () => {
     await createNewVariant(db, api, { storeId, actor, productId: 1, variant: { ...novo, sku: null, weight: null, stock_management: false, stock: null } });
-    expect(creates).toEqual([{ values: [{ pt: "Preta" }, { pt: "M" }], price: "120.00", stock_management: false }]);
+    // os SKUs do espelho (SKU-100…) não são numéricos: a numeração começa em 1
+    expect(creates).toEqual([{ values: [{ pt: "Preta" }, { pt: "M" }], price: "120.00", stock_management: false, sku: "1" }]);
   });
 
   it("recusa combinação repetida e quantidade errada de valores, sem chamar a API", async () => {

@@ -34,6 +34,7 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
             <option value="valores">Padronizar grafia dos valores (cores e tamanhos)</option>
             <option value="ordem">Corrigir a ordem das propriedades (COR antes de TAMANHO)</option>
             <option value="completar">Completar COR e TAMANHO que faltam (você informa os valores)</option>
+            <option value="sku">Ajustar SKUs (numerar os vazios e corrigir repetidos)</option>
             <option value="excluir">Excluir produtos (não dá para desfazer)</option>
           </select>
         </label>
@@ -191,6 +192,17 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
                 </ul>
               </>
             )}
+          </div>
+        )}
+
+        {tipo === "sku" && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p>
+              Dá um <strong>SKU</strong> às variantes que estão sem código e renumera os <strong>códigos repetidos</strong>, seguindo a numeração da loja (o próximo número depois do maior que existe hoje).
+            </p>
+            <p className="text-muted">
+              Códigos que já são únicos não mudam. Quando um código aparece em mais de uma variante, a mais antiga fica com ele e as outras recebem números novos. Você confere cada troca na pré-visualização e pode reverter o lote. Para pegar a loja toda, selecione todos os produtos.
+            </p>
           </div>
         )}
 

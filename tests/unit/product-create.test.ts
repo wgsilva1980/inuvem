@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { join } from "node:path";
 import { loadMigrations, runMigrations } from "@/lib/db/migrate";
-import type { Db } from "@/lib/sync/repo";
+import { upsertProducts, type Db } from "@/lib/sync/repo";
 import { MAX_VARIANTS, buildCreateInput, createProduct, gerarCombinacoes, InvalidNewProductError, parseCores, parseTamanhos, validateNewVariants, type CreateApi, type NewVariantInput } from "@/lib/catalog/create";
 import { parseNewProductForm } from "@/lib/catalog/new-product-form";
 import { getProductDetail, listCatalog } from "@/lib/catalog/query";
@@ -179,6 +179,13 @@ describe("createProduct", () => {
     expect(detalhe?.variants.map((v) => v.values.map((x) => x.pt))).toEqual([["Preta", "P"], ["Preta", "M"]]);
     expect((await listCatalog(db, storeId)).total).toBe(1);
     expect(await audits()).toMatchObject([{ acao: "produto.criar", entidade: "produto", entidade_id: "777", sucesso: true, depois: { nome: "Blusa Nova", publicado: false, variantes: 2, propriedades: "COR | TAMANHO" } }]);
+  });
+
+  it("SKU em branco recebe numeração automática depois do maior da loja; os digitados ficam", async () => {
+    await upsertProducts(db, storeId, [{ id: 1, name: { pt: "Antigo" }, published: true, variants: [{ id: 5, product_id: 1, sku: "900", price: "10.00", stock_management: false, stock: null, values: [] }] } as unknown as Product]);
+    const api = new FakeStore();
+    await createProduct(db, api, { storeId, actor, product: produto, variants: [variante({ sku: "ABC" }), variante({ values: ["Preta", "M"] }), variante({ values: ["Azul", "P"] })] });
+    expect(api.received[0]!.variants!.map((v) => v.sku)).toEqual(["ABC", "901", "902"]);
   });
 
   it("não chama a loja se as variantes forem inválidas", async () => {
