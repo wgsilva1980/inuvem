@@ -118,9 +118,9 @@ async function current(db: Db, base: Base): Promise<ImageRow[]> {
 }
 
 /** Envia o arquivo (já validado) à Nuvemshop em base64. O conteúdo não vai para o histórico, só o nome e o tamanho. */
-export async function uploadImage(db: Db, api: ImageApi, base: Base & { filename: string; bytes: Buffer }): Promise<void> {
+export async function uploadImage(db: Db, api: ImageApi, base: Base & { filename: string; bytes: Buffer; detalhes?: Record<string, unknown> }): Promise<void> {
   const images = await current(db, base);
-  await run(db, api, { ...base, acao: "enviar", antes: { total: images.length }, depois: { filename: base.filename, bytes: base.bytes.length } }, () =>
+  await run(db, api, { ...base, acao: "enviar", antes: { total: images.length }, depois: { filename: base.filename, bytes: base.bytes.length, ...(base.detalhes ?? {}) } }, () =>
     api.create(base.productId, { attachment: base.bytes.toString("base64"), filename: base.filename }),
   );
 }
