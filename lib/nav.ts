@@ -3,6 +3,7 @@ export const NAV_LINKS = [
   { href: "/produtos", label: "Produtos" },
   { href: "/categorias", label: "Categorias" },
   { href: "/contatos", label: "Contatos" },
+  { href: "/imagens", label: "Imagens" },
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
   { href: "/usuarios", label: "Usuários" },
