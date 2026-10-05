@@ -178,7 +178,7 @@ function NewVariantForm({ productId, attributes }: { productId: number; attribut
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">SKU</span>
-            <input name="sku" maxLength={255} className={fieldClass} />
+            <input name="sku" maxLength={255} placeholder="Automático" className={fieldClass} />
             {err("sku") && <span className="text-danger">{err("sku")}</span>}
           </label>
           <label className="flex flex-col gap-1 text-sm">

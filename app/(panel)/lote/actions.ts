@@ -9,6 +9,7 @@ import { countVariantChanges, describeOperation, planOperation } from "@/lib/bul
 import { JobStateError, cancelJob, createJob, loadMirrorProducts, startJob } from "@/lib/bulk/repo";
 import { resolveSelection } from "@/lib/bulk/selection";
 import { listCategoryOptions } from "@/lib/catalog/query";
+import { contextoSku } from "@/lib/catalog/sku";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 
@@ -36,7 +37,7 @@ export async function createBulk(_prev: BulkFormState | null, formData: FormData
   if (op.type === "categoria" && !categories.some((c) => c.id === op.categoryId)) return { message: "Categoria não encontrada. Sincronize e tente de novo." };
   const nameOf = (id: number) => categories.find((c) => c.id === id)?.name ?? `#${id}`;
 
-  const plan = planOperation(op, await loadMirrorProducts(db, store.id, selection.ids));
+  const plan = planOperation(op, await loadMirrorProducts(db, store.id, selection.ids), op.type === "sku" ? await contextoSku(db, store.id) : undefined);
   if (plan.items.length === 0) {
     const motivos = [...new Set(plan.ignorados.map((i) => i.motivo))].slice(0, 4).join("; ");
     return { message: `Nada a alterar nesta seleção${motivos ? `: ${motivos}` : ""}.` };

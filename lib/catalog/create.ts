@@ -2,6 +2,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Product, ProductInput, VariantInput } from "@/lib/nuvemshop/types";
 import { padronizarCor, padronizarTamanho, PROPRIEDADES_PADRAO } from "@/lib/bulk/operations";
 import { upsertProducts, type Db } from "@/lib/sync/repo";
+import { proximosSkus } from "./sku";
 import { sanitizeDescription } from "./description";
 import type { ProductEdit } from "./edit";
 
@@ -113,8 +114,12 @@ export async function createProduct(
   const problema = validateNewVariants(variants);
   if (problema) throw new InvalidNewProductError(problema);
 
-  const input = buildCreateInput(product, variants);
-  const depois = { nome: product.name, publicado: product.published, variantes: variants.length, propriedades: input.attributes ? PROPRIEDADES_PADRAO.join(" | ") : null };
+  // SKU em branco: numeração automática, na sequência da loja
+  const faltam = variants.filter((v) => v.sku === null).length;
+  const novos = faltam > 0 ? await proximosSkus(db, storeId, faltam) : [];
+  const comSku = variants.map((v) => (v.sku === null ? { ...v, sku: novos.shift() as string } : v));
+  const input = buildCreateInput(product, comSku);
+  const depois = { nome: product.name, publicado: product.published, variantes: variants.length, skus: comSku.map((v) => v.sku), propriedades: input.attributes ? PROPRIEDADES_PADRAO.join(" | ") : null };
   let criado: Product;
   try {
     criado = await api.create(input);

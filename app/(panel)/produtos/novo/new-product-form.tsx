@@ -115,7 +115,7 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
             </label>
             <label className={label}>
               <span className="text-muted">SKU</span>
-              <input name="sku" maxLength={255} className={fieldClass} />
+              <input name="sku" maxLength={255} placeholder="Automático" className={fieldClass} />
               {err("sku") && <span className="text-danger">{err("sku")}</span>}
             </label>
             <label className={label}>
@@ -214,7 +214,7 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
                           </label>
                           <label className={label}>
                             <span className="text-muted">SKU</span>
-                            <input name={`v_${i}_sku`} value={l.sku ?? ""} onChange={(e) => editar(chave, "sku", e.target.value)} maxLength={255} className={fieldClass} />
+                            <input name={`v_${i}_sku`} value={l.sku ?? ""} onChange={(e) => editar(chave, "sku", e.target.value)} maxLength={255} placeholder="Automático" className={fieldClass} />
                             {err(`v_${i}_sku`) && <span className="text-danger">{err(`v_${i}_sku`)}</span>}
                           </label>
                           {controlar && (

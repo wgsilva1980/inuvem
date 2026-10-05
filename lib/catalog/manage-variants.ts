@@ -2,6 +2,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import { pt, type I18n, type Product, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
 import { upsertProducts, type Db } from "@/lib/sync/repo";
 import { ProductMissingError } from "./images";
+import { proximosSkus } from "./sku";
 import { VariantNotFoundError, assertValidValues } from "./update-variant";
 import { valuesToI18n, type VariantEdit } from "./variants";
 
@@ -66,16 +67,18 @@ export async function createNewVariant(db: Db, api: ManageApi, args: Base & { va
   await assertProduct(db, base);
   await assertValidValues(db, { storeId: base.storeId, productId: base.productId, values: variant.values });
 
+  // SKU em branco: numeração automática, na sequência da loja
+  const sku = variant.sku ?? (await proximosSkus(db, base.storeId, 1))[0] ?? null;
   const input: VariantInput = {
     values: valuesToI18n(variant.values, []),
     price: variant.price,
     stock_management: variant.stock_management,
-    ...(variant.sku !== null ? { sku: variant.sku } : {}),
+    ...(sku !== null ? { sku } : {}),
     ...(variant.promotional_price !== null ? { promotional_price: variant.promotional_price } : {}),
     ...(variant.stock_management && variant.stock !== null ? { stock: variant.stock } : {}),
     ...(variant.weight !== null && variant.weight !== undefined ? { weight: variant.weight } : {}),
   };
-  await run(db, api, base, "variante.criar", { total: await variantCount(db, base) }, { values: variant.values, sku: variant.sku, price: variant.price, stock: variant.stock }, () =>
+  await run(db, api, base, "variante.criar", { total: await variantCount(db, base) }, { values: variant.values, sku, price: variant.price, stock: variant.stock }, () =>
     api.createVariant(base.productId, input),
   );
 }

@@ -7,6 +7,7 @@ import { buildRevertChanges, createRevertJob, findMismatches, runItem, stepJob, 
 import { operationSchema, planOperation } from "@/lib/bulk/operations";
 import { cancelJob, claimItems, createJob, getJob, getJobCounts, getJobItems, listJobs, loadMirrorProducts, startJob, JobStateError } from "@/lib/bulk/repo";
 import { listProductIds } from "@/lib/catalog/query";
+import { contextoSku, proximosSkus } from "@/lib/catalog/sku";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Category, Product, ProductInput, Variant, VariantInput } from "@/lib/nuvemshop/types";
 
@@ -400,5 +401,40 @@ describe("excluir produtos em lote", () => {
     await run(api, jobId);
     expect(await getJobCounts(db, jobId)).toMatchObject({ ok: 1 });
     expect((await pg.query("SELECT id FROM products")).rows).toEqual([]);
+  });
+});
+
+describe("ajustar SKUs em lote", () => {
+  const comSku = (id: number, skus: Array<string | null>) =>
+    product(id, { variants: skus.map((s, i) => variant(id * 10 + i, id, { sku: s, values: [{ pt: `V${i}` }] })) });
+
+  it("numera os vazios e renumera os repetidos (o mais antigo fica), na sequência da loja", async () => {
+    const api = await setup([comSku(1, ["100", "101"]), comSku(2, ["101", null]), comSku(3, ["200", "200"])]);
+    const op = operationSchema.parse({ type: "sku" });
+    const plan = planOperation(op, await loadMirrorProducts(db, storeId, [1, 2, 3]), await contextoSku(db, storeId));
+    const novos = plan.items.flatMap((i) => i.changes.variants.map((v) => [v.id, v.skuNovo]));
+    expect(novos).toEqual([
+      [20, { antes: "101", depois: "201" }],
+      [21, { antes: null, depois: "202" }],
+      [31, { antes: "200", depois: "203" }],
+    ]);
+    expect(plan.ignorados.map((i) => i.productId)).toEqual([1]); // produto 1 já está certo
+
+    const jobId = await createJob(db, { storeId, actor, operation: op, descricao: "t", plan });
+    await startJob(db, storeId, jobId);
+    await run(api, jobId);
+    const skus = (await pg.query<{ id: string; sku: string }>("SELECT id::text AS id, sku FROM variants ORDER BY id")).rows.map((r) => [r.id, r.sku]);
+    expect(skus).toEqual([["10", "100"], ["11", "101"], ["20", "201"], ["21", "202"], ["30", "200"], ["31", "203"]]);
+
+    // reverter volta o código antigo (vazio vira "")
+    const revertId = await createRevertJob(db, { storeId, actor, jobId });
+    await startJob(db, storeId, revertId);
+    await run(api, revertId);
+    expect((await pg.query<{ sku: string }>("SELECT sku FROM variants WHERE id IN (20, 21) ORDER BY id")).rows.map((r) => r.sku)).toEqual(["101", ""]);
+  });
+
+  it("proximosSkus continua do maior número da loja", async () => {
+    await setup([comSku(1, ["100", "101"]), comSku(2, ["abc", null])]);
+    expect(await proximosSkus(db, storeId, 3)).toEqual(["102", "103", "104"]);
   });
 });
