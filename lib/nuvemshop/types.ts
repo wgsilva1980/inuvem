@@ -52,6 +52,8 @@ export const productSchema = z
     published: z.boolean().optional(),
     tags: z.string().nullable().optional(),
     categories: z.array(categoryRefSchema).optional(),
+    /** Nomes das propriedades das variações (ex.: Cor, Tam). Cada variante tem um valor por propriedade, na mesma ordem. */
+    attributes: z.array(i18nSchema).optional(),
     variants: z.array(variantSchema).optional(),
     images: z.array(imageSchema).optional(),
     seo_title: i18nSchema.nullable().optional(),
@@ -93,6 +95,7 @@ export type ProductInput = Partial<{
   seo_title: I18n;
   seo_description: I18n;
   variants: VariantInput[];
+  attributes: I18n[];
   images: Array<{ src: string; position?: number }>;
 }>;
 
@@ -102,7 +105,7 @@ export type VariantInput = Partial<{
   promotional_price: string | number | null;
   stock_management: boolean;
   stock: number | null;
-  weight: string | number;
+  weight: string | number | null;
   width: string | number;
   height: string | number;
   depth: string | number;

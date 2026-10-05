@@ -2,7 +2,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Variant, VariantInput } from "@/lib/nuvemshop/types";
 import { mapVariant } from "@/lib/sync/mappers";
 import { upsertVariantRows, type Db } from "@/lib/sync/repo";
-import { buildVariantInput, changedVariantFields, pickVariant, remoteVariantToEdit, variantToEdit, type VariantEdit } from "./variants";
+import { buildVariantInput, changedVariantFields, pickVariant, remoteVariantToEdit, valuesToStrings, variantToEdit, type VariantEdit } from "./variants";
 
 /** Acesso à API da Nuvemshop (injetado para testar sem rede). */
 export interface VariantApi {
@@ -28,6 +28,18 @@ export class InvalidVariantImageError extends Error {
   }
 }
 
+export class InvalidVariantValuesError extends Error {
+  constructor(message = "Informe um valor para cada propriedade do produto.") {
+    super(message);
+  }
+}
+
+export class DuplicateVariantError extends Error {
+  constructor() {
+    super("Já existe uma variante com essa combinação de valores neste produto.");
+  }
+}
+
 export type VariantUpdateResult = { changed: false } | { changed: true; fields: string[] };
 
 interface MirrorRow {
@@ -37,6 +49,8 @@ interface MirrorRow {
   stock: number | null;
   stock_management: boolean;
   image_id: string | null;
+  weight: string | null;
+  values: unknown;
 }
 
 async function audit(
@@ -50,6 +64,35 @@ async function audit(
   );
 }
 
+/** Quantas propriedades o produto tem (nomes em `attributes`, ex.: Cor e Tam). */
+export async function attributeCount(db: Db, storeId: string, productId: number): Promise<number> {
+  const rows = await db.query<{ n: number }>(
+    "SELECT coalesce(jsonb_array_length(raw_json->'attributes'), 0)::int AS n FROM products WHERE store_id = $1::uuid AND id = $2::bigint",
+    [storeId, productId],
+  );
+  return rows[0]?.n ?? 0;
+}
+
+/** Confere que há um valor por propriedade e que a combinação não repete a de outra variante do produto. */
+export async function assertValidValues(
+  db: Db,
+  args: { storeId: string; productId: number; values: string[]; exceptVariantId?: number },
+): Promise<void> {
+  const n = await attributeCount(db, args.storeId, args.productId);
+  if (n === 0) throw new InvalidVariantValuesError("Este produto não tem propriedades (como Cor ou Tam); defina as propriedades antes.");
+  if (args.values.length !== n || args.values.some((v) => v.trim() === "")) throw new InvalidVariantValuesError();
+  const key = (values: string[]) => JSON.stringify(values.map((v) => v.trim().toLowerCase()));
+  const others = await db.query<{ id: string; values: unknown }>(
+    "SELECT id::text AS id, values FROM variants WHERE store_id = $1::uuid AND product_id = $2::bigint",
+    [args.storeId, args.productId],
+  );
+  const wanted = key(args.values);
+  for (const o of others) {
+    if (args.exceptVariantId !== undefined && Number(o.id) === args.exceptVariantId) continue;
+    if (key(valuesToStrings(o.values)) === wanted) throw new DuplicateVariantError();
+  }
+}
+
 /** Salva uma variante: confere alteração por fora, envia só o que mudou, atualiza o espelho e registra no histórico. */
 export async function updateVariant(
   db: Db,
@@ -59,7 +102,7 @@ export async function updateVariant(
   const { storeId, actor, productId, variantId, after } = args;
   const rows = await db.query<MirrorRow>(
     `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management,
-            nullif(raw_json->>'image_id', '') AS image_id
+            nullif(raw_json->>'image_id', '') AS image_id, weight::text AS weight, values
      FROM variants WHERE store_id = $1::uuid AND product_id = $2::bigint AND id = $3::bigint`,
     [storeId, productId, variantId],
   );
@@ -68,6 +111,10 @@ export async function updateVariant(
   const before = variantToEdit({ ...rows[0], image_id: rows[0].image_id === null ? null : Number(rows[0].image_id) });
   const fields = changedVariantFields(before, after);
   if (fields.length === 0) return { changed: false };
+
+  if (fields.includes("values") && after.values) {
+    await assertValidValues(db, { storeId, productId, values: after.values, exceptVariantId: variantId });
+  }
 
   if (fields.includes("image_id") && after.image_id !== null) {
     const owned = await db.query(
@@ -87,7 +134,7 @@ export async function updateVariant(
   const antes = pickVariant(before, fields);
   const depois = pickVariant(after, fields);
   try {
-    const updated = await api.put(productId, variantId, buildVariantInput(after, fields));
+    const updated = await api.put(productId, variantId, buildVariantInput(after, fields, rows[0].values));
     await upsertVariantRows(db, storeId, [mapVariant(updated, productId)]);
     await audit(db, { storeId, actor, variantId, antes, depois, resultado: { status: "ok" }, sucesso: true });
     return { changed: true, fields };

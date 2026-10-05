@@ -15,8 +15,8 @@ import {
   validateImageUpload,
   type ImageApi,
 } from "@/lib/catalog/images";
-import { InvalidVariantImageError, VariantConflictError, VariantNotFoundError, updateVariant } from "@/lib/catalog/update-variant";
-import { variantEditSchema } from "@/lib/catalog/variants";
+import { DuplicateVariantError, InvalidVariantImageError, InvalidVariantValuesError, VariantConflictError, VariantNotFoundError, updateVariant } from "@/lib/catalog/update-variant";
+import { formValues, variantEditSchema } from "@/lib/catalog/variants";
 import { query } from "@/lib/db";
 import {
   NuvemshopError,
@@ -36,6 +36,7 @@ export interface ActionState {
 }
 
 const fail = (err: unknown, event: string): ActionState => {
+  if (err instanceof InvalidVariantValuesError || err instanceof DuplicateVariantError) return { message: err.message };
   if (err instanceof VariantConflictError || err instanceof VariantNotFoundError || err instanceof InvalidVariantImageError || err instanceof ProductMissingError) {
     return { message: err.message };
   }
@@ -57,10 +58,15 @@ export async function saveVariant(productId: number, variantId: number, _prev: A
     stock_management: formData.get("stock_management") === "on",
     stock: formData.get("stock") ?? "",
     image_id: formData.get("image_id") ?? "",
+    weight: formData.get("weight") ?? "",
+    values: formValues(formData),
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] ??= issue.message;
+    for (const issue of parsed.error.issues) {
+      const key = issue.path[0] === "values" ? `value_${String(issue.path[1] ?? 0)}` : String(issue.path[0]);
+      fieldErrors[key] ??= issue.message;
+    }
     return { message: "Corrija os campos destacados.", fieldErrors };
   }
 
