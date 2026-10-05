@@ -48,6 +48,8 @@ export function operationFromForm(get: (name: string) => string): FormResult {
     const modo = get("publicar_modo");
     if (modo !== "publicar" && modo !== "despublicar") return fail("Escolha publicar ou despublicar.");
     candidate = { type, published: modo === "publicar" };
+  } else if (type === "propriedades") {
+    candidate = { type };
   } else if (type === "categoria") {
     const modo = get("categoria_modo");
     const id = Number(get("categoria_id"));

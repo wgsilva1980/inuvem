@@ -29,6 +29,7 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
             <option value="estoque">Alterar estoque</option>
             <option value="publicar">Publicar ou despublicar</option>
             <option value="categoria">Adicionar ou remover de uma categoria</option>
+            <option value="propriedades">Padronizar propriedades (COR e TAMANHO)</option>
           </select>
         </label>
 
@@ -109,6 +110,17 @@ export function OperationForm({ selecao, total, categories }: { selecao: string;
               <option value="despublicar">Despublicar (ocultar da loja)</option>
             </select>
           </label>
+        )}
+
+        {tipo === "propriedades" && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p>
+              Renomeia as duas propriedades das variações para <strong>COR</strong> e <strong>TAMANHO</strong> (por exemplo “Cor | Tam”, “COR | TAM”, “Cor | Tamanho”). Os valores das variantes (Branca, PP…) não mudam.
+            </p>
+            <p className="text-muted">
+              Ficam de fora, com o motivo na pré-visualização: produtos que já estão certos, com a ordem invertida (TAMANHO antes de COR), com uma só propriedade, sem propriedades ou com nomes que o painel não reconhece.
+            </p>
+          </div>
         )}
 
         {tipo === "categoria" && (
