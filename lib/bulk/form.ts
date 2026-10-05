@@ -48,7 +48,7 @@ export function operationFromForm(get: (name: string) => string): FormResult {
     const modo = get("publicar_modo");
     if (modo !== "publicar" && modo !== "despublicar") return fail("Escolha publicar ou despublicar.");
     candidate = { type, published: modo === "publicar" };
-  } else if (type === "propriedades" || type === "valores") {
+  } else if (type === "propriedades" || type === "valores" || type === "ordem") {
     candidate = { type };
   } else if (type === "categoria") {
     const modo = get("categoria_modo");

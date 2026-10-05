@@ -11,7 +11,7 @@ export function describeChanges(changes: ItemChanges, categoryName: (id: number)
     const names = (ids: number[]) => ids.map(categoryName).join(", ") || "nenhuma";
     lines.push(`Categorias: ${names(p.categories.antes)} → ${names(p.categories.depois)}`);
   }
-  if (p?.attributes) lines.push(`Propriedades: ${p.attributes.antes.join(" | ")} → ${p.attributes.depois.join(" | ")}`);
+  if (p?.attributes) lines.push(`Propriedades: ${p.attributes.antes.join(" | ")} → ${p.attributes.depois.join(" | ")}${p.attributes.trocar ? " (ordem trocada)" : ""}`);
   for (const v of changes.variants) {
     const parts: string[] = [];
     if (v.price) parts.push(`preço ${brl(v.price.antes)} → ${brl(v.price.depois)}`);
