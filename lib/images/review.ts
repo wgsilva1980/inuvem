@@ -67,11 +67,11 @@ const SCHEMA_JSON = {
   additionalProperties: false,
 } as const;
 
-const SISTEMA = `Você revisa fotos de produtos de uma loja virtual de moda feminina (Donatelle Concept) e escreve o texto alternativo (alt) de cada foto.
+const SISTEMA = `Você revisa fotos de produtos de uma loja virtual de moda feminina (Donatelle Concept) e escreve o texto alternativo (alt) de cada foto. O foco é sempre a PEÇA DE ROUPA (ou o acessório), nunca a modelo.
 
-Texto alternativo: descreva o que se vê, em português do Brasil, em uma frase de até ${ALT_MAX} caracteres. Diga a peça, a cor, a modelagem e os detalhes visíveis, e se há uma modelo vestindo ou se a peça está solta. Não comece com "imagem de" nem "foto de". Não invente marca, tamanho, preço nem material que não dê para ver. Use o nome do produto só se ajudar; descreva o que realmente aparece.
+Texto alternativo: descreva só a peça, como numa ficha de produto, em português do Brasil, em uma frase de até ${ALT_MAX} caracteres. Diga o tipo da peça, a cor, a modelagem e os detalhes que se veem (comprimento, decote, alças, fenda, botões, bolsos, costura, textura, estampa, acabamento). Quando a foto for de detalhe, descreva o detalhe. Mesmo que a peça esteja vestida, escreva como se fosse a peça: por exemplo "Saia midi azul-clara de cintura alta com fenda frontal e bolsos", e não "Modelo veste saia azul". NUNCA mencione modelo, mulher, pessoa, corpo, rosto, cabelo, pose, "veste", "vestindo" nem "usando". Também não mencione o cenário, a menos que seja indispensável para entender a peça. Não comece com "imagem de" nem "foto de". Não invente marca, tamanho, preço nem material que não dê para ver.
 
-Qualidade (1 a 5), pensando em uma foto de vitrine: 5 = nítida, bem iluminada, peça em destaque; 4 = boa, com um detalhe pequeno a melhorar; 3 = aceitável; 2 = fraca (problema claro); 1 = inutilizável. Em "problemas" liste só o que realmente atrapalha a venda (lista vazia se não houver). A foto chega reduzida; não aponte "baixa_resolucao" só por isso.
+Qualidade (1 a 5), avaliando a foto como vitrine da PEÇA: 5 = nítida, bem iluminada, a peça (ou o detalhe pretendido) bem visível e em destaque; 4 = boa, com um detalhe pequeno a melhorar; 3 = aceitável; 2 = fraca (problema claro); 1 = inutilizável. Julgue a peça, a cor fiel, o foco e a luz sobre ela; não avalie a modelo (rosto, pose, expressão). Em "problemas" liste só o que realmente atrapalha a venda da peça (lista vazia se não houver). A foto chega reduzida; não aponte "baixa_resolucao" só por isso. No campo "observacao" escreva uma frase curta sobre a foto da peça, sem comentar a modelo.
 
 Moda tem enquadramentos intencionais, então não os trate como defeito: fotos de detalhe (decote, costas, nó, barra, tecido) e fotos que cortam o rosto da modelo são normais. Use "cortada" só quando a própria peça fica cortada de um jeito que impede entender o produto (por exemplo, falta a parte principal da peça numa foto que pretendia mostrá-la inteira). Use "fundo_poluido" só quando objetos ou o cenário competem de verdade com a peça e atrapalham vê-la; um cenário decorado discreto, por si só, não é problema. Uma foto nítida e bem iluminada em que a peça aparece bem merece nota 5.
 
@@ -87,59 +87,71 @@ export function clienteAnthropic(env: Record<string, string | undefined> = proce
 }
 
 /** Revisor real: manda a foto (JPEG reduzido) ao Claude e pede a resposta em JSON. */
+/** O texto fala da modelo (e não da peça)? Palavras que não devem aparecer no alt. */
+export const MENCIONA_MODELO = /\b(modelo|mulher|mo[çc]a|garota|pessoa|veste|vestindo|vestida|usando|usa)\b/i;
+
 export function criarRevisor(client: Anthropic = clienteAnthropic()): Revisor {
   return async (imagem, ctx) => {
-    const contexto = [
-      `Produto: ${ctx.produto}`,
-      ctx.categorias.length ? `Categorias: ${ctx.categorias.join(", ")}` : null,
-      ctx.variacoes.length ? `Variações (cor/tamanho): ${ctx.variacoes.join("; ")}` : null,
-      `Esta é a foto ${ctx.posicao} de ${ctx.total} do produto.`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-    let res;
-    try {
-      res = await client.beta.messages.create({
-        model: MODELO_REVISAO,
-        max_tokens: 4096,
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA_JSON as unknown as Record<string, unknown> } },
-        system: SISTEMA,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: imagem.mediaType, data: imagem.bytes.toString("base64") } },
-              { type: "text", text: contexto },
-            ],
-          },
-        ],
-      });
-    } catch (err) {
-      if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-        throw new RevisaoConfigError("A chave da API da Anthropic (ANTHROPIC_API_KEY) é inválida ou não tem permissão.");
-      }
-      if (err instanceof Anthropic.BadRequestError && /credit|balance/i.test(err.message)) {
-        throw new RevisaoConfigError("A conta da Anthropic está sem crédito.");
-      }
-      if (err instanceof Anthropic.BadRequestError && /workspace/i.test(err.message)) {
-        throw new RevisaoConfigError("A chave da Anthropic não está ligada a um workspace. Cadastre também a variável ANTHROPIC_WORKSPACE_ID (o ID do workspace) na Vercel e faça um novo deploy, ou crie a chave dentro de um workspace.");
-      }
-      throw err;
+    const primeira = await revisarUmaVez(client, imagem, ctx);
+    if (!MENCIONA_MODELO.test(primeira.alt)) return primeira;
+    // pediu só a peça e veio falando da modelo: uma nova tentativa, apontando o problema
+    const segunda = await revisarUmaVez(client, imagem, ctx, primeira.alt);
+    return { ...segunda, entrada: primeira.entrada + segunda.entrada, saida: primeira.saida + segunda.saida };
+  };
+}
+
+async function revisarUmaVez(client: Anthropic, imagem: { bytes: Buffer; mediaType: "image/jpeg" }, ctx: ContextoFoto, textoRejeitado?: string): Promise<Revisao> {
+  const contexto = [
+    `Produto: ${ctx.produto}`,
+    ctx.categorias.length ? `Categorias: ${ctx.categorias.join(", ")}` : null,
+    ctx.variacoes.length ? `Variações (cor/tamanho): ${ctx.variacoes.join("; ")}` : null,
+    `Esta é a foto ${ctx.posicao} de ${ctx.total} do produto.`,
+    textoRejeitado ? `Atenção: sua resposta anterior (“${textoRejeitado}”) falava da modelo ou de quem veste. Reescreva o alt descrevendo somente a peça (tipo, cor, modelagem e detalhes), sem citar modelo, mulher, pessoa nem “veste/vestindo/usando”.` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  let res;
+  try {
+    res = await client.beta.messages.create({
+      model: MODELO_REVISAO,
+      max_tokens: 4096,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA_JSON as unknown as Record<string, unknown> } },
+      system: SISTEMA,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: imagem.mediaType, data: imagem.bytes.toString("base64") } },
+            { type: "text", text: contexto },
+          ],
+        },
+      ],
+    });
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+      throw new RevisaoConfigError("A chave da API da Anthropic (ANTHROPIC_API_KEY) é inválida ou não tem permissão.");
     }
-    if (res.stop_reason === "refusal") throw new Error("o Claude recusou analisar esta foto");
-    const texto = res.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")?.text;
-    if (!texto) throw new Error("resposta sem texto");
-    const r = respostaSchema.parse(JSON.parse(texto));
-    return {
-      alt: r.alt.trim().replace(/\s+/g, " ").slice(0, ALT_MAX),
-      qualidade: r.qualidade,
-      problemas: r.problemas.filter((p): p is ProblemaVisual => (PROBLEMAS_VISUAIS as readonly string[]).includes(p)),
-      observacao: r.observacao.trim().slice(0, 300),
-      entrada: res.usage.input_tokens,
-      saida: res.usage.output_tokens,
-    };
+    if (err instanceof Anthropic.BadRequestError && /credit|balance/i.test(err.message)) {
+      throw new RevisaoConfigError("A conta da Anthropic está sem crédito.");
+    }
+    if (err instanceof Anthropic.BadRequestError && /workspace/i.test(err.message)) {
+      throw new RevisaoConfigError("A chave da Anthropic não está ligada a um workspace. Cadastre também a variável ANTHROPIC_WORKSPACE_ID (o ID do workspace) na Vercel e faça um novo deploy, ou crie a chave dentro de um workspace.");
+    }
+    throw err;
+  }
+  if (res.stop_reason === "refusal") throw new Error("o Claude recusou analisar esta foto");
+  const texto = res.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")?.text;
+  if (!texto) throw new Error("resposta sem texto");
+  const r = respostaSchema.parse(JSON.parse(texto));
+  return {
+    alt: r.alt.trim().replace(/\s+/g, " ").slice(0, ALT_MAX),
+    qualidade: r.qualidade,
+    problemas: r.problemas.filter((p): p is ProblemaVisual => (PROBLEMAS_VISUAIS as readonly string[]).includes(p)),
+    observacao: r.observacao.trim().slice(0, 300),
+    entrada: res.usage.input_tokens,
+    saida: res.usage.output_tokens,
   };
 }
 

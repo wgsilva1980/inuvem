@@ -12,6 +12,7 @@ import {
   clienteAnthropic,
   criarRevisor,
   estimarCustoUsd,
+  MENCIONA_MODELO,
   fotosPendentes,
   resumoRevisao,
   revisarPendentes,
@@ -169,6 +170,41 @@ describe("revisor (Claude)", () => {
     const sem = clienteAnthropic({ ANTHROPIC_API_KEY: "k" }) as unknown as { _options: { defaultHeaders?: Record<string, string> } };
     expect(com._options.defaultHeaders).toEqual({ "anthropic-workspace-id": "wrkspc_123" });
     expect(sem._options.defaultHeaders ?? {}).not.toHaveProperty("anthropic-workspace-id");
+  });
+
+  it("pede para descrever só a peça, sem falar da modelo", async () => {
+    const c = cliente({ stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: JSON.stringify({ alt: "Saia midi azul com fenda", qualidade: 5, problemas: [], observacao: "" }) }] });
+    await criarRevisor(c)(foto, ctx);
+    const sistema = String((cliente as unknown as { ultimo: Record<string, unknown> }).ultimo.system);
+    expect(sistema).toContain("PEÇA DE ROUPA");
+    expect(sistema).toMatch(/NUNCA mencione modelo/);
+    expect(sistema).toMatch(/não avalie a modelo/);
+  });
+
+  it("se o texto falar da modelo, tenta de novo apontando o problema e soma os tokens", async () => {
+    const respostas = [
+      { alt: "Modelo veste saia azul com fenda", qualidade: 5, problemas: [], observacao: "ok" },
+      { alt: "Saia midi azul de cintura alta com fenda frontal", qualidade: 5, problemas: [], observacao: "ok" },
+    ];
+    const pedidos: Array<Record<string, any>> = [];
+    const c = { beta: { messages: { create: async (p: Record<string, any>) => (pedidos.push(p), { stop_reason: "end_turn", usage: { input_tokens: 1000, output_tokens: 50 }, content: [{ type: "text", text: JSON.stringify(respostas[pedidos.length - 1]) }] }) } } } as never;
+    const r = await criarRevisor(c)(foto, ctx);
+    expect(r.alt).toBe("Saia midi azul de cintura alta com fenda frontal");
+    expect(r).toMatchObject({ entrada: 2000, saida: 100 });
+    expect(pedidos).toHaveLength(2);
+    expect(pedidos[1]!.messages[0].content[1].text).toContain("Modelo veste saia azul com fenda");
+  });
+
+  it("não repete a chamada quando o texto já fala só da peça", async () => {
+    let chamadas = 0;
+    const c = { beta: { messages: { create: async () => (chamadas++, { stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: JSON.stringify({ alt: "Blusa regata branca com laço no decote e modelagem solta", qualidade: 5, problemas: [], observacao: "" }) }] }) } } } as never;
+    await criarRevisor(c)(foto, ctx);
+    expect(chamadas).toBe(1);
+  });
+
+  it("o detector pega modelo/veste/usando mas não 'modelagem'", () => {
+    for (const t of ["Modelo veste saia", "Mulher usando blusa", "Saia que a modelo usa", "Peça vestindo bem"]) expect(MENCIONA_MODELO.test(t)).toBe(true);
+    for (const t of ["Saia midi de modelagem reta", "Blusa regata com laço no decote", "Vestido longo estampado"]) expect(MENCIONA_MODELO.test(t)).toBe(false);
   });
 
   it("recusa do Claude vira erro da foto", async () => {
