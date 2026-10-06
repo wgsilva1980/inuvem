@@ -75,6 +75,9 @@ export default async function RevisaoPage({ searchParams }: { searchParams: Prom
           ← Imagens
         </Link>
         <h1 className="text-xl font-semibold">Revisão das fotos com o Claude</h1>
+        <Link href="/imagens/teste-alt" className="text-sm underline">
+          O texto não grava na loja? Testar como a Nuvemshop aceita o texto alternativo →
+        </Link>
         <p className="text-sm text-muted">
           O Claude olha cada foto e sugere o texto alternativo (alt, em português), uma nota de 1 a 5 e problemas visíveis (desfocada, escura, cortada, fundo poluído…). Revisar não altera nada na loja; o envio dos textos é um passo à parte e dá para editar cada um.
         </p>
