@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { ProductImage } from "@/lib/nuvemshop/types";
 import type { Db } from "@/lib/sync/repo";
 
 /** Modelo da revisão de fotos (leitura de imagem + texto curto): o padrão da API para novos códigos. */
@@ -186,20 +185,29 @@ export interface FotoPendente {
   total: number;
 }
 
-/** Fotos do espelho ainda sem revisão (ou com endereço novo, ou com erro de mais de 10 min). `ignorar` = já tentadas nesta rodada. */
+/**
+ * Fotos principais (a primeira de cada produto, pela posição) ainda sem revisão (ou com endereço novo, ou com erro de mais de 10 min).
+ * Só a principal é revisada: é a que aparece nas buscas e na vitrine, e a que mais vale ter um texto alternativo. `ignorar` = já tentadas nesta rodada.
+ */
 export async function fotosPendentes(db: Db, storeId: string, limite: number, ignorar: string[] = []): Promise<FotoPendente[]> {
   return db.query<FotoPendente>(
-    `SELECT (i->>'id') AS image_id, p.id::text AS product_id, (i->>'src') AS src, p.name AS produto,
-            coalesce((SELECT array_agg(c->'name'->>'pt') FROM jsonb_array_elements(p.categories) c WHERE c->'name'->>'pt' IS NOT NULL), '{}') AS categorias,
-            coalesce((SELECT array_agg(coalesce((SELECT string_agg(v2->>'pt', ' / ') FROM jsonb_array_elements(v.values) v2), '')) FROM variants v WHERE v.store_id = p.store_id AND v.product_id = p.id), '{}') AS variacoes,
-            t.n::int AS posicao, jsonb_array_length(p.raw_json->'images') AS total
-     FROM products p
-     CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) WITH ORDINALITY AS t(i, n)
-     LEFT JOIN image_review r ON r.store_id = p.store_id AND r.image_id = (i->>'id')::bigint
-     WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL
-       AND (r.image_id IS NULL OR r.src <> (i->>'src') OR (r.error IS NOT NULL AND r.reviewed_at < now() - interval '10 minutes'))
-       AND NOT ((i->>'id') = ANY($3::text[]))
-     ORDER BY p.id, t.n
+    `WITH fotos AS (
+       SELECT p.id, p.store_id, p.name, p.categories, i, t.n,
+              row_number() OVER (PARTITION BY p.id ORDER BY nullif(i->>'position', '')::int NULLS LAST, t.n) AS rn,
+              jsonb_array_length(p.raw_json->'images') AS total
+       FROM products p
+       CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) WITH ORDINALITY AS t(i, n)
+       WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL)
+     SELECT (f.i->>'id') AS image_id, f.id::text AS product_id, (f.i->>'src') AS src, f.name AS produto,
+            coalesce((SELECT array_agg(c->'name'->>'pt') FROM jsonb_array_elements(f.categories) c WHERE c->'name'->>'pt' IS NOT NULL), '{}') AS categorias,
+            coalesce((SELECT array_agg(coalesce((SELECT string_agg(v2->>'pt', ' / ') FROM jsonb_array_elements(v.values) v2), '')) FROM variants v WHERE v.store_id = f.store_id AND v.product_id = f.id), '{}') AS variacoes,
+            coalesce(nullif(f.i->>'position', '')::int, f.n::int) AS posicao, f.total
+     FROM fotos f
+     LEFT JOIN image_review r ON r.store_id = f.store_id AND r.image_id = (f.i->>'id')::bigint
+     WHERE f.rn = 1
+       AND (r.image_id IS NULL OR r.src <> (f.i->>'src') OR (r.error IS NOT NULL AND r.reviewed_at < now() - interval '10 minutes'))
+       AND NOT ((f.i->>'id') = ANY($3::text[]))
+     ORDER BY f.id
      LIMIT $2`,
     [storeId, limite, ignorar],
   );
@@ -218,6 +226,7 @@ export async function gravarRevisao(db: Db, storeId: string, f: FotoPendente, r:
 }
 
 export interface ResumoRevisao {
+  /** Fotos principais (uma por produto com foto). */
   fotos: number;
   revisadas: number;
   comErro: number;
@@ -225,29 +234,30 @@ export interface ResumoRevisao {
   saida: number;
   porQualidade: Record<number, number>;
   comProblema: number;
-  semAltNaLoja: number;
-  altPendentes: number;
 }
 
+/** Fotos principais (1 por produto) com a revisão correspondente, se houver. Base da tela, do resumo e da exportação. */
+const PRINCIPAIS = `WITH fotos AS (
+    SELECT p.id AS product_id, p.name AS produto, p.store_id, (i->>'id')::bigint AS image_id, (i->>'src') AS src,
+           nullif(i->>'position', '')::int AS position,
+           row_number() OVER (PARTITION BY p.id ORDER BY nullif(i->>'position', '')::int NULLS LAST, t.n) AS rn
+    FROM products p
+    CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) WITH ORDINALITY AS t(i, n)
+    WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL),
+  principais AS (SELECT * FROM fotos WHERE rn = 1)`;
+
 export async function resumoRevisao(db: Db, storeId: string): Promise<ResumoRevisao> {
-  const [r] = await db.query<{
-    fotos: string; revisadas: string; erros: string; entrada: string; saida: string; com_problema: string; sem_alt: string; alt_pendentes: string; q1: string; q2: string; q3: string; q4: string; q5: string;
-  }>(
-    `WITH f AS (
-       SELECT p.store_id, (i->>'id')::bigint AS image_id, (i->>'src') AS src,
-              coalesce(i->'alt'->>'pt', CASE WHEN jsonb_typeof(i->'alt') = 'array' THEN i->'alt'->>0 END, '') AS alt_loja
-       FROM products p CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) i
-       WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL)
+  const [r] = await db.query<{ fotos: string; revisadas: string; erros: string; com_problema: string; q1: string; q2: string; q3: string; q4: string; q5: string; entrada: string; saida: string }>(
+    `${PRINCIPAIS}
      SELECT count(*)::text AS fotos,
             count(r.image_id) FILTER (WHERE r.error IS NULL)::text AS revisadas,
             count(r.image_id) FILTER (WHERE r.error IS NOT NULL)::text AS erros,
-            coalesce(sum(r.input_tokens), 0)::text AS entrada, coalesce(sum(r.output_tokens), 0)::text AS saida,
             count(*) FILTER (WHERE r.error IS NULL AND (cardinality(r.problems) > 0 OR r.quality <= 3))::text AS com_problema,
-            count(*) FILTER (WHERE f.alt_loja = '')::text AS sem_alt,
-            count(*) FILTER (WHERE r.alt_pt IS NOT NULL AND r.error IS NULL AND r.alt_aplicado_at IS NULL AND (f.alt_loja = '' OR r.alt_editado))::text AS alt_pendentes,
             count(*) FILTER (WHERE r.quality = 1)::text AS q1, count(*) FILTER (WHERE r.quality = 2)::text AS q2, count(*) FILTER (WHERE r.quality = 3)::text AS q3,
-            count(*) FILTER (WHERE r.quality = 4)::text AS q4, count(*) FILTER (WHERE r.quality = 5)::text AS q5
-     FROM f LEFT JOIN image_review r ON r.store_id = f.store_id AND r.image_id = f.image_id AND r.src = f.src`,
+            count(*) FILTER (WHERE r.quality = 4)::text AS q4, count(*) FILTER (WHERE r.quality = 5)::text AS q5,
+            (SELECT coalesce(sum(input_tokens), 0) FROM image_review WHERE store_id = $1::uuid)::text AS entrada,
+            (SELECT coalesce(sum(output_tokens), 0) FROM image_review WHERE store_id = $1::uuid)::text AS saida
+     FROM principais f LEFT JOIN image_review r ON r.store_id = f.store_id AND r.image_id = f.image_id AND r.src = f.src`,
     [storeId],
   );
   return {
@@ -258,9 +268,47 @@ export async function resumoRevisao(db: Db, storeId: string): Promise<ResumoRevi
     saida: Number(r?.saida ?? 0),
     porQualidade: { 1: Number(r?.q1 ?? 0), 2: Number(r?.q2 ?? 0), 3: Number(r?.q3 ?? 0), 4: Number(r?.q4 ?? 0), 5: Number(r?.q5 ?? 0) },
     comProblema: Number(r?.com_problema ?? 0),
-    semAltNaLoja: Number(r?.sem_alt ?? 0),
-    altPendentes: Number(r?.alt_pendentes ?? 0),
   };
+}
+
+export interface LinhaRevisao {
+  product_id: string;
+  produto: string;
+  image_id: string;
+  src: string;
+  position: number | null;
+  alt_pt: string | null;
+  quality: number | null;
+  problems: string[];
+  note: string | null;
+  error: string | null;
+  revisada: boolean;
+}
+
+/** Uma linha por produto: a foto principal e a revisão dela (se já feita). */
+export async function linhasRevisao(db: Db, storeId: string): Promise<LinhaRevisao[]> {
+  return db.query<LinhaRevisao>(
+    `${PRINCIPAIS}
+     SELECT f.product_id::text, f.produto, f.image_id::text, f.src, f.position, r.alt_pt, r.quality, coalesce(r.problems, '{}') AS problems, r.note, r.error,
+            (r.image_id IS NOT NULL AND r.src = f.src) AS revisada
+     FROM principais f LEFT JOIN image_review r ON r.store_id = f.store_id AND r.image_id = f.image_id
+     ORDER BY f.produto, f.product_id`,
+    [storeId],
+  );
+}
+
+const celula = (v: string | number | null) => {
+  const t = v === null ? "" : String(v);
+  return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
+/** Planilha (CSV com `;` e BOM, para abrir no Excel em português) com os textos alternativos sugeridos das fotos principais revisadas. */
+export function gerarCsvRevisao(linhas: LinhaRevisao[]): string {
+  const cab = ["Produto", "ID do produto", "Nota (1 a 5)", "Problemas", "Texto alternativo sugerido", "Observação", "Foto (endereço)"];
+  const linhasCsv = linhas
+    .filter((l) => l.revisada && !l.error && l.alt_pt)
+    .map((l) => [l.produto, l.product_id, l.quality, l.problems.map((p) => PROBLEMA_VISUAL_LABEL[p as ProblemaVisual] ?? p).join(", "), l.alt_pt, l.note, l.src].map(celula).join(";"));
+  return `\uFEFF${[cab.join(";"), ...linhasCsv].join("\r\n")}\r\n`;
 }
 
 /** Revisa fotos pendentes até estourar o orçamento de tempo (ou `maxFotos`), `concorrencia` por vez. */
@@ -306,144 +354,4 @@ export async function revisarPendentes(
   }
   const restam = await fotosPendentes(db, args.storeId, 1, [...tentadas]);
   return { revisadas, erros, restantes: restam.length > 0, tentadas: [...tentadas] };
-}
-
-/* ---------- texto alternativo na loja ---------- */
-
-export interface AltApi {
-  updateAlt(productId: number, imageId: number, alt: Record<string, string> | string[]): Promise<ProductImage>;
-  getImage(productId: number, imageId: number): Promise<ProductImage>;
-  /** Pausa entre o envio e a leitura de conferência (a loja pode demorar a refletir). Injetável nos testes. */
-  esperar?: (ms: number) => Promise<void>;
-}
-
-const pausa = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** O alt em português que a loja devolve (aceita as duas formas: objeto por idioma ou lista). */
-export function altDaImagem(img: Pick<ProductImage, "alt">): string {
-  const a = img.alt;
-  if (!a) return "";
-  if (Array.isArray(a)) return String(a[0] ?? "");
-  return String((a as Record<string, string>).pt ?? "");
-}
-
-/** Forma de envio que a loja aceitou (descoberta na primeira vez e lembrada enquanto o servidor estiver de pé). */
-let formaAlt: "objeto" | "lista" | null = null;
-
-/** Grava o alt na loja. Na primeira vez confere lendo de volta; tenta o formato de objeto por idioma e, se não pegar, o de lista. */
-export async function enviarAlt(api: AltApi, productId: number, imageId: number, texto: string): Promise<void> {
-  const esperar = api.esperar ?? pausa;
-  const tentativas = formaAlt ? [formaAlt] : (["objeto", "lista"] as const);
-  for (const forma of tentativas) {
-    const r = await api.updateAlt(productId, imageId, forma === "objeto" ? { pt: texto } : [texto]);
-    if (formaAlt === forma) return; // já comprovado antes
-    if (altDaImagem(r) === texto) {
-      formaAlt = forma;
-      return;
-    }
-    // a resposta do PUT não trouxe o texto: confere lendo a foto (duas vezes, com uma pausa, caso a loja demore a refletir)
-    for (const espera of [700, 2500]) {
-      await esperar(espera);
-      const lida = await api.getImage(productId, imageId).catch(() => null);
-      if (lida && altDaImagem(lida) === texto) {
-        formaAlt = forma;
-        return;
-      }
-    }
-  }
-  throw new Error("a loja não gravou o texto alternativo (conferi lendo de volta)");
-}
-
-export function _resetFormaAltParaTeste() {
-  formaAlt = null;
-}
-
-async function registrar(db: Db, e: { storeId: string; actor: string; productId: number; antes: unknown; depois: unknown; resultado: unknown; sucesso: boolean }) {
-  await db.query(
-    `INSERT INTO audit_log (store_id, actor_email, acao, entidade, entidade_id, antes, depois, resultado_api, sucesso)
-     VALUES ($1::uuid, $2, 'imagem.alt', 'produto', $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)`,
-    [e.storeId, e.actor, String(e.productId), JSON.stringify(e.antes), JSON.stringify(e.depois), JSON.stringify(e.resultado), e.sucesso],
-  );
-}
-
-/** Atualiza o alt da foto também no espelho (sem precisar rebuscar o produto). */
-async function atualizarEspelho(db: Db, storeId: string, productId: number, imageId: string, texto: string) {
-  await db.query(
-    `UPDATE products SET raw_json = jsonb_set(raw_json, '{images}', coalesce((
-       SELECT jsonb_agg(CASE WHEN (i->>'id') = $3 THEN jsonb_set(i, '{alt}', jsonb_build_object('pt', $4::text)) ELSE i END ORDER BY n)
-       FROM jsonb_array_elements(raw_json->'images') WITH ORDINALITY AS t(i, n)), '[]'::jsonb))
-     WHERE store_id = $1::uuid AND id = $2::bigint`,
-    [storeId, productId, imageId, texto],
-  );
-}
-
-export async function aplicarAltDaFoto(db: Db, api: AltApi, args: { storeId: string; actor: string; productId: number; imageId: string; texto: string; antes: string }): Promise<void> {
-  const { storeId, actor, productId, imageId, texto, antes } = args;
-  try {
-    await enviarAlt(api, productId, Number(imageId), texto);
-    await atualizarEspelho(db, storeId, productId, imageId, texto);
-    await db.query(`UPDATE image_review SET alt_aplicado = $3, alt_aplicado_at = now() WHERE store_id = $1::uuid AND image_id = $2::bigint`, [storeId, imageId, texto]);
-    await registrar(db, { storeId, actor, productId, antes: { id: Number(imageId), alt: antes }, depois: { id: Number(imageId), alt: texto }, resultado: { status: "ok" }, sucesso: true });
-  } catch (err) {
-    await registrar(db, { storeId, actor, productId, antes: { id: Number(imageId), alt: antes }, depois: { id: Number(imageId), alt: texto }, resultado: { mensagem: err instanceof Error ? err.message : String(err) }, sucesso: false });
-    throw err;
-  }
-}
-
-/** Salva o texto editado por uma pessoa e envia à loja (sobrescreve o que houver). */
-export async function salvarAltEditado(db: Db, api: AltApi, args: { storeId: string; actor: string; productId: number; imageId: string; texto: string }): Promise<void> {
-  const texto = args.texto.trim().replace(/\s+/g, " ").slice(0, 250);
-  if (!texto) throw new Error("o texto alternativo não pode ficar vazio");
-  const [atual] = await db.query<{ alt_loja: string }>(
-    `SELECT coalesce(i->'alt'->>'pt', CASE WHEN jsonb_typeof(i->'alt') = 'array' THEN i->'alt'->>0 END, '') AS alt_loja
-     FROM products p CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) i
-     WHERE p.store_id = $1::uuid AND p.id = $2::bigint AND (i->>'id') = $3`,
-    [args.storeId, args.productId, args.imageId],
-  );
-  if (!atual) throw new Error("a foto não está mais no produto");
-  await db.query(
-    `INSERT INTO image_review (store_id, image_id, product_id, src, alt_pt, alt_editado)
-     SELECT $1::uuid, $2::bigint, $3::bigint, (i->>'src'), $4, true
-     FROM products p CROSS JOIN LATERAL jsonb_array_elements(p.raw_json->'images') i WHERE p.store_id = $1::uuid AND p.id = $3::bigint AND (i->>'id') = $2::text
-     ON CONFLICT (store_id, image_id) DO UPDATE SET alt_pt = $4, alt_editado = true`,
-    [args.storeId, args.imageId, args.productId, texto],
-  );
-  await aplicarAltDaFoto(db, api, { ...args, texto, antes: atual.alt_loja });
-}
-
-/** Envia à loja os textos sugeridos (só onde a loja está sem texto, ou o texto foi editado), até estourar o orçamento. */
-export async function aplicarAltPendentes(
-  db: Db,
-  api: AltApi,
-  args: { storeId: string; actor: string; budgetMs: number; ignorar?: string[]; now?: () => number },
-): Promise<{ aplicados: number; falhas: Array<{ imageId: string; mensagem: string }>; restantes: boolean }> {
-  const now = args.now ?? Date.now;
-  const inicio = now();
-  const ignorar = new Set(args.ignorar ?? []);
-  const out = { aplicados: 0, falhas: [] as Array<{ imageId: string; mensagem: string }>, restantes: false };
-  while (true) {
-    const [prox] = await db.query<{ image_id: string; product_id: string; alt_pt: string; alt_loja: string }>(
-      `SELECT r.image_id::text, r.product_id::text, r.alt_pt,
-              coalesce(f.i->'alt'->>'pt', CASE WHEN jsonb_typeof(f.i->'alt') = 'array' THEN f.i->'alt'->>0 END, '') AS alt_loja
-       FROM image_review r
-       JOIN products p ON p.store_id = r.store_id AND p.id = r.product_id
-       CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) f(i)
-       WHERE r.store_id = $1::uuid AND (f.i->>'id') = r.image_id::text AND (f.i->>'src') = r.src
-         AND r.error IS NULL AND r.alt_pt IS NOT NULL AND r.alt_pt <> '' AND r.alt_aplicado_at IS NULL
-         AND (coalesce(f.i->'alt'->>'pt', CASE WHEN jsonb_typeof(f.i->'alt') = 'array' THEN f.i->'alt'->>0 END, '') = '' OR r.alt_editado)
-         AND NOT (r.image_id::text = ANY($2::text[]))
-       ORDER BY r.product_id, r.image_id LIMIT 1`,
-      [args.storeId, [...ignorar]],
-    );
-    if (!prox) return out;
-    if (now() - inicio >= args.budgetMs) return { ...out, restantes: true };
-    ignorar.add(prox.image_id);
-    try {
-      await aplicarAltDaFoto(db, api, { storeId: args.storeId, actor: args.actor, productId: Number(prox.product_id), imageId: prox.image_id, texto: prox.alt_pt, antes: prox.alt_loja });
-      out.aplicados++;
-    } catch (err) {
-      out.falhas.push({ imageId: prox.image_id, mensagem: err instanceof Error ? err.message : String(err) });
-      if (out.falhas.length >= 3 && out.aplicados === 0) return out; // algo sistemático (formato recusado, permissão): para em vez de tentar tudo
-    }
-  }
 }

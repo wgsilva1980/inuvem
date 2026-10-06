@@ -5,23 +5,19 @@ import sharp from "sharp";
 import { loadMigrations, runMigrations } from "@/lib/db/migrate";
 import type { Db } from "@/lib/sync/repo";
 import {
+  MENCIONA_MODELO,
   RevisaoConfigError,
-  _resetFormaAltParaTeste,
-  altDaImagem,
-  aplicarAltPendentes,
   clienteAnthropic,
   criarRevisor,
   estimarCustoUsd,
-  MENCIONA_MODELO,
   fotosPendentes,
+  gerarCsvRevisao,
+  linhasRevisao,
   resumoRevisao,
   revisarPendentes,
-  salvarAltEditado,
-  type AltApi,
   type Revisao,
   type Revisor,
 } from "@/lib/images/review";
-import type { ProductImage } from "@/lib/nuvemshop/types";
 
 let pg: PGlite;
 let db: Db;
@@ -50,7 +46,6 @@ beforeEach(async () => {
   const { rows } = await pg.query<{ id: string }>("INSERT INTO stores (nuvemshop_store_id, access_token_encrypted) VALUES (1, 'x') RETURNING id");
   storeId = rows[0]!.id;
   jpeg = await sharp({ create: { width: 40, height: 50, channels: 3, background: "#88aacc" } }).jpeg().toBuffer();
-  _resetFormaAltParaTeste();
 });
 
 const baixar = async () => jpeg;
@@ -65,17 +60,31 @@ beforeEach(() => {
   revisorOk.chamadas.length = 0;
 });
 
-describe("revisão em lote", () => {
-  it("revisa as fotos pendentes com o contexto do produto e termina", async () => {
+describe("revisão em lote (só a foto principal)", () => {
+  it("revisa uma foto por produto, a de menor posição, com o contexto do produto", async () => {
     await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }, { id: 11, src: "https://x/11.jpg" }]);
     await produto(2, "Blusa", [{ id: 20, src: "https://x/20.jpg" }]);
     const r = await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
-    expect(r).toMatchObject({ revisadas: 3, erros: 0, restantes: false });
-    expect(revisorOk.chamadas.sort()).toEqual(["Blusa#1", "Saia#1", "Saia#2"]);
+    expect(r).toMatchObject({ revisadas: 2, erros: 0, restantes: false });
+    expect(revisorOk.chamadas.sort()).toEqual(["Blusa#1", "Saia#1"]);
     const res = await resumoRevisao(db, storeId);
-    expect(res).toMatchObject({ fotos: 3, revisadas: 3, comErro: 0, entrada: 3000, saida: 300, semAltNaLoja: 3, altPendentes: 3 });
-    expect(res.porQualidade[4]).toBe(3);
+    expect(res).toMatchObject({ fotos: 2, revisadas: 2, comErro: 0, entrada: 2000, saida: 200 });
+    expect(res.porQualidade[4]).toBe(2);
     expect(await fotosPendentes(db, storeId, 10)).toEqual([]);
+  });
+
+  it("a principal é a de menor posição, mesmo fora de ordem no cadastro", async () => {
+    await pg.query("INSERT INTO products (store_id, id, name, raw_json) VALUES ($1, 7, 'Vestido', $2::jsonb)", [
+      storeId,
+      JSON.stringify({ images: [{ id: 71, src: "https://x/71.jpg", position: 3 }, { id: 72, src: "https://x/72.jpg", position: 1 }, { id: 73, src: "https://x/73.jpg", position: 2 }] }),
+    ]);
+    expect((await fotosPendentes(db, storeId, 10)).map((f) => f.image_id)).toEqual(["72"]);
+  });
+
+  it("produto sem foto não entra", async () => {
+    await produto(1, "Sem foto", []);
+    expect(await fotosPendentes(db, storeId, 10)).toEqual([]);
+    expect((await resumoRevisao(db, storeId)).fotos).toBe(0);
   });
 
   it("manda a foto reduzida (JPEG até 768 px)", async () => {
@@ -89,7 +98,7 @@ describe("revisão em lote", () => {
   });
 
   it("respeita maxFotos e continua depois", async () => {
-    await produto(1, "Saia", Array.from({ length: 5 }, (_, n) => ({ id: 10 + n, src: `https://x/${n}.jpg` })));
+    for (let n = 0; n < 5; n++) await produto(100 + n, `P${n}`, [{ id: 1000 + n, src: `https://x/${n}.jpg` }]);
     const r1 = await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar, maxFotos: 2 });
     expect(r1).toMatchObject({ revisadas: 2, restantes: true });
     const r2 = await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
@@ -97,7 +106,7 @@ describe("revisão em lote", () => {
   });
 
   it("para no orçamento de tempo", async () => {
-    await produto(1, "Saia", Array.from({ length: 12 }, (_, n) => ({ id: 10 + n, src: `https://x/${n}.jpg` })));
+    for (let n = 0; n < 12; n++) await produto(100 + n, `P${n}`, [{ id: 1000 + n, src: `https://x/${n}.jpg` }]);
     let t = 0;
     const r = await revisarPendentes(db, { storeId, budgetMs: 150, revisor: revisorOk, baixar, concorrencia: 2, now: () => (t += 100) });
     expect(r.restantes).toBe(true);
@@ -106,9 +115,10 @@ describe("revisão em lote", () => {
   });
 
   it("erro numa foto não trava as outras; erro recente não é repetido, o antigo sim", async () => {
-    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }, { id: 11, src: "https://x/11.jpg" }]);
+    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }]);
+    await produto(2, "Blusa", [{ id: 20, src: "https://x/20.jpg" }]);
     const revisor: Revisor = async (_i, ctx) => {
-      if (ctx.posicao === 1) throw new Error("falhou");
+      if (ctx.produto === "Saia") throw new Error("falhou");
       return ok();
     };
     const r = await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor, baixar });
@@ -134,8 +144,39 @@ describe("revisão em lote", () => {
     expect((await fotosPendentes(db, storeId, 10)).map((f) => f.src)).toEqual(["https://x/novo.jpg"]);
   });
 
+  it("o resumo só conta fotos principais, mas o custo soma todas as revisões já feitas", async () => {
+    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }, { id: 11, src: "https://x/11.jpg" }]);
+    await pg.query(
+      "INSERT INTO image_review (store_id, image_id, product_id, src, quality, input_tokens, output_tokens) VALUES ($1, 11, 1, 'https://x/11.jpg', 5, 500, 50)",
+      [storeId],
+    );
+    const antes = await resumoRevisao(db, storeId);
+    expect(antes).toMatchObject({ fotos: 1, revisadas: 0, entrada: 500, saida: 50 }); // a revisão da foto 11 (não principal) não conta como revisada
+    expect(antes.porQualidade[5]).toBe(0);
+  });
+
   it("estima o custo", () => {
     expect(estimarCustoUsd(1_000_000, 100_000)).toBeCloseTo(6);
+  });
+});
+
+describe("planilha dos textos", () => {
+  it("lista só as principais revisadas, com `;`, aspas escapadas e BOM", async () => {
+    await produto(1, 'Saia "midi"; azul', [{ id: 10, src: "https://x/10.jpg" }]);
+    await produto(2, "Blusa", [{ id: 20, src: "https://x/20.jpg" }]);
+    await produto(3, "Sem revisão", [{ id: 30, src: "https://x/30.jpg" }]);
+    const revisor: Revisor = async (_i, ctx) =>
+      ctx.produto === "Sem revisão" ? Promise.reject(new Error("x")) : ok(ctx.produto === "Blusa" ? "Blusa regata branca com laço" : "Saia midi azul de cintura alta", { problemas: ["escura"], qualidade: 3, observacao: "foto escura" });
+    await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor, baixar });
+    const linhas = await linhasRevisao(db, storeId);
+    expect(linhas.map((l) => [l.produto, l.error === null])).toEqual([["Blusa", true], ["Saia \"midi\"; azul", true], ["Sem revisão", false]]); // a que deu erro fica de fora da planilha
+    const csv = gerarCsvRevisao(linhas);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    const rows = csv.slice(1).trim().split("\r\n");
+    expect(rows).toHaveLength(3); // cabeçalho + 2 revisadas
+    expect(rows[0]).toBe("Produto;ID do produto;Nota (1 a 5);Problemas;Texto alternativo sugerido;Observação;Foto (endereço)");
+    expect(rows[1]).toBe("Blusa;2;3;Escura;Blusa regata branca com laço;foto escura;https://x/20.jpg");
+    expect(rows[2]).toContain('"Saia ""midi""; azul";1;3;Escura;Saia midi azul de cintura alta');
   });
 });
 
@@ -221,129 +262,5 @@ describe("revisor (Claude)", () => {
     expect(p.messages[0].content[0]).toMatchObject({ type: "image", source: { type: "base64", media_type: "image/jpeg" } });
     expect(p.messages[0].content[1].text).toContain("Saia midi");
     expect(p.messages[0].content[1].text).toContain("Azul / P");
-  });
-});
-
-/** Loja falsa: só guarda o alt por foto e aceita o formato escolhido. */
-function lojaAlt(aceita: "objeto" | "lista" | "nenhum") {
-  const alts = new Map<number, unknown>();
-  const chamadas: string[] = [];
-  const api: AltApi = {
-    esperar: async () => {},
-    async updateAlt(_p, id, alt) {
-      chamadas.push(Array.isArray(alt) ? "lista" : "objeto");
-      if (aceita === "objeto" && !Array.isArray(alt)) alts.set(id, alt);
-      if (aceita === "lista" && Array.isArray(alt)) alts.set(id, alt);
-      return { id, product_id: 1, src: "", alt: (alts.get(id) ?? {}) as never } as ProductImage;
-    },
-    async getImage(_p, id) {
-      return { id, product_id: 1, src: "", alt: (alts.get(id) ?? {}) as never } as ProductImage;
-    },
-  };
-  return { api, alts, chamadas };
-}
-
-describe("texto alternativo na loja", () => {
-  it("lê o alt nas duas formas", () => {
-    expect(altDaImagem({ alt: { pt: "a" } })).toBe("a");
-    expect(altDaImagem({ alt: ["b"] })).toBe("b");
-    expect(altDaImagem({ alt: {} })).toBe("");
-  });
-
-  it("envia só onde a loja está sem texto, atualiza o espelho e registra no histórico", async () => {
-    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }, { id: 11, src: "https://x/11.jpg", alt: { pt: "texto da loja" } }, { id: 12, src: "https://x/12.jpg", alt: {} }]);
-    await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
-    expect((await resumoRevisao(db, storeId)).altPendentes).toBe(2);
-    const { api, alts } = lojaAlt("objeto");
-    const r = await aplicarAltPendentes(db, api, { storeId, actor: "a@b.c", budgetMs: 10_000 });
-    expect(r).toMatchObject({ aplicados: 2, falhas: [], restantes: false });
-    expect([...alts.keys()].sort()).toEqual([10, 12]); // a 11 já tinha texto: fica
-    const espelho = await pg.query<{ a: string }>("SELECT jsonb_path_query_array(raw_json, '$.images[*].alt.pt')::text AS a FROM products WHERE id = 1");
-    expect(JSON.parse(espelho.rows[0]!.a)).toEqual(["Alt de Saia 1", "texto da loja", "Alt de Saia 3"]);
-    expect((await resumoRevisao(db, storeId)).altPendentes).toBe(0);
-    const log = await pg.query<{ acao: string; sucesso: boolean }>("SELECT acao, sucesso FROM audit_log ORDER BY id");
-    expect(log.rows).toEqual([{ acao: "imagem.alt", sucesso: true }, { acao: "imagem.alt", sucesso: true }]);
-    expect((await aplicarAltPendentes(db, api, { storeId, actor: "a@b.c", budgetMs: 10_000 })).aplicados).toBe(0);
-  });
-
-  it("descobre o formato: tenta objeto, confere, e usa lista se a loja só aceitar lista (e lembra)", async () => {
-    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }, { id: 11, src: "https://x/11.jpg" }]);
-    await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
-    const { api, chamadas } = lojaAlt("lista");
-    const r = await aplicarAltPendentes(db, api, { storeId, actor: "a@b.c", budgetMs: 10_000 });
-    expect(r.aplicados).toBe(2);
-    expect(chamadas).toEqual(["objeto", "lista", "lista"]); // 1ª foto: objeto (não pegou) e lista; 2ª: direto lista
-  });
-
-  it("aceita quando a loja só reflete o texto na segunda leitura (demora a gravar)", async () => {
-    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }]);
-    await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
-    let leituras = 0;
-    let gravado = "";
-    const esperas: number[] = [];
-    const api: AltApi = {
-      esperar: async (ms) => void esperas.push(ms),
-      async updateAlt(_p, id, alt) {
-        gravado = Array.isArray(alt) ? "" : alt.pt!; // grava, mas a resposta do PUT vem sem o alt
-        return { id, product_id: 1, src: "", alt: {} as never } as ProductImage;
-      },
-      async getImage(_p, id) {
-        leituras++;
-        return { id, product_id: 1, src: "", alt: (leituras >= 2 ? { pt: gravado } : {}) as never } as ProductImage;
-      },
-    };
-    const r = await aplicarAltPendentes(db, api, { storeId, actor: "a@b.c", budgetMs: 10_000 });
-    expect(r).toMatchObject({ aplicados: 1, falhas: [] });
-    expect(leituras).toBe(2);
-    expect(esperas).toEqual([700, 2500]);
-  });
-
-  it("se a loja não gravar de nenhum jeito, falha com mensagem e para cedo", async () => {
-    await produto(1, "Saia", Array.from({ length: 6 }, (_, n) => ({ id: 10 + n, src: `https://x/${n}.jpg` })));
-    await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
-    const { api } = lojaAlt("nenhum");
-    const r = await aplicarAltPendentes(db, api, { storeId, actor: "a@b.c", budgetMs: 10_000 });
-    expect(r.aplicados).toBe(0);
-    expect(r.falhas).toHaveLength(3);
-    expect(r.falhas[0]!.mensagem).toContain("não gravou");
-    const log = await pg.query<{ sucesso: boolean }>("SELECT sucesso FROM audit_log");
-    expect(log.rows.every((l) => !l.sucesso)).toBe(true);
-  });
-
-  it("texto editado por uma pessoa sobrescreve o da loja", async () => {
-    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg", alt: { pt: "antigo" } }]);
-    await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
-    const { api, alts } = lojaAlt("objeto");
-    await salvarAltEditado(db, api, { storeId, actor: "a@b.c", productId: 1, imageId: "10", texto: "  Saia midi   azul  " });
-    expect(alts.get(10)).toEqual({ pt: "Saia midi azul" });
-    const [linha] = (await pg.query<{ alt_pt: string; alt_editado: boolean; alt_aplicado: string }>("SELECT alt_pt, alt_editado, alt_aplicado FROM image_review")).rows;
-    expect(linha).toEqual({ alt_pt: "Saia midi azul", alt_editado: true, alt_aplicado: "Saia midi azul" });
-    await expect(salvarAltEditado(db, api, { storeId, actor: "a@b.c", productId: 1, imageId: "10", texto: "   " })).rejects.toThrow("vazio");
-    await expect(salvarAltEditado(db, api, { storeId, actor: "a@b.c", productId: 1, imageId: "999", texto: "x" })).rejects.toThrow("não está mais");
-  });
-});
-
-
-describe("diagnóstico do alt", () => {
-  it("mostra o que a loja devolve e para na primeira forma que grava", async () => {
-    const { diagnosticarAlt } = await import("@/lib/images/review-api");
-    const estado: { alt: unknown } = { alt: {} };
-    const chamadas: string[] = [];
-    const client = {
-      get: async () => ({ id: 1, alt: estado.alt }),
-      put: async (_p: string, corpo: { alt: unknown }) => {
-        chamadas.push(JSON.stringify(corpo));
-        if (Array.isArray(corpo.alt)) estado.alt = corpo.alt; // só a lista pega
-        return { id: 1, alt: estado.alt };
-      },
-    } as never;
-    vi.useFakeTimers();
-    const p = diagnosticarAlt(client, 1, 1, "Saia midi azul");
-    await vi.advanceTimersByTimeAsync(10_000);
-    const passos = await p;
-    vi.useRealTimers();
-    expect(chamadas).toEqual(['{"alt":{"pt":"Saia midi azul"}}', '{"alt":["Saia midi azul"]}']);
-    expect(passos.at(-1)).toEqual({ passo: "Conclusão", resultado: "o formato “PUT { alt: [texto] }” gravou o texto" });
-    expect(passos.some((p) => p.passo === "GET antes" && p.resultado === "alt = {}")).toBe(true);
   });
 });
