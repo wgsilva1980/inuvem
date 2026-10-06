@@ -20,13 +20,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Falta configurar a chave da API da Anthropic (variável ANTHROPIC_API_KEY na Vercel) e fazer um novo deploy." }, { status: 409 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { maxProdutos?: unknown; ignorar?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { maxProdutos?: unknown; ignorar?: unknown; publicados?: unknown; comEstoque?: unknown };
   const maxProdutos = Number.isInteger(body.maxProdutos) && (body.maxProdutos as number) > 0 ? Math.min(body.maxProdutos as number, 500) : undefined;
   const ignorar = Array.isArray(body.ignorar) ? body.ignorar.filter((s): s is string => typeof s === "string" && /^\d+$/.test(s)).slice(0, 2000) : [];
+  const filtro = { publicados: body.publicados === true, comEstoque: body.comEstoque === true };
   try {
     const db = { query };
-    const r = await gerarSeoPendentes(db, { storeId: store.id, budgetMs: 25_000, gerador: criarGeradorSeo(), maxProdutos, ignorar });
-    const resumo = await resumoSeo(db, store.id);
+    const r = await gerarSeoPendentes(db, { storeId: store.id, budgetMs: 25_000, gerador: criarGeradorSeo(), maxProdutos, ignorar, filtro });
+    const resumo = await resumoSeo(db, store.id, filtro);
     return Response.json({ ...r, geradasTotal: resumo.geradas, produtos: resumo.produtos });
   } catch (err) {
     if (err instanceof RevisaoConfigError) return Response.json({ error: err.message }, { status: 409 });

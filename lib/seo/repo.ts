@@ -7,6 +7,17 @@ import type { Db } from "@/lib/sync/repo";
 import type { ContextoSeo, GeradorSeo, SugestaoSeo } from "./generate";
 import { DESCRICAO_MAX, TITULO_MAX, textoDaDescricao } from "./text";
 
+/** Quais produtos entram: só os publicados na loja e/ou só os com estoque disponível (alguma variação sem controle de estoque ou com estoque > 0). */
+export interface FiltroSeo {
+  publicados: boolean;
+  comEstoque: boolean;
+}
+export const SEM_FILTRO: FiltroSeo = { publicados: false, comEstoque: false };
+
+/** Condição SQL do filtro sobre `p` (products); `a` e `b` são os números dos dois parâmetros booleanos. */
+const condicaoFiltro = (a: number, b: number) =>
+  `(NOT $${a}::boolean OR p.published) AND (NOT $${b}::boolean OR EXISTS (SELECT 1 FROM variants fv WHERE fv.store_id = p.store_id AND fv.product_id = p.id AND (NOT fv.stock_management OR coalesce(fv.stock, 0) > 0)))`;
+
 export interface ProdutoParaSeo extends ContextoSeo {
   product_id: string;
   /** Foto principal (a de menor posição), se houver. */
@@ -14,7 +25,7 @@ export interface ProdutoParaSeo extends ContextoSeo {
 }
 
 /** Produtos sem sugestão (ou com erro de mais de 10 min). `ignorar` = já tentados nesta rodada. */
-export async function produtosParaSeo(db: Db, storeId: string, limite: number, ignorar: string[] = []): Promise<ProdutoParaSeo[]> {
+export async function produtosParaSeo(db: Db, storeId: string, limite: number, ignorar: string[] = [], filtro: FiltroSeo = SEM_FILTRO): Promise<ProdutoParaSeo[]> {
   const rows = await db.query<{
     product_id: string; produto: string; descricao: string | null; seo_titulo: string; seo_descricao: string; categorias: string[]; variacoes: string[]; foto: string | null;
   }>(
@@ -29,9 +40,10 @@ export async function produtosParaSeo(db: Db, storeId: string, limite: number, i
      WHERE p.store_id = $1::uuid
        AND (s.product_id IS NULL OR (s.error IS NOT NULL AND s.generated_at < now() - interval '10 minutes'))
        AND NOT (p.id::text = ANY($3::text[]))
+       AND ${condicaoFiltro(4, 5)}
      ORDER BY p.id
      LIMIT $2`,
-    [storeId, limite, ignorar],
+    [storeId, limite, ignorar, filtro.publicados, filtro.comEstoque],
   );
   return rows.map((r) => ({
     product_id: r.product_id,
@@ -60,7 +72,7 @@ export async function gravarSeo(db: Db, storeId: string, productId: string, r: {
 /** Gera sugestões de SEO para os produtos pendentes até estourar o orçamento de tempo (ou `maxProdutos`), `concorrencia` por vez. */
 export async function gerarSeoPendentes(
   db: Db,
-  args: { storeId: string; budgetMs: number; gerador: GeradorSeo; baixar?: Baixador; concorrencia?: number; maxProdutos?: number; ignorar?: string[]; now?: () => number },
+  args: { storeId: string; budgetMs: number; gerador: GeradorSeo; baixar?: Baixador; concorrencia?: number; maxProdutos?: number; ignorar?: string[]; filtro?: FiltroSeo; now?: () => number },
 ): Promise<{ geradas: number; erros: number; restantes: boolean; tentados: string[] }> {
   const now = args.now ?? Date.now;
   const baixar = args.baixar ?? baixarFoto;
@@ -71,7 +83,7 @@ export async function gerarSeoPendentes(
   let erros = 0;
   while (now() - inicio < args.budgetMs && (args.maxProdutos === undefined || geradas + erros < args.maxProdutos)) {
     const faltam = args.maxProdutos === undefined ? concorrencia * 2 : Math.min(concorrencia * 2, args.maxProdutos - geradas - erros);
-    const lote = await produtosParaSeo(db, args.storeId, faltam, [...tentados]);
+    const lote = await produtosParaSeo(db, args.storeId, faltam, [...tentados], args.filtro);
     if (lote.length === 0) return { geradas, erros, restantes: false, tentados: [...tentados] };
     for (const p of lote) tentados.add(p.product_id);
     let proximo = 0;
@@ -99,7 +111,7 @@ export async function gerarSeoPendentes(
     );
     if (config) throw config;
   }
-  const restam = await produtosParaSeo(db, args.storeId, 1, [...tentados]);
+  const restam = await produtosParaSeo(db, args.storeId, 1, [...tentados], args.filtro);
   return { geradas, erros, restantes: restam.length > 0, tentados: [...tentados] };
 }
 
@@ -116,7 +128,7 @@ export interface ResumoSeo {
   saida: number;
 }
 
-export async function resumoSeo(db: Db, storeId: string): Promise<ResumoSeo> {
+export async function resumoSeo(db: Db, storeId: string, filtro: FiltroSeo = SEM_FILTRO): Promise<ResumoSeo> {
   const [r] = await db.query<{ produtos: string; geradas: string; erros: string; aplicadas: string; sem_seo: string; entrada: string; saida: string }>(
     `SELECT count(*)::text AS produtos,
             count(s.product_id) FILTER (WHERE s.error IS NULL)::text AS geradas,
@@ -125,8 +137,8 @@ export async function resumoSeo(db: Db, storeId: string): Promise<ResumoSeo> {
             count(*) FILTER (WHERE coalesce(p.raw_json->'seo_title'->>'pt', '') = '' OR coalesce(p.raw_json->'seo_description'->>'pt', '') = '')::text AS sem_seo,
             coalesce(sum(s.input_tokens), 0)::text AS entrada, coalesce(sum(s.output_tokens), 0)::text AS saida
      FROM products p LEFT JOIN seo_suggestion s ON s.store_id = p.store_id AND s.product_id = p.id
-     WHERE p.store_id = $1::uuid`,
-    [storeId],
+     WHERE p.store_id = $1::uuid AND ${condicaoFiltro(2, 3)}`,
+    [storeId, filtro.publicados, filtro.comEstoque],
   );
   return {
     produtos: Number(r?.produtos ?? 0),
@@ -155,7 +167,7 @@ export interface LinhaSeo {
   igual: boolean;
 }
 
-export async function listarSeo(db: Db, storeId: string): Promise<LinhaSeo[]> {
+export async function listarSeo(db: Db, storeId: string, filtro: FiltroSeo = SEM_FILTRO): Promise<LinhaSeo[]> {
   return db.query<LinhaSeo>(
     `SELECT p.id::text AS product_id, p.name AS produto,
             (SELECT i->>'src' FROM jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) WITH ORDINALITY AS t(i, n)
@@ -165,9 +177,9 @@ export async function listarSeo(db: Db, storeId: string): Promise<LinhaSeo[]> {
             (s.applied_at IS NOT NULL) AS aplicado,
             (s.title IS NOT NULL AND s.title = coalesce(p.raw_json->'seo_title'->>'pt', '') AND s.description = coalesce(p.raw_json->'seo_description'->>'pt', '')) AS igual
      FROM products p LEFT JOIN seo_suggestion s ON s.store_id = p.store_id AND s.product_id = p.id
-     WHERE p.store_id = $1::uuid
+     WHERE p.store_id = $1::uuid AND ${condicaoFiltro(2, 3)}
      ORDER BY lower(p.name), p.id`,
-    [storeId],
+    [storeId, filtro.publicados, filtro.comEstoque],
   );
 }
 
@@ -214,7 +226,7 @@ const mensagemDe = (err: unknown) => (err instanceof NuvemshopError ? err.userMe
 export async function aplicarSeoPendentes(
   db: Db,
   api: ProductApi,
-  args: { storeId: string; actor: string; budgetMs: number; modo: ModoAplicar; ignorar?: string[]; now?: () => number },
+  args: { storeId: string; actor: string; budgetMs: number; modo: ModoAplicar; ignorar?: string[]; filtro?: FiltroSeo; now?: () => number },
 ): Promise<{ aplicados: number; falhas: Array<{ productId: string; produto: string; mensagem: string }>; restantes: boolean }> {
   const now = args.now ?? Date.now;
   const inicio = now();
@@ -227,8 +239,9 @@ export async function aplicarSeoPendentes(
        WHERE s.store_id = $1::uuid AND s.error IS NULL AND s.title IS NOT NULL AND s.description IS NOT NULL AND s.applied_at IS NULL
          AND ($2 = 'todos' OR (coalesce(p.raw_json->'seo_title'->>'pt', '') = '' AND coalesce(p.raw_json->'seo_description'->>'pt', '') = ''))
          AND NOT (s.product_id::text = ANY($3::text[]))
+         AND ${condicaoFiltro(4, 5)}
        ORDER BY s.product_id LIMIT 1`,
-      [args.storeId, args.modo, [...ignorar]],
+      [args.storeId, args.modo, [...ignorar], args.filtro?.publicados ?? false, args.filtro?.comEstoque ?? false],
     );
     if (!prox) return out;
     if (now() - inicio >= args.budgetMs) return { ...out, restantes: true };
@@ -244,13 +257,13 @@ export async function aplicarSeoPendentes(
 }
 
 /** Quantos produtos cada modo de aplicação atingiria agora (para o texto do botão e da confirmação). */
-export async function contarParaAplicar(db: Db, storeId: string): Promise<{ vazios: number; todos: number }> {
+export async function contarParaAplicar(db: Db, storeId: string, filtro: FiltroSeo = SEM_FILTRO): Promise<{ vazios: number; todos: number }> {
   const [r] = await db.query<{ vazios: string; todos: string }>(
     `SELECT count(*) FILTER (WHERE coalesce(p.raw_json->'seo_title'->>'pt', '') = '' AND coalesce(p.raw_json->'seo_description'->>'pt', '') = '')::text AS vazios,
             count(*)::text AS todos
      FROM seo_suggestion s JOIN products p ON p.store_id = s.store_id AND p.id = s.product_id
-     WHERE s.store_id = $1::uuid AND s.error IS NULL AND s.title IS NOT NULL AND s.description IS NOT NULL AND s.applied_at IS NULL`,
-    [storeId],
+     WHERE s.store_id = $1::uuid AND s.error IS NULL AND s.title IS NOT NULL AND s.description IS NOT NULL AND s.applied_at IS NULL AND ${condicaoFiltro(2, 3)}`,
+    [storeId, filtro.publicados, filtro.comEstoque],
   );
   return { vazios: Number(r?.vazios ?? 0), todos: Number(r?.todos ?? 0) };
 }
