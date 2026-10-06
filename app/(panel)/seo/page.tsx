@@ -10,6 +10,7 @@ import { contarParaAplicar, listarSeo, resumoSeo, type LinhaSeo } from "@/lib/se
 import { getActiveStore } from "@/lib/stores";
 import { ApplyRunner, GenerateRunner } from "./runners";
 import { SeoEditor } from "./seo-editor";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 const POR_PAGINA = 15;
@@ -35,22 +36,26 @@ function filtrar(linhas: LinhaSeo[], filtro: Filtro): LinhaSeo[] {
   }
 }
 
-export default async function SeoPage({ searchParams }: { searchParams: Promise<{ filtro?: string; page?: string }> }) {
+export default async function SeoPage({ searchParams }: { searchParams: Promise<{ filtro?: string; page?: string; f?: string; publicados?: string; estoque?: string }> }) {
   await requireAdmin();
   const sp = await searchParams;
   const store = await getActiveStore();
   const filtro = (FILTROS.map((f) => f[0]) as string[]).includes(sp.filtro ?? "") ? (sp.filtro as Filtro) : "revisar";
   const configurado = Boolean(process.env.ANTHROPIC_API_KEY);
+  // Sem o formulário enviado (f=1), o padrão é só produtos publicados na loja; as caixas marcadas vêm de publicados=1 e estoque=1.
+  const publicados = sp.f === "1" ? sp.publicados === "1" : true;
+  const comEstoque = sp.f === "1" ? sp.estoque === "1" : false;
+  const filtroProdutos = { publicados, comEstoque };
 
   const db = { query };
-  const resumo = store ? await resumoSeo(db, store.id) : null;
-  const contagem = store ? await contarParaAplicar(db, store.id) : { vazios: 0, todos: 0 };
-  const linhas = store ? await listarSeo(db, store.id) : [];
+  const resumo = store ? await resumoSeo(db, store.id, filtroProdutos) : null;
+  const contagem = store ? await contarParaAplicar(db, store.id, filtroProdutos) : { vazios: 0, todos: 0 };
+  const linhas = store ? await listarSeo(db, store.id, filtroProdutos) : [];
   const lista = filtrar(linhas, filtro);
   const pages = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const page = Math.min(Math.max(1, Number(sp.page) || 1), pages);
   const visiveis = lista.slice((page - 1) * POR_PAGINA, page * POR_PAGINA);
-  const href = (f: Filtro, p = 1) => `/seo?filtro=${f}${p > 1 ? `&page=${p}` : ""}`;
+  const href = (f: Filtro, p = 1) => `/seo?filtro=${f}&f=1&publicados=${publicados ? 1 : 0}&estoque=${comEstoque ? 1 : 0}${p > 1 ? `&page=${p}` : ""}`;
   const custo = resumo ? estimarCustoUsd(resumo.entrada, resumo.saida) : 0;
 
   return (
@@ -71,13 +76,35 @@ export default async function SeoPage({ searchParams }: { searchParams: Promise<
         </Card>
       )}
 
+      <Card className="flex flex-col gap-2">
+        <h2 className="text-base font-semibold">Quais produtos</h2>
+        <form method="get" action="/seo" className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <input type="hidden" name="f" value="1" />
+          <input type="hidden" name="filtro" value={filtro} />
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="publicados" value="1" defaultChecked={publicados} className="h-4 w-4" />
+            Só publicados na loja
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="estoque" value="1" defaultChecked={comEstoque} className="h-4 w-4" />
+            Só com estoque disponível
+          </label>
+          <Button type="submit" variant="outline">
+            Filtrar
+          </Button>
+        </form>
+        <p className="text-xs text-muted">
+          O filtro vale para gerar o SEO, para a lista abaixo e para gravar na loja: produtos fora dele não são gerados nem alterados. “Com estoque” = alguma variação sem controle de estoque ou com estoque maior que zero.
+        </p>
+      </Card>
+
       {resumo && (
         <>
           <Card className="flex flex-col gap-3">
             <p className="text-sm">
               {resumo.geradas} de {resumo.produtos} produtos com SEO gerado{resumo.comErro ? ` (${resumo.comErro} com erro, serão tentados de novo)` : ""}; {resumo.aplicadas} já gravados na loja; {resumo.semSeo} produtos estão hoje sem título ou sem descrição de SEO. Modelo: {MODELO_REVISAO}. Uso até agora: {resumo.entrada.toLocaleString("pt-BR")} tokens de entrada e {resumo.saida.toLocaleString("pt-BR")} de saída (custo estimado de US$ {custo.toFixed(2)}).
             </p>
-            <GenerateRunner produtos={resumo.produtos} geradas={resumo.geradas} />
+            <GenerateRunner produtos={resumo.produtos} geradas={resumo.geradas} publicados={publicados} comEstoque={comEstoque} />
           </Card>
 
           <Card className="flex flex-col gap-2">
@@ -85,7 +112,7 @@ export default async function SeoPage({ searchParams }: { searchParams: Promise<
             <p className="text-sm">
               Envia o SEO sugerido (do jeito que está nesta tela, inclusive o que você editou e gravou) aos produtos ainda não gravados. “Nos que estão sem SEO” não mexe em quem já tem título ou descrição; “em todos” substitui o que existe. Cada produto vai para o Histórico com o texto antigo.
             </p>
-            <ApplyRunner vazios={contagem.vazios} todos={contagem.todos} />
+            <ApplyRunner vazios={contagem.vazios} todos={contagem.todos} publicados={publicados} comEstoque={comEstoque} />
           </Card>
         </>
       )}

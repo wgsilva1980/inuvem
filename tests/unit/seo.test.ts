@@ -284,3 +284,48 @@ describe("gravar na loja", () => {
     expect(r.aplicados).toBeLessThan(4);
   });
 });
+
+
+describe("filtro de produtos (publicados e com estoque)", () => {
+  const variante = (id: number, over: Record<string, unknown>) => [{ id: id * 10, product_id: id, price: "10.00", stock_management: false, values: [{ pt: "Azul" }], ...over }];
+  const catalogo = () => [
+    produto(1, "Publicado com estoque", { variants: variante(1, { stock_management: true, stock: 3 }) as never }),
+    produto(2, "Publicado estoque ilimitado", { variants: variante(2, { stock_management: false }) as never }),
+    produto(3, "Publicado sem estoque", { variants: variante(3, { stock_management: true, stock: 0 }) as never }),
+    produto(4, "Rascunho com estoque", { published: false, variants: variante(4, { stock_management: true, stock: 5 }) as never }),
+  ];
+  const nomes = async (f: { publicados: boolean; comEstoque: boolean }) => (await produtosParaSeo(db, storeId, 10, [], f)).map((p) => p.produto).sort();
+
+  it("sem filtro entram todos; só publicados tira o rascunho; com estoque tira os esgotados", async () => {
+    await upsertProducts(db, storeId, catalogo());
+    expect(await nomes({ publicados: false, comEstoque: false })).toHaveLength(4);
+    expect(await nomes({ publicados: true, comEstoque: false })).toEqual(["Publicado com estoque", "Publicado estoque ilimitado", "Publicado sem estoque"]);
+    expect(await nomes({ publicados: false, comEstoque: true })).toEqual(["Publicado com estoque", "Publicado estoque ilimitado", "Rascunho com estoque"]);
+    expect(await nomes({ publicados: true, comEstoque: true })).toEqual(["Publicado com estoque", "Publicado estoque ilimitado"]);
+  });
+
+  it("gerar só gera para quem passa no filtro; os outros não são tocados", async () => {
+    await upsertProducts(db, storeId, catalogo());
+    const filtro = { publicados: true, comEstoque: true };
+    const r = await gerarSeoPendentes(db, { storeId, budgetMs: 10_000, gerador, baixar, filtro });
+    expect(r).toMatchObject({ geradas: 2, restantes: false });
+    expect(gerador.chamadas.map((c) => c.produto).sort()).toEqual(["Publicado com estoque", "Publicado estoque ilimitado"]);
+    expect((await pg.query("SELECT count(*)::int AS n FROM seo_suggestion")).rows[0]).toEqual({ n: 2 });
+    expect(await resumoSeo(db, storeId, filtro)).toMatchObject({ produtos: 2, geradas: 2 });
+    expect(await resumoSeo(db, storeId)).toMatchObject({ produtos: 4, geradas: 2 }); // sem filtro, ainda faltam 2
+    expect((await listarSeo(db, storeId, filtro)).map((l) => l.produto)).toEqual(["Publicado com estoque", "Publicado estoque ilimitado"]);
+  });
+
+  it("gravar na loja respeita o filtro, mesmo que a sugestão exista para outros produtos", async () => {
+    const produtos = catalogo();
+    await upsertProducts(db, storeId, produtos);
+    await gerarSeoPendentes(db, { storeId, budgetMs: 10_000, gerador, baixar }); // gera para os 4
+    const l = loja(produtos);
+    const filtro = { publicados: true, comEstoque: false };
+    expect(await contarParaAplicar(db, storeId, filtro)).toEqual({ vazios: 3, todos: 3 });
+    const r = await aplicarSeoPendentes(db, l.api, { storeId, actor: "a@b.c", budgetMs: 10_000, modo: "vazios", filtro });
+    expect(r.aplicados).toBe(3);
+    expect(l.puts.map((x) => x.id).sort()).toEqual([1, 2, 3]); // o rascunho (4) ficou de fora
+    expect(await contarParaAplicar(db, storeId)).toEqual({ vazios: 1, todos: 1 });
+  });
+});

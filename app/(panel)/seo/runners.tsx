@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 /** Gera as sugestões de SEO com o Claude em passos (retomável). `maxProdutos` limita a rodada (para testar com poucos). */
-export function GenerateRunner({ produtos, geradas }: { produtos: number; geradas: number }) {
+export function GenerateRunner({ produtos, geradas, publicados, comEstoque }: { produtos: number; geradas: number; publicados: boolean; comEstoque: boolean }) {
   const router = useRouter();
   const [rodando, setRodando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export function GenerateRunner({ produtos, geradas }: { produtos: number; gerada
       for (let i = 0; i < 2000; i++) {
         const restante = maxProdutos ? maxProdutos - total - falhas : undefined;
         if (restante !== undefined && restante <= 0) break;
-        const res = await fetch("/api/seo/step", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxProdutos: restante, ignorar: tentados }) });
+        const res = await fetch("/api/seo/step", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxProdutos: restante, ignorar: tentados, publicados, comEstoque }) });
         const data = (await res.json()) as { error?: string; geradas?: number; erros?: number; restantes?: boolean; tentados?: string[] };
         if (!res.ok || data.error) throw new Error(data.error ?? "Falha ao gerar o SEO.");
         total += data.geradas ?? 0;
@@ -63,7 +63,7 @@ export function GenerateRunner({ produtos, geradas }: { produtos: number; gerada
 }
 
 /** Envia as sugestões à loja em passos (retomável). */
-export function ApplyRunner({ vazios, todos }: { vazios: number; todos: number }) {
+export function ApplyRunner({ vazios, todos, publicados, comEstoque }: { vazios: number; todos: number; publicados: boolean; comEstoque: boolean }) {
   const router = useRouter();
   const [rodando, setRodando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export function ApplyRunner({ vazios, todos }: { vazios: number; todos: number }
     const ignorar: string[] = [];
     try {
       for (let i = 0; i < 2000; i++) {
-        const res = await fetch("/api/seo/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ modo, ignorar }) });
+        const res = await fetch("/api/seo/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ modo, ignorar, publicados, comEstoque }) });
         const data = (await res.json()) as { error?: string; aplicados?: number; falhas?: Array<{ productId: string; produto: string; mensagem: string }>; restantes?: boolean };
         if (!res.ok || data.error) throw new Error(data.error ?? "Falha ao enviar o SEO.");
         aplicados += data.aplicados ?? 0;

@@ -16,18 +16,19 @@ export async function POST(request: Request) {
   const store = await getActiveStore();
   if (!store) return Response.json({ error: "Nenhuma loja conectada." }, { status: 409 });
 
-  const body = (await request.json().catch(() => ({}))) as { modo?: unknown; ignorar?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { modo?: unknown; ignorar?: unknown; publicados?: unknown; comEstoque?: unknown };
   const modo = body.modo === "todos" ? "todos" : "vazios";
   const ignorar = Array.isArray(body.ignorar) ? body.ignorar.filter((s): s is string => typeof s === "string" && /^\d+$/.test(s)).slice(0, 2000) : [];
+  const filtro = { publicados: body.publicados === true, comEstoque: body.comEstoque === true };
   try {
     const client = await clientForStore(store);
     const db = { query };
     const r = await aplicarSeoPendentes(
       db,
       { get: (id) => getProduct(client, id), put: (id, input) => updateProduct(client, id, input) },
-      { storeId: store.id, actor: admin.email, budgetMs: 25_000, modo, ignorar },
+      { storeId: store.id, actor: admin.email, budgetMs: 25_000, modo, ignorar, filtro },
     );
-    return Response.json({ ...r, ...(await contarParaAplicar(db, store.id)) });
+    return Response.json({ ...r, ...(await contarParaAplicar(db, store.id, filtro)) });
   } catch (err) {
     if (err instanceof NuvemshopError) return Response.json({ error: err.userMessage }, { status: 502 });
     console.error(JSON.stringify({ level: "error", event: "seo.apply.failed", message: err instanceof Error ? err.message : String(err) }));
