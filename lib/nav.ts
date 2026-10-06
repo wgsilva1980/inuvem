@@ -4,6 +4,7 @@ export const NAV_LINKS = [
   { href: "/categorias", label: "Categorias" },
   { href: "/contatos", label: "Contatos" },
   { href: "/imagens", label: "Imagens" },
+  { href: "/seo", label: "SEO" },
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
   { href: "/usuarios", label: "Usuários" },

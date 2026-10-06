@@ -86,6 +86,18 @@ export function clienteAnthropic(env: Record<string, string | undefined> = proce
 }
 
 /** Revisor real: manda a foto (JPEG reduzido) ao Claude e pede a resposta em JSON. */
+/** Erros que não adianta tentar de novo foto a foto (chave inválida, sem crédito, sem workspace): viram erro de configuração com orientação. */
+export function erroDeConfig(err: unknown): RevisaoConfigError | null {
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return new RevisaoConfigError("A chave da API da Anthropic (ANTHROPIC_API_KEY) é inválida ou não tem permissão.");
+  }
+  if (err instanceof Anthropic.BadRequestError && /credit|balance/i.test(err.message)) return new RevisaoConfigError("A conta da Anthropic está sem crédito.");
+  if (err instanceof Anthropic.BadRequestError && /workspace/i.test(err.message)) {
+    return new RevisaoConfigError("A chave da Anthropic não está ligada a um workspace. Cadastre também a variável ANTHROPIC_WORKSPACE_ID (o ID do workspace) na Vercel e faça um novo deploy, ou crie a chave dentro de um workspace.");
+  }
+  return null;
+}
+
 /** O texto fala da modelo (e não da peça)? Palavras que não devem aparecer no alt. */
 export const MENCIONA_MODELO = /\b(modelo|mulher|mo[çc]a|garota|pessoa|veste|vestindo|vestida|usando|usa)\b/i;
 
@@ -129,16 +141,7 @@ async function revisarUmaVez(client: Anthropic, imagem: { bytes: Buffer; mediaTy
       ],
     });
   } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-      throw new RevisaoConfigError("A chave da API da Anthropic (ANTHROPIC_API_KEY) é inválida ou não tem permissão.");
-    }
-    if (err instanceof Anthropic.BadRequestError && /credit|balance/i.test(err.message)) {
-      throw new RevisaoConfigError("A conta da Anthropic está sem crédito.");
-    }
-    if (err instanceof Anthropic.BadRequestError && /workspace/i.test(err.message)) {
-      throw new RevisaoConfigError("A chave da Anthropic não está ligada a um workspace. Cadastre também a variável ANTHROPIC_WORKSPACE_ID (o ID do workspace) na Vercel e faça um novo deploy, ou crie a chave dentro de um workspace.");
-    }
-    throw err;
+    throw erroDeConfig(err) ?? err;
   }
   if (res.stop_reason === "refusal") throw new Error("o Claude recusou analisar esta foto");
   const texto = res.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")?.text;
@@ -158,7 +161,7 @@ async function revisarUmaVez(client: Anthropic, imagem: { bytes: Buffer; mediaTy
 
 export type Baixador = (url: string) => Promise<Buffer>;
 
-const baixarPadrao: Baixador = async (url) => {
+export const baixarFoto: Baixador = async (url) => {
   if (!/^https:\/\//i.test(url)) throw new Error("endereço da foto não é https");
   const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new Error(`a loja respondeu ${res.status} ao baixar a foto`);
@@ -317,7 +320,7 @@ export async function revisarPendentes(
   args: { storeId: string; budgetMs: number; revisor: Revisor; baixar?: Baixador; concorrencia?: number; maxFotos?: number; ignorar?: string[]; now?: () => number },
 ): Promise<{ revisadas: number; erros: number; restantes: boolean; tentadas: string[] }> {
   const now = args.now ?? Date.now;
-  const baixar = args.baixar ?? baixarPadrao;
+  const baixar = args.baixar ?? baixarFoto;
   const concorrencia = args.concorrencia ?? 4;
   const inicio = now();
   const tentadas = new Set(args.ignorar ?? []);
