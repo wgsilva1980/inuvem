@@ -313,7 +313,11 @@ export async function revisarPendentes(
 export interface AltApi {
   updateAlt(productId: number, imageId: number, alt: Record<string, string> | string[]): Promise<ProductImage>;
   getImage(productId: number, imageId: number): Promise<ProductImage>;
+  /** Pausa entre o envio e a leitura de conferência (a loja pode demorar a refletir). Injetável nos testes. */
+  esperar?: (ms: number) => Promise<void>;
 }
+
+const pausa = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** O alt em português que a loja devolve (aceita as duas formas: objeto por idioma ou lista). */
 export function altDaImagem(img: Pick<ProductImage, "alt">): string {
@@ -328,14 +332,23 @@ let formaAlt: "objeto" | "lista" | null = null;
 
 /** Grava o alt na loja. Na primeira vez confere lendo de volta; tenta o formato de objeto por idioma e, se não pegar, o de lista. */
 export async function enviarAlt(api: AltApi, productId: number, imageId: number, texto: string): Promise<void> {
+  const esperar = api.esperar ?? pausa;
   const tentativas = formaAlt ? [formaAlt] : (["objeto", "lista"] as const);
   for (const forma of tentativas) {
     const r = await api.updateAlt(productId, imageId, forma === "objeto" ? { pt: texto } : [texto]);
     if (formaAlt === forma) return; // já comprovado antes
-    const lida = await api.getImage(productId, imageId).catch(() => r);
-    if (altDaImagem(lida) === texto) {
+    if (altDaImagem(r) === texto) {
       formaAlt = forma;
       return;
+    }
+    // a resposta do PUT não trouxe o texto: confere lendo a foto (duas vezes, com uma pausa, caso a loja demore a refletir)
+    for (const espera of [700, 2500]) {
+      await esperar(espera);
+      const lida = await api.getImage(productId, imageId).catch(() => null);
+      if (lida && altDaImagem(lida) === texto) {
+        formaAlt = forma;
+        return;
+      }
     }
   }
   throw new Error("a loja não gravou o texto alternativo (conferi lendo de volta)");
