@@ -20,5 +20,5 @@ export const updateImage = async (
   c: NuvemshopClient,
   productId: number,
   imageId: number,
-  input: { position?: number; src?: string; alt?: Record<string, string> | string[] },
+  input: { position?: number; src?: string },
 ): Promise<ProductImage> => imageSchema.parse(await c.put(`/products/${productId}/images/${imageId}`, input));
