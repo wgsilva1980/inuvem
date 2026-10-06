@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -229,6 +229,7 @@ function lojaAlt(aceita: "objeto" | "lista" | "nenhum") {
   const alts = new Map<number, unknown>();
   const chamadas: string[] = [];
   const api: AltApi = {
+    esperar: async () => {},
     async updateAlt(_p, id, alt) {
       chamadas.push(Array.isArray(alt) ? "lista" : "objeto");
       if (aceita === "objeto" && !Array.isArray(alt)) alts.set(id, alt);
@@ -274,6 +275,29 @@ describe("texto alternativo na loja", () => {
     expect(chamadas).toEqual(["objeto", "lista", "lista"]); // 1ª foto: objeto (não pegou) e lista; 2ª: direto lista
   });
 
+  it("aceita quando a loja só reflete o texto na segunda leitura (demora a gravar)", async () => {
+    await produto(1, "Saia", [{ id: 10, src: "https://x/10.jpg" }]);
+    await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
+    let leituras = 0;
+    let gravado = "";
+    const esperas: number[] = [];
+    const api: AltApi = {
+      esperar: async (ms) => void esperas.push(ms),
+      async updateAlt(_p, id, alt) {
+        gravado = Array.isArray(alt) ? "" : alt.pt!; // grava, mas a resposta do PUT vem sem o alt
+        return { id, product_id: 1, src: "", alt: {} as never } as ProductImage;
+      },
+      async getImage(_p, id) {
+        leituras++;
+        return { id, product_id: 1, src: "", alt: (leituras >= 2 ? { pt: gravado } : {}) as never } as ProductImage;
+      },
+    };
+    const r = await aplicarAltPendentes(db, api, { storeId, actor: "a@b.c", budgetMs: 10_000 });
+    expect(r).toMatchObject({ aplicados: 1, falhas: [] });
+    expect(leituras).toBe(2);
+    expect(esperas).toEqual([700, 2500]);
+  });
+
   it("se a loja não gravar de nenhum jeito, falha com mensagem e para cedo", async () => {
     await produto(1, "Saia", Array.from({ length: 6 }, (_, n) => ({ id: 10 + n, src: `https://x/${n}.jpg` })));
     await revisarPendentes(db, { storeId, budgetMs: 10_000, revisor: revisorOk, baixar });
@@ -296,5 +320,30 @@ describe("texto alternativo na loja", () => {
     expect(linha).toEqual({ alt_pt: "Saia midi azul", alt_editado: true, alt_aplicado: "Saia midi azul" });
     await expect(salvarAltEditado(db, api, { storeId, actor: "a@b.c", productId: 1, imageId: "10", texto: "   " })).rejects.toThrow("vazio");
     await expect(salvarAltEditado(db, api, { storeId, actor: "a@b.c", productId: 1, imageId: "999", texto: "x" })).rejects.toThrow("não está mais");
+  });
+});
+
+
+describe("diagnóstico do alt", () => {
+  it("mostra o que a loja devolve e para na primeira forma que grava", async () => {
+    const { diagnosticarAlt } = await import("@/lib/images/review-api");
+    const estado: { alt: unknown } = { alt: {} };
+    const chamadas: string[] = [];
+    const client = {
+      get: async () => ({ id: 1, alt: estado.alt }),
+      put: async (_p: string, corpo: { alt: unknown }) => {
+        chamadas.push(JSON.stringify(corpo));
+        if (Array.isArray(corpo.alt)) estado.alt = corpo.alt; // só a lista pega
+        return { id: 1, alt: estado.alt };
+      },
+    } as never;
+    vi.useFakeTimers();
+    const p = diagnosticarAlt(client, 1, 1, "Saia midi azul");
+    await vi.advanceTimersByTimeAsync(10_000);
+    const passos = await p;
+    vi.useRealTimers();
+    expect(chamadas).toEqual(['{"alt":{"pt":"Saia midi azul"}}', '{"alt":["Saia midi azul"]}']);
+    expect(passos.at(-1)).toEqual({ passo: "Conclusão", resultado: "o formato “PUT { alt: [texto] }” gravou o texto" });
+    expect(passos.some((p) => p.passo === "GET antes" && p.resultado === "alt = {}")).toBe(true);
   });
 });
