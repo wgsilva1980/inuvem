@@ -7,6 +7,7 @@ export const NAV_LINKS = [
   { href: "/seo", label: "SEO" },
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
+  { href: "/automacoes", label: "Automações" },
   { href: "/usuarios", label: "Usuários" },
 ] as const;
 
