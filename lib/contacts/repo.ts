@@ -58,8 +58,8 @@ export interface ContactListItem {
   active: boolean;
 }
 
-/** Lista com busca (nome, fantasia, e-mail, telefone, CPF/CNPJ), tipo e situação, paginada. */
-export async function listContacts(db: Db, storeId: string, f: ContactFilters): Promise<{ items: ContactListItem[]; total: number; page: number; pages: number }> {
+/** WHERE (e parâmetros) dos filtros de contatos: busca (nome, fantasia, e-mail, telefone, CPF/CNPJ, cidade), tipo e situação. */
+export function buildContactsWhere(storeId: string, f: ContactFilters): { clause: string; params: unknown[] } {
   const where = ["store_id = $1::uuid"];
   const params: unknown[] = [storeId];
   const add = (v: unknown) => {
@@ -78,8 +78,12 @@ export async function listContacts(db: Db, storeId: string, f: ContactFilters): 
   else if (f.kind) where.push(`kind = ${add(f.kind)}`);
   if (f.status === "ativos") where.push("active");
   else if (f.status === "inativos") where.push("NOT active");
+  return { clause: where.join(" AND "), params };
+}
 
-  const clause = where.join(" AND ");
+/** Lista com busca (nome, fantasia, e-mail, telefone, CPF/CNPJ), tipo e situação, paginada. */
+export async function listContacts(db: Db, storeId: string, f: ContactFilters): Promise<{ items: ContactListItem[]; total: number; page: number; pages: number }> {
+  const { clause, params } = buildContactsWhere(storeId, f);
   const total = Number((await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM contacts WHERE ${clause}`, params))[0]?.n ?? 0);
   const pages = Math.max(1, Math.ceil(total / CONTACTS_PAGE_SIZE));
   const page = Math.min(Math.max(1, f.page ?? 1), pages);
@@ -89,6 +93,13 @@ export async function listContacts(db: Db, storeId: string, f: ContactFilters): 
     params,
   );
   return { items, total, page, pages };
+}
+
+/** Todos os contatos que casam com os filtros (sem paginação), no limite pedido, para exportar. */
+export async function listContactsForExport(db: Db, storeId: string, f: ContactFilters, limit: number): Promise<{ items: Contact[]; truncated: boolean }> {
+  const { clause, params } = buildContactsWhere(storeId, f);
+  const rows = await db.query<Contact>(`SELECT ${COLUMNS} FROM contacts WHERE ${clause} ORDER BY lower(name), id LIMIT ${limit + 1}`, params);
+  return { items: rows.slice(0, limit), truncated: rows.length > limit };
 }
 
 export async function getContact(db: Db, storeId: string, id: number): Promise<Contact | null> {

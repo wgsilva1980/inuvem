@@ -47,6 +47,12 @@ export default async function ContatosPage({ searchParams }: { searchParams: Pro
     return qs ? `/contatos?${qs}` : "/contatos";
   };
 
+  const exportParams = new URLSearchParams();
+  if (sp.q) exportParams.set("q", sp.q);
+  if (kind) exportParams.set("tipo", kind);
+  if (sp.situacao !== "ativos") exportParams.set("situacao", sp.situacao);
+  const exportHref = `/api/contatos/exportar${exportParams.size ? `?${exportParams}` : ""}`;
+
   return (
     <main className="flex flex-col gap-4 pb-20">
       <div className="flex items-end justify-between gap-3">
@@ -56,9 +62,14 @@ export default async function ContatosPage({ searchParams }: { searchParams: Pro
             {result.total} {result.total === 1 ? "contato" : "contatos"} · clientes e fornecedores
           </p>
         </div>
-        <Link href="/contatos/novo" className={buttonClass("primary")}>
-          Novo contato
-        </Link>
+        <div className="flex gap-2">
+          <a href={exportHref} className={buttonClass("outline")} download>
+            Exportar Excel
+          </a>
+          <Link href="/contatos/novo" className={buttonClass("primary")}>
+            Novo contato
+          </Link>
+        </div>
       </div>
       {sp.excluido === "1" && <Alert tone="success">Contato excluído.</Alert>}
 
