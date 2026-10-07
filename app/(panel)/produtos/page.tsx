@@ -39,6 +39,10 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
     return qs ? `/produtos?${qs}` : "/produtos";
   };
 
+  const exportParams = new URLSearchParams(filtersQueryString(sp));
+  if (sp.ordem && sp.ordem !== "nome") exportParams.set("ordem", sp.ordem);
+  const exportHref = `/api/produtos/exportar${exportParams.size ? `?${exportParams}` : ""}`;
+
   return (
     <main className="flex flex-col gap-4 pb-20">
       <div className="flex items-end justify-between gap-3">
@@ -46,9 +50,14 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
           <h1 className="text-xl font-semibold">Produtos</h1>
           <p className="text-sm text-muted">{result.total} {result.total === 1 ? "produto" : "produtos"}</p>
         </div>
-        <Link href="/produtos/novo" className={buttonClass("primary")}>
-          Novo produto
-        </Link>
+        <div className="flex gap-2">
+          <a href={exportHref} className={buttonClass("outline")} download>
+            Exportar Excel
+          </a>
+          <Link href="/produtos/novo" className={buttonClass("primary")}>
+            Novo produto
+          </Link>
+        </div>
       </div>
       {excluido && <Alert tone="success">Produto excluído da Nuvemshop.</Alert>}
 
