@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_LINKS, isActive } from "@/lib/nav";
+import { ADMIN_LINKS, NAV_LINKS, isActive } from "@/lib/nav";
 
 describe("navegação principal", () => {
   it("ativa o link da própria página e de subpáginas", () => {
@@ -15,7 +15,11 @@ describe("navegação principal", () => {
   });
 
   it("todo link do menu aponta para uma rota única", () => {
-    const hrefs = NAV_LINKS.map((l) => l.href);
+    const hrefs = [...NAV_LINKS, ...ADMIN_LINKS].map((l) => l.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it("agrupa as páginas administrativas no submenu", () => {
+    expect(ADMIN_LINKS.map((l) => l.label)).toEqual(["Imagens", "SEO", "Lotes", "Histórico", "Automações", "Usuários"]);
   });
 });
