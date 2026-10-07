@@ -3,6 +3,7 @@ import { z } from "zod";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Category, Product } from "@/lib/nuvemshop/types";
 import { verifyWebhookSignature } from "@/lib/nuvemshop/webhook-verify";
+import { aplicarRegraSemEstoque } from "@/lib/automations/out-of-stock";
 import { removeCategoryFromMirror, upsertCategories, upsertProducts, type Db } from "@/lib/sync/repo";
 
 /** Eventos que o painel assina na Nuvemshop (produtos e categorias). */
@@ -29,6 +30,8 @@ const payloadSchema = z
 export interface ResourceApi {
   getProduct(id: number): Promise<Product>;
   getCategory(id: number): Promise<Category>;
+  /** Publica ou despublica o produto na loja (usado pela regra “sem estoque”); opcional para quem só lê. */
+  setPublished?(id: number, published: boolean): Promise<Product>;
 }
 
 export interface StoreRef {
@@ -81,12 +84,20 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
     case "product/created":
     case "product/updated": {
       const api = await deps.apiFor(store);
+      let produto: Product;
       try {
-        await upsertProducts(db, storeId, [await api.getProduct(id)]);
+        produto = await api.getProduct(id);
+        await upsertProducts(db, storeId, [produto]);
       } catch (err) {
         if (isNotFound(err)) return removeProduct(db, storeId, id); // apagado logo depois do evento
         throw err;
       }
+      // Regra opcional: todas as variações sem estoque -> despublica. Uma falha aqui não derruba o webhook (fica no Histórico).
+      const regra = await aplicarRegraSemEstoque(db, { storeId, produto, setPublished: api.setPublished?.bind(api) }).catch((err) => {
+        deps.log?.({ event: "webhook.regra_sem_estoque_falhou", message: err instanceof Error ? err.message : String(err) });
+        return "falhou" as const;
+      });
+      if (regra === "despublicado") deps.log?.({ event: "webhook.produto_despublicado_sem_estoque", product: id });
       return;
     }
     case "category/created":
