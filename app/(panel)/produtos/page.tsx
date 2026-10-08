@@ -5,6 +5,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { ProductList } from "./product-list";
 import { buttonClass } from "@/components/ui/button";
 import { activeFilters, catalogParamsSchema, filtersQueryString, paramsToFilters } from "@/lib/catalog/params";
+import { contarRascunhos } from "@/lib/catalog/drafts";
 import { listCatalog, listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
@@ -27,7 +28,7 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
   const sp = catalogParamsSchema.parse(raw);
   const filters = paramsToFilters(sp);
   const db = { query };
-  const [result, categories] = await Promise.all([listCatalog(db, store.id, filters), listCategoryOptions(db, store.id)]);
+  const [result, categories, rascunhos] = await Promise.all([listCatalog(db, store.id, filters), listCategoryOptions(db, store.id), contarRascunhos(db, store.id)]);
 
   const chips = activeFilters(sp, (id) => categories.find((c) => c.id === id)?.name);
 
@@ -50,7 +51,10 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
           <h1 className="text-xl font-semibold">Produtos</h1>
           <p className="text-sm text-muted">{result.total} {result.total === 1 ? "produto" : "produtos"}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Link href="/produtos/rascunhos" className={buttonClass("outline")}>
+            Rascunhos{rascunhos > 0 ? ` (${rascunhos})` : ""}
+          </Link>
           <a href={exportHref} className={buttonClass("outline")} download>
             Exportar Excel
           </a>

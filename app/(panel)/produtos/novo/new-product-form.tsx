@@ -9,19 +9,24 @@ import { fieldClass } from "@/components/ui/field";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { MAX_VARIANTS, gerarCombinacoes, parseCores, parseTamanhos } from "@/lib/catalog/create";
 import type { RascunhoAtual, RascunhoIA } from "@/lib/catalog/ai-draft-shared";
+import type { FormSalvo, FotoSalva } from "@/lib/catalog/drafts-shared";
 import type { CategoryOption } from "@/lib/catalog/query";
 import type { SugestoesCategoria } from "@/lib/catalog/store-context";
 import { textoDaDescricao } from "@/lib/seo/text";
 import { uploadProductImage } from "../[id]/media-actions";
 import { criarProdutoComFotos, type NovoProdutoResultado } from "./actions";
+import { enviarFotoRascunho, marcarRascunhoCriado } from "./rascunhos-actions";
 
 type Linha = { preco?: string; promo?: string; sku?: string; estoque?: string };
 const label = "flex flex-col gap-1 text-sm";
 
-/** Foto escolhida no cadastro: o arquivo vai para a loja depois que o produto é criado. */
+/** Foto escolhida no cadastro: o arquivo (ou a cópia guardada no rascunho) vai para a loja depois que o produto é criado. */
 export interface FotoNova {
   id: string;
-  file: File;
+  file?: File;
+  /** Já guardada no rascunho (Blob): o servidor a envia à loja sem passar pelo navegador. */
+  salva?: FotoSalva;
+  nome: string;
 }
 
 /** Rascunho da IA para aplicar no formulário. "completo" = primeira análise (preenche tudo); "ajuste" = só refaz os textos. */
@@ -39,33 +44,52 @@ function IaTag({ show }: { show: boolean }) {
   return <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">✨ Sugerido pela IA</span>;
 }
 
-export function NewProductForm({ categories, fotos, inicial, atualRef }: { categories: CategoryOption[]; fotos: FotoNova[]; inicial: Inicial | null; atualRef: MutableRefObject<() => RascunhoAtual> }) {
+interface FormProps {
+  categories: CategoryOption[];
+  fotos: FotoNova[];
+  inicial: Inicial | null;
+  atualRef: MutableRefObject<() => RascunhoAtual>;
+  /** Campos guardados de um rascunho: começam preenchidos assim (a IA não reescreve por cima). */
+  salvo?: FormSalvo | null;
+  /** O rascunho já tinha análise da IA (destaca o que falta). */
+  analisado?: boolean;
+  /** Preenchido pelo formulário: devolve os campos como estão agora, para guardar no rascunho. */
+  coletarRef: MutableRefObject<() => FormSalvo>;
+  rascunhoId: number | null;
+  /** Guarda o rascunho (campos + fotos); devolve a mensagem para mostrar. */
+  onSalvarRascunho: () => Promise<string>;
+  onDescartarRascunho?: () => void;
+}
+
+export function NewProductForm({ categories, fotos, inicial, atualRef, salvo = null, analisado: analisadoProp = false, coletarRef, rascunhoId, onSalvarRascunho, onDescartarRascunho }: FormProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [resultado, setResultado] = useState<NovoProdutoResultado | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [salvandoRascunho, setSalvandoRascunho] = useState(false);
+  const [msgRascunho, setMsgRascunho] = useState<string | null>(null);
   const [criadoId, setCriadoId] = useState<number | null>(null);
   const [fotoEstado, setFotoEstado] = useState<Record<string, FotoEstado>>({});
   const err = (name: string) => resultado?.fieldErrors?.[name];
 
-  const [nome, setNome] = useState("");
-  const [descInicial, setDescInicial] = useState("");
+  const [nome, setNome] = useState(salvo?.name ?? "");
+  const [descInicial, setDescInicial] = useState(salvo?.description ?? "");
   const [descVersao, setDescVersao] = useState(0);
-  const [tags, setTags] = useState("");
-  const [cats, setCats] = useState<Set<number>>(new Set());
-  const [seoTitulo, setSeoTitulo] = useState("");
-  const [seoDescricao, setSeoDescricao] = useState("");
-  const [peso, setPeso] = useState("");
-  const [ia, setIa] = useState<Set<string>>(new Set());
+  const [tags, setTags] = useState(salvo?.tags ?? "");
+  const [cats, setCats] = useState<Set<number>>(new Set(salvo?.categorias.filter((id) => categories.some((c) => c.id === id)) ?? []));
+  const [seoTitulo, setSeoTitulo] = useState(salvo?.seoTitulo ?? "");
+  const [seoDescricao, setSeoDescricao] = useState(salvo?.seoDescricao ?? "");
+  const [peso, setPeso] = useState(salvo?.peso ?? "");
+  const [ia, setIa] = useState<Set<string>>(new Set(salvo?.iaMarcados ?? []));
   const limparIa = (k: string) => setIa((prev) => (prev.has(k) ? new Set([...prev].filter((x) => x !== k)) : prev));
 
-  const [modo, setModo] = useState<"simples" | "variacoes">("simples");
-  const [controlar, setControlar] = useState(false);
-  const [coresTexto, setCoresTexto] = useState("");
-  const [tamanhosTexto, setTamanhosTexto] = useState("");
-  const [precoPadrao, setPrecoPadrao] = useState("");
-  const [promoPadrao, setPromoPadrao] = useState("");
-  const [estoquePadrao, setEstoquePadrao] = useState("");
+  const [modo, setModo] = useState<"simples" | "variacoes">(salvo?.modo ?? "simples");
+  const [controlar, setControlar] = useState(salvo?.controlar ?? false);
+  const [coresTexto, setCoresTexto] = useState(salvo?.cores ?? "");
+  const [tamanhosTexto, setTamanhosTexto] = useState(salvo?.tamanhos ?? "");
+  const [precoPadrao, setPrecoPadrao] = useState(salvo?.preco ?? "");
+  const [promoPadrao, setPromoPadrao] = useState(salvo?.promocional ?? "");
+  const [estoquePadrao, setEstoquePadrao] = useState(salvo?.estoque ?? "");
   const [linhas, setLinhas] = useState<Record<string, Linha>>({});
 
   // Referência da loja: o que costuma ser feito nas categorias escolhidas (preço, tamanhos, peso). Só sugere; nunca preenche sozinho.
@@ -90,7 +114,7 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
   }, [categoriasChave]);
 
   // O assistente deixa o rascunho pronto: aplica nos campos (a pessoa confere e edita antes de criar).
-  const versaoAplicada = useRef(0);
+  const versaoAplicada = useRef(salvo || analisadoProp ? 1 : 0);
   useEffect(() => {
     if (!inicial || inicial.versao === versaoAplicada.current) return;
     versaoAplicada.current = inicial.versao;
@@ -141,8 +165,27 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
     return { nome, descricao: textoDaDescricao(html, 2000), tags, seoTitulo, seoDescricao };
   };
 
+  // Para guardar o rascunho: os campos como estão agora.
+  coletarRef.current = () => ({
+    name: nome,
+    description: (formRef.current?.elements.namedItem("description") as HTMLInputElement | null)?.value ?? descInicial,
+    tags,
+    categorias: [...cats],
+    modo,
+    cores: coresTexto,
+    tamanhos: tamanhosTexto,
+    preco: precoPadrao,
+    promocional: promoPadrao,
+    peso,
+    controlar,
+    estoque: estoquePadrao,
+    seoTitulo,
+    seoDescricao,
+    iaMarcados: [...ia],
+  });
+
   // Campos que a IA não tem como saber ficam em destaque depois da análise.
-  const analisado = inicial !== null;
+  const analisado = inicial !== null || analisadoProp;
   const destaque = (vazio: boolean) => (analisado && vazio ? "border-warning ring-1 ring-warning/60" : "");
 
   const cores = useMemo(() => parseCores(coresTexto), [coresTexto]);
@@ -169,19 +212,24 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
         }
         id = r.id;
         setCriadoId(id);
+        if (rascunhoId !== null) void marcarRascunhoCriado(rascunhoId, id);
       }
       let falhou = false;
       for (const f of fotos) {
         if (fotoEstado[f.id]?.estado === "ok") continue;
         setFotoEstado((prev) => ({ ...prev, [f.id]: { estado: "enviando" } }));
-        const body = new FormData();
-        body.set("file", f.file);
-        body.set("tipo", "auto");
-        body.set("enquadramento", "auto");
-        body.set("padronizar", "1");
-        let r;
+        let r: { ok?: boolean; message?: string };
         try {
-          r = await uploadProductImage(id, body);
+          if (f.file) {
+            const body = new FormData();
+            body.set("file", f.file);
+            body.set("tipo", "auto");
+            body.set("enquadramento", "auto");
+            body.set("padronizar", "1");
+            r = await uploadProductImage(id, body);
+          } else if (f.salva && rascunhoId !== null) {
+            r = await enviarFotoRascunho(rascunhoId, id, f.salva.pathname);
+          } else r = { ok: false, message: "Foto sem arquivo." };
         } catch {
           r = { ok: false, message: "Falhou. Tente de novo." };
         }
@@ -201,6 +249,17 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
 
   const fotosPendentes = fotos.filter((f) => fotoEstado[f.id]?.estado !== "ok").length;
   const travado = enviando || criadoId !== null;
+
+  async function salvarRascunho() {
+    if (salvandoRascunho || enviando) return;
+    setSalvandoRascunho(true);
+    setMsgRascunho(null);
+    try {
+      setMsgRascunho(await onSalvarRascunho());
+    } finally {
+      setSalvandoRascunho(false);
+    }
+  }
 
   return (
     <form ref={formRef} onSubmit={enviar} className="flex flex-col gap-4">
@@ -371,7 +430,7 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
             {controlar && (
               <label className={label}>
                 <span className="text-muted">Estoque</span>
-                <input name="estoque" inputMode="numeric" className={fieldClass} />
+                <input name="estoque" value={estoquePadrao} onChange={(e) => setEstoquePadrao(e.target.value)} inputMode="numeric" className={fieldClass} />
                 {err("estoque") && <span className="text-danger">{err("estoque")}</span>}
               </label>
             )}
@@ -518,7 +577,7 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
               return (
                 <li key={f.id} className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 truncate">
-                    {i + 1}. {f.file.name}
+                    {i + 1}. {f.nome}
                   </span>
                   <span className={st?.estado === "ok" ? "text-success" : st?.estado === "erro" ? "text-danger" : "text-muted"}>
                     {st?.estado === "ok" ? "enviada" : st?.estado === "enviando" ? "enviando…" : st?.estado === "erro" ? `falhou: ${st.mensagem}` : "na fila"}
@@ -546,10 +605,24 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
               <Alert tone="danger" className="border-0 p-0">
                 {resultado.message}
               </Alert>
+            ) : msgRascunho ? (
+              <span className="text-muted">{msgRascunho}</span>
             ) : (
               <span className="text-muted">{criadoId !== null ? "Produto criado como rascunho." : "Nada é enviado à loja até você clicar em “Criar produto”."}</span>
             )}
           </div>
+          {criadoId === null && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={salvandoRascunho || enviando} onClick={() => void salvarRascunho()} className="min-h-11">
+                {salvandoRascunho ? "Salvando…" : rascunhoId !== null ? "Salvar rascunho" : "Salvar como rascunho"}
+              </Button>
+              {rascunhoId !== null && onDescartarRascunho && (
+                <Button type="button" variant="outline" disabled={salvandoRascunho || enviando} onClick={onDescartarRascunho} className="min-h-11">
+                  Descartar rascunho
+                </Button>
+              )}
+            </div>
+          )}
           <Button type="submit" disabled={enviando || (criadoId !== null && fotosPendentes === 0) || (criadoId === null && modo === "variacoes" && (combos.length === 0 || grandeDemais))} className="min-h-11">
             {enviando
               ? criadoId === null
