@@ -186,7 +186,7 @@ interface Linha {
 }
 
 /** Todos os produtos do espelho com suas imagens e medidas (o catálogo é pequeno, então o filtro e a paginação ficam em memória). */
-export async function auditarProdutos(db: Db, storeId: string): Promise<ProdutoAuditado[]> {
+export async function auditarProdutos(db: Db, storeId: string, productId?: number): Promise<ProdutoAuditado[]> {
   const rows = await db.query<Linha>(
     `SELECT p.id::text AS product_id, p.name,
             (i->>'id') AS image_id, nullif(i->>'position', '')::int AS position, (i->>'src') AS src,
@@ -194,9 +194,9 @@ export async function auditarProdutos(db: Db, storeId: string): Promise<ProdutoA
      FROM products p
      LEFT JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) WITH ORDINALITY AS t(i, n) ON true
      LEFT JOIN image_audit a ON a.store_id = p.store_id AND a.image_id = (i->>'id')::bigint
-     WHERE p.store_id = $1::uuid
+     WHERE p.store_id = $1::uuid AND ($2::bigint IS NULL OR p.id = $2::bigint)
      ORDER BY p.id, nullif(i->>'position', '')::int NULLS LAST, t.n`,
-    [storeId],
+    [storeId, productId ?? null],
   );
   const out = new Map<string, ProdutoAuditado>();
   for (const r of rows) {

@@ -7,7 +7,10 @@ import { query } from "@/lib/db";
 import { fotosComOriginal } from "@/lib/images/reenquadrar";
 import { getActiveStore } from "@/lib/stores";
 import { Alert } from "@/components/ui/alert";
+import { avaliarProntidao } from "@/lib/catalog/readiness";
+import { auditarProdutos } from "@/lib/images/audit";
 import { ImagesPanel } from "./images-panel";
+import { ReadinessCard } from "./readiness-card";
 import { ProductForm } from "./product-form";
 import { DeleteProduct } from "./delete-product";
 import { VariantFields, VariantsManage } from "./variants-editor";
@@ -22,13 +25,15 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
   const store = await getActiveStore();
   if (!store) notFound();
   const db = { query };
-  const [product, categories, images, comOriginal] = await Promise.all([
+  const [product, categories, images, comOriginal, auditoria] = await Promise.all([
     getProductDetail(db, store.id, productId),
     listCategoryOptions(db, store.id),
     getProductImages(db, store.id, productId),
     fotosComOriginal(db, store.id, productId),
+    auditarProdutos(db, store.id, productId),
   ]);
   if (!product) notFound();
+  const checklist = avaliarProntidao(product, images.length, auditoria[0] ?? null);
 
   return (
     <main className="flex max-w-4xl flex-col gap-4 pb-32">
@@ -44,9 +49,12 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
 
       {criado === "1" && (
         <Alert tone="success">
-          Produto criado na Nuvemshop {product.published ? "e publicado" : "como rascunho (não aparece na vitrine)"}. Falta adicionar as fotos, na seção “Imagens” mais abaixo{product.published ? "" : ", e depois marcar “Publicado na loja” quando estiver pronto"}.
+          Produto criado na Nuvemshop {product.published ? "e publicado" : "como rascunho (não aparece na vitrine)"}.{" "}
+          {images.length === 0 ? "Falta adicionar as fotos, na seção “Imagens” mais abaixo." : "Confira o checklist abaixo antes de publicar."}
         </Alert>
       )}
+
+      <ReadinessCard productId={productId} publicado={product.published} checklist={checklist} />
 
       <ProductForm product={product} categories={categories}>
         <VariantFields productId={productId} variants={product.variants} images={images} attributes={product.attributes} />
@@ -54,7 +62,9 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
 
       <VariantsManage productId={productId} attributes={product.attributes} />
 
-      <ImagesPanel productId={productId} images={images} comOriginal={comOriginal} />
+      <div id="imagens" className="scroll-mt-4">
+        <ImagesPanel productId={productId} images={images} comOriginal={comOriginal} />
+      </div>
 
       <DeleteProduct productId={productId} name={product.name} />
     </main>

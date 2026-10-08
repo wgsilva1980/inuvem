@@ -135,4 +135,14 @@ describe("relatório", () => {
     const [p] = await auditarProdutos(db, storeId);
     expect(p!.imagens[0]).toMatchObject({ medida: null, problemas: [] });
   });
+
+  it("com o ID do produto, devolve só aquele produto", async () => {
+    await produto(1, "A", [{ id: 10, src: "https://x/a.jpg" }]);
+    await produto(2, "B", [{ id: 20, src: "https://x/b.jpg" }, { id: 21, src: "https://x/c.jpg" }]);
+    const [so] = await auditarProdutos(db, storeId, 2);
+    expect(so!.name).toBe("B");
+    expect(so!.imagens).toHaveLength(2);
+    expect(await auditarProdutos(db, storeId, 99)).toEqual([]);
+    expect(await auditarProdutos(db, storeId)).toHaveLength(2);
+  });
 });

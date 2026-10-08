@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/admin";
 import { prepareDescription } from "@/lib/catalog/description";
-import { productEditSchema } from "@/lib/catalog/edit";
+import { productEditSchema, toEdit } from "@/lib/catalog/edit";
 import { getProductDetail } from "@/lib/catalog/query";
 import { ProductConflictError, ProductNotFoundError, updateProduct } from "@/lib/catalog/update";
 import { deleteProduct } from "@/lib/catalog/delete";
@@ -163,4 +163,28 @@ export async function deleteProductAction(productId: number, _prev: SaveState | 
   }
   revalidatePath("/produtos");
   redirect("/produtos?excluido=1");
+}
+
+/** Publica o produto na loja (só o campo "Publicado na loja"; o resto não é tocado). Registra no histórico como qualquer edição. */
+export async function publicarProduto(productId: number): Promise<SaveState> {
+  const admin = await requireAdmin();
+  if (!Number.isInteger(productId) || productId <= 0) return { message: "Produto inválido." };
+  const store = await getActiveStore();
+  if (!store) return { message: "Nenhuma loja conectada." };
+  try {
+    const client = await clientForStore(store);
+    const detail = await getProductDetail({ query }, store.id, productId);
+    if (!detail) return { message: new ProductNotFoundError().message };
+    const result = await updateProduct(
+      { query },
+      { get: (id) => getProduct(client, id), put: (id, input) => apiUpdateProduct(client, id, input) },
+      { storeId: store.id, actor: admin.email, productId, after: { ...toEdit(detail), published: true } },
+    );
+    revalidatePath(`/produtos/${productId}`);
+    revalidatePath("/produtos");
+    return { ok: true, message: result.changed ? "Produto publicado na loja." : "O produto já estava publicado." };
+  } catch (err) {
+    revalidatePath(`/produtos/${productId}`); // se a loja mudou por fora, a tela mostra o estado novo
+    return { message: describe(err, "product.publish.failed") };
+  }
 }
