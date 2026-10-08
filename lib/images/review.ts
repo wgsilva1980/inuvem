@@ -4,10 +4,8 @@ import type { Db } from "@/lib/sync/repo";
 
 /** Modelo da revisão de fotos (leitura de imagem + texto curto): o padrão da API para novos códigos. */
 export const MODELO_REVISAO = "claude-opus-5-5";
-/** Preço por milhão de tokens, só para estimar o custo na tela. */
-const PRECO_ENTRADA = 4;
-const PRECO_SAIDA = 20;
-export const estimarCustoUsd = (entrada: number, saida: number) => (entrada * PRECO_ENTRADA + saida * PRECO_SAIDA) / 1_000_000;
+import { estimarCustoUsd } from "./custo";
+export { estimarCustoUsd };
 
 import { ALT_MAX } from "./alt";
 export { ALT_MAX };
