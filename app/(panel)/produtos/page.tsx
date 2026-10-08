@@ -55,6 +55,9 @@ export default async function ProdutosPage({ searchParams }: { searchParams: Pro
           <Link href="/produtos/rascunhos" className={buttonClass("outline")}>
             Rascunhos{rascunhos > 0 ? ` (${rascunhos})` : ""}
           </Link>
+          <Link href="/produtos/lote-ia" className={buttonClass("outline")}>
+            Cadastro em lote
+          </Link>
           <a href={exportHref} className={buttonClass("outline")} download>
             Exportar Excel
           </a>

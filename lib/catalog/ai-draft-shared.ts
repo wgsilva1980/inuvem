@@ -1,7 +1,10 @@
 /** Tipos e constantes do cadastro assistido por IA, sem dependências (usados também pelo navegador). */
+import type { FormSalvo } from "./drafts-shared";
 /** Quantas fotos o assistente analisa de uma vez. */
 export const MAX_FOTOS_IA = 6;
 export const NOME_MAX = 90;
+/** Quantas fotos o cadastro em lote aceita de uma vez (várias peças). */
+export const MAX_FOTOS_LOTE = 30;
 
 export interface CategoriaOpcao {
   id: number;
@@ -46,4 +49,34 @@ export interface RascunhoIA {
   avisos: string[];
   entrada: number;
   saida: number;
+}
+
+/** Campos do formulário de novo produto a partir da análise da IA (o que a pessoa vê ao abrir o rascunho, com as etiquetas "sugerido pela IA"). */
+export function rascunhoParaForm(d: RascunhoIA): FormSalvo {
+  const marcados = ["name", "description", "seo_title", "seo_description"];
+  const add = (cond: boolean, chave: string) => cond && marcados.push(chave);
+  add(d.tags !== "", "tags");
+  add(d.categoriaIds.length > 0, "categories");
+  add(d.cores.length > 0, "cores");
+  add(d.tamanhos.length > 0, "tamanhos");
+  add(d.preco !== "", "preco");
+  add(d.promocional !== "", "promocional");
+  add(d.pesoKg !== "", "peso");
+  return {
+    name: d.nome,
+    description: d.descricaoHtml,
+    tags: d.tags,
+    categorias: d.categoriaIds,
+    modo: d.cores.length > 0 || d.tamanhos.length > 0 ? "variacoes" : "simples",
+    cores: d.cores.join(", "),
+    tamanhos: d.tamanhos.join(", "),
+    preco: d.preco,
+    promocional: d.promocional,
+    peso: d.pesoKg,
+    controlar: false,
+    estoque: "",
+    seoTitulo: d.seoTitulo,
+    seoDescricao: d.seoDescricao,
+    iaMarcados: marcados,
+  };
 }

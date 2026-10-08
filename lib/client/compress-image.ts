@@ -47,10 +47,10 @@ export async function prepareImageFile(file: File): Promise<File> {
 
 const LADO_ANALISE = 1024;
 
-/** Cópia pequena da foto (JPEG, até 1024 px) para mandar à análise da IA sem estourar o limite de envio. Só roda no navegador. */
-export async function miniaturaParaAnalise(file: File): Promise<Blob> {
+/** Cópia pequena da foto (JPEG, até `lado` px; padrão 1024) para mandar à IA sem estourar o limite de envio. Só roda no navegador. */
+export async function miniaturaParaAnalise(file: File, lado = LADO_ANALISE, qualidade = 0.82): Promise<Blob> {
   const img = await loadBitmap(file);
-  const escala = Math.min(1, LADO_ANALISE / Math.max(img.naturalWidth, img.naturalHeight));
+  const escala = Math.min(1, lado / Math.max(img.naturalWidth, img.naturalHeight));
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(img.naturalWidth * escala));
   canvas.height = Math.max(1, Math.round(img.naturalHeight * escala));
@@ -59,7 +59,7 @@ export async function miniaturaParaAnalise(file: File): Promise<Blob> {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const blob = await toBlob(canvas, 0.82);
+  const blob = await toBlob(canvas, qualidade);
   if (!blob) throw new Error("Não foi possível preparar a foto.");
   return blob;
 }
