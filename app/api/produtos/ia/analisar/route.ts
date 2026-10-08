@@ -2,6 +2,7 @@ import { requireAdminApi } from "@/lib/auth/admin";
 import { sniffImageType } from "@/lib/catalog/images";
 import { MAX_FOTOS_IA, criarGeradorRascunho, type RascunhoAtual } from "@/lib/catalog/ai-draft";
 import { listCategoryOptions } from "@/lib/catalog/query";
+import { exemplosDeTom, tagsUsadas } from "@/lib/catalog/store-context";
 import { query } from "@/lib/db";
 import { RevisaoConfigError, prepararFoto } from "@/lib/images/review";
 import { hit } from "@/lib/rate-limit";
@@ -68,7 +69,11 @@ export async function POST(request: Request) {
 
   try {
     const categorias = (await listCategoryOptions({ query }, store.id)).map((c) => ({ id: c.id, name: c.name }));
-    const rascunho = await criarGeradorRascunho()({ fotos, anotacoes, categorias, ajuste: ajuste || undefined, atual });
+    // referência da loja: se a consulta falhar, a análise segue sem ela
+    const contextoLoja = await Promise.all([exemplosDeTom({ query }, store.id), tagsUsadas({ query }, store.id)])
+      .then(([exemplos, tags]) => ({ exemplos, tagsUsadas: tags }))
+      .catch(() => undefined);
+    const rascunho = await criarGeradorRascunho()({ fotos, anotacoes, categorias, ajuste: ajuste || undefined, atual, contextoLoja });
     return Response.json(rascunho);
   } catch (err) {
     if (err instanceof RevisaoConfigError) return Response.json({ error: err.message }, { status: 409 });
