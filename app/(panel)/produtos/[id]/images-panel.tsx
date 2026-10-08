@@ -6,7 +6,9 @@ import { Card } from "@/components/ui/card";
 import type { ImageRow } from "@/lib/catalog/images";
 import { prepareImageFile } from "@/lib/client/compress-image";
 import { fieldClass } from "@/components/ui/field";
-import { ENQUADRAMENTO_LABEL, TIPO_LABEL, type Enquadramento, type Tipo } from "@/lib/images/standard";
+import { ENQUADRAMENTO_LABEL, TAMANHO, TIPO_LABEL, type Enquadramento, type Tipo } from "@/lib/images/standard";
+import type { Recorte } from "@/lib/images/recorte";
+import { CropEditor } from "./crop-editor";
 import { moveProductImage, previewProductImage, removeProductImage, setMainProductImage, uploadProductImage, type ActionState, type PreviewState } from "./media-actions";
 
 interface Staged {
@@ -15,6 +17,8 @@ interface Staged {
   tipo: "auto" | Tipo;
   enquadramento: "auto" | Enquadramento;
   padronizar: boolean;
+  /** Enquadramento manual: retângulo escolhido no editor (null = ainda não mexeu: a foto preenche o quadro). */
+  recorte: Recorte | null;
   carregando: boolean;
   enviando: boolean;
   preview?: PreviewState;
@@ -24,12 +28,13 @@ interface Staged {
 
 const kb = (n: number) => `${Math.round(n / 1024)} KB`;
 
-const formDe = (s: Pick<Staged, "file" | "tipo" | "enquadramento" | "padronizar">) => {
+const formDe = (s: Pick<Staged, "file" | "tipo" | "enquadramento" | "padronizar" | "recorte">) => {
   const body = new FormData();
   body.set("file", s.file);
   body.set("tipo", s.tipo);
   body.set("enquadramento", s.enquadramento);
   body.set("padronizar", s.padronizar ? "1" : "0");
+  if (s.enquadramento === "manual" && s.recorte) body.set("recorte", JSON.stringify(s.recorte));
   return body;
 };
 
@@ -48,14 +53,33 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
 
   const patch = (id: string, p: Partial<Staged>) => setStaged((list) => list.map((x) => (x.id === id ? { ...x, ...p } : x)));
 
-  async function carregarPrevia(item: Staged) {
-    patch(item.id, { carregando: true, erro: undefined });
+  // Só a resposta da última pedida vale (arrastar no editor dispara várias prévias seguidas).
+  const sequencia = useRef(new Map<string, number>());
+  const adiar = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  /** `silenciosa`: atualiza a prévia sem trocar a imagem por "Preparando…" (o editor manual precisa continuar na tela). */
+  async function carregarPrevia(item: Staged, silenciosa = false) {
+    const n = (sequencia.current.get(item.id) ?? 0) + 1;
+    sequencia.current.set(item.id, n);
+    patch(item.id, silenciosa ? { erro: undefined } : { carregando: true, erro: undefined });
     try {
       const preview = await previewProductImage(formDe(item));
+      if (sequencia.current.get(item.id) !== n) return;
       patch(item.id, { carregando: false, preview, erro: preview.ok ? undefined : preview.message });
     } catch {
+      if (sequencia.current.get(item.id) !== n) return;
       patch(item.id, { carregando: false, erro: "Não foi possível gerar a prévia. Tente de novo." });
     }
+  }
+
+  /** Move/zoom no editor manual: guarda o recorte na hora e atualiza a prévia (tamanho, miniatura) depois de uma pausa. */
+  function recortar(item: Staged, recorte: Recorte) {
+    patch(item.id, { recorte });
+    clearTimeout(adiar.current.get(item.id));
+    adiar.current.set(
+      item.id,
+      setTimeout(() => void carregarPrevia({ ...item, recorte }, true), 500),
+    );
   }
 
   async function addFiles(files: FileList | File[]) {
@@ -64,7 +88,7 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
         const file = await prepareImageFile(original);
-        const item: Staged = { id, file, tipo: "auto", enquadramento: "auto", padronizar: true, carregando: true, enviando: false, originalUrl: URL.createObjectURL(file) };
+        const item: Staged = { id, file, tipo: "auto", enquadramento: "auto", padronizar: true, recorte: null, carregando: true, enviando: false, originalUrl: URL.createObjectURL(file) };
         setStaged((list) => [...list, item]);
         void carregarPrevia(item);
       } catch (err) {
@@ -75,6 +99,8 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
   }
 
   function descartar(id: string) {
+    clearTimeout(adiar.current.get(id));
+    sequencia.current.set(id, (sequencia.current.get(id) ?? 0) + 1); // ignora prévia em andamento
     setStaged((list) => {
       const item = list.find((x) => x.id === id);
       if (item) URL.revokeObjectURL(item.originalUrl);
@@ -84,8 +110,10 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
 
   /** Muda uma opção e refaz a prévia com ela. */
   function mudar(item: Staged, p: Partial<Pick<Staged, "tipo" | "enquadramento" | "padronizar">>) {
-    const novo = { ...item, ...p };
-    patch(item.id, p);
+    clearTimeout(adiar.current.get(item.id));
+    // Mudar o tipo muda a proporção do quadro: o recorte antigo não vale mais.
+    const novo = { ...item, ...p, ...(p.tipo !== undefined || p.enquadramento !== undefined ? { recorte: null } : {}) };
+    patch(item.id, { ...p, ...(p.tipo !== undefined || p.enquadramento !== undefined ? { recorte: null } : {}) });
     if (novo.padronizar) void carregarPrevia(novo);
   }
 
@@ -166,6 +194,15 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
                     <div className="flex min-h-40 items-center justify-center rounded bg-border/30 p-2">
                       {it.carregando ? (
                         <p className="text-sm text-muted">Preparando a prévia…</p>
+                      ) : it.padronizar && it.enquadramento === "manual" && p?.ok && p.tipo && !p.semPadronizar ? (
+                        <CropEditor
+                          src={it.originalUrl}
+                          quadro={TAMANHO[p.tipo]}
+                          fundo={p.fundo ?? "#F5F1EC"}
+                          recorte={it.recorte}
+                          onChange={(r) => recortar(it, r)}
+                          disabled={it.enviando || enviandoTudo}
+                        />
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={it.padronizar && p?.dataUrl ? p.dataUrl : it.originalUrl} alt="Prévia da imagem" className="max-h-80 w-auto max-w-full rounded object-contain" />
@@ -213,6 +250,7 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
                         <option value="auto">Automático{p?.enquadramento && it.enquadramento === "auto" ? ` (${ENQUADRAMENTO_LABEL[p.enquadramento].split(" ")[0]})` : ""}</option>
                         <option value="ajustar">{ENQUADRAMENTO_LABEL.ajustar}</option>
                         <option value="cortar">{ENQUADRAMENTO_LABEL.cortar}</option>
+                        <option value="manual">{ENQUADRAMENTO_LABEL.manual}</option>
                       </select>
                     </label>
                   </div>

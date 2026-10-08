@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { TAMANHO, type Enquadramento, type Tipo } from "./standard";
+import { alturaDoRecorte, recorteInicial, type Recorte } from "./recorte";
 
 export { ENQUADRAMENTO_LABEL, TAMANHO, TIPO_LABEL, type Enquadramento, type Tipo } from "./standard";
 
@@ -16,6 +17,8 @@ export interface PadronizarOpcoes {
   tipo?: Tipo | "auto";
   enquadramento?: Enquadramento | "auto";
   fundo?: string;
+  /** Só vale com enquadramento "manual"; sem ele, a foto preenche o quadro, centralizada. */
+  recorte?: Recorte;
 }
 
 export interface Padronizada {
@@ -79,7 +82,7 @@ export async function padronizarImagem(input: Buffer, opcoes: PadronizarOpcoes =
   const bordas = await analisarBordas(input, true);
   const enquadramento: Enquadramento = !opcoes.enquadramento || opcoes.enquadramento === "auto" ? (bordas.uniforme ? "ajustar" : "cortar") : opcoes.enquadramento;
   const fundoPadrao = parseHex(opcoes.fundo ?? FUNDO_PADRAO) ? (opcoes.fundo ?? FUNDO_PADRAO) : FUNDO_PADRAO;
-  const fundo = enquadramento === "ajustar" && bordas.uniforme ? bordas.cor : fundoPadrao.toUpperCase();
+  const fundo = enquadramento !== "cortar" && bordas.uniforme ? bordas.cor : fundoPadrao.toUpperCase();
   const rgb = parseHex(fundo)!;
 
   if (Math.max(largOrig, altOrig) < MIN_LADO_BOM) avisos.push(`Foto pequena (${largOrig}×${altOrig}): abaixo de ${MIN_LADO_BOM} px no lado maior a imagem pode ficar sem nitidez na loja.`);
@@ -89,7 +92,43 @@ export async function padronizarImagem(input: Buffer, opcoes: PadronizarOpcoes =
   const base = sharp(input, { failOn: "none" }).rotate().flatten({ background: rgb });
 
   let quadro: Buffer;
-  if (enquadramento === "cortar") {
+  if (enquadramento === "manual") {
+    const r = opcoes.recorte ?? recorteInicial(largOrig / altOrig, W / H);
+    const cw = r.w * largOrig; // largura do recorte, em pixels da foto
+    const ch = alturaDoRecorte(r.w, largOrig / altOrig, W / H) * altOrig;
+    const cx = r.x * largOrig;
+    const cy = r.y * altOrig;
+    const escala = W / cw;
+    if (escala > 1.6) avisos.push(`A foto foi ampliada ${escala.toFixed(1)}× para preencher o quadro e pode ficar borrada.`);
+    // parte da foto que cai dentro do recorte (o resto do quadro é fundo)
+    const x0 = Math.max(0, Math.floor(cx));
+    const y0 = Math.max(0, Math.floor(cy));
+    const x1 = Math.min(largOrig, Math.ceil(cx + cw));
+    const y1 = Math.min(altOrig, Math.ceil(cy + ch));
+    const fundoQuadro = sharp({ create: { width: W, height: H, channels: 3, background: rgb } });
+    if (x1 - x0 < 1 || y1 - y0 < 1) {
+      quadro = await fundoQuadro.png({ compressionLevel: 1 }).toBuffer();
+    } else {
+      // gira e achata antes de recortar (no sharp, a ordem entre rotate e extract não é garantida no mesmo pipeline)
+      const orientada = await base.clone().png({ compressionLevel: 1 }).toBuffer();
+      const dentro = await sharp(orientada)
+        .extract({ left: x0, top: y0, width: x1 - x0, height: y1 - y0 })
+        .resize(Math.max(1, Math.round((x1 - x0) * escala)), Math.max(1, Math.round((y1 - y0) * escala)), { fit: "fill" })
+        .toBuffer();
+      const meta2 = await sharp(dentro).metadata();
+      const left = Math.round((x0 - cx) * escala);
+      const top = Math.round((y0 - cy) * escala);
+      // o encaixe arredondado pode passar 1 px do quadro: corta o excesso
+      const recorteL = Math.max(0, -left);
+      const recorteT = Math.max(0, -top);
+      const larg = Math.min(meta2.width!, W - Math.max(0, left)) - recorteL;
+      const alt = Math.min(meta2.height!, H - Math.max(0, top)) - recorteT;
+      const peca = larg > 0 && alt > 0 ? await sharp(dentro).extract({ left: recorteL, top: recorteT, width: larg, height: alt }).toBuffer() : null;
+      quadro = peca
+        ? await fundoQuadro.composite([{ input: peca, left: Math.max(0, left), top: Math.max(0, top) }]).png({ compressionLevel: 1 }).toBuffer()
+        : await fundoQuadro.png({ compressionLevel: 1 }).toBuffer();
+    }
+  } else if (enquadramento === "cortar") {
     const escala = Math.max(W / largOrig, H / altOrig);
     if (escala > 1.6) avisos.push(`A foto foi ampliada ${escala.toFixed(1)}× para preencher o quadro e pode ficar borrada.`);
     quadro = await base.resize(W, H, { fit: "cover", position: sharp.strategy.attention }).toBuffer();

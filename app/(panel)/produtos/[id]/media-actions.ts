@@ -14,6 +14,7 @@ import {
   type ImageApi,
 } from "@/lib/catalog/images";
 import { DuplicateVariantError, InvalidVariantImageError, InvalidVariantValuesError, VariantConflictError, VariantNotFoundError } from "@/lib/catalog/update-variant";
+import { lerRecorte } from "@/lib/images/recorte";
 import { padronizarImagem, type Enquadramento, type PadronizarOpcoes, type Tipo } from "@/lib/images/standardize";
 import { query } from "@/lib/db";
 import {
@@ -85,7 +86,7 @@ export async function moveProductImage(productId: number, imageId: number, direc
 }
 
 const TIPOS = new Set(["auto", "peca", "modelo"]);
-const ENQUADRAMENTOS = new Set(["auto", "ajustar", "cortar"]);
+const ENQUADRAMENTOS = new Set(["auto", "ajustar", "cortar", "manual"]);
 
 /** Lê o arquivo do formulário e confere tipo, tamanho e conteúdo (o navegador não é confiável). */
 async function lerArquivo(formData: FormData): Promise<{ file: File; bytes: Buffer; real: string } | ActionState> {
@@ -102,7 +103,11 @@ async function lerArquivo(formData: FormData): Promise<{ file: File; bytes: Buff
 function opcoesDoFormulario(formData: FormData): PadronizarOpcoes {
   const tipo = String(formData.get("tipo") ?? "auto");
   const enquadramento = String(formData.get("enquadramento") ?? "auto");
-  return { tipo: TIPOS.has(tipo) ? (tipo as PadronizarOpcoes["tipo"]) : "auto", enquadramento: ENQUADRAMENTOS.has(enquadramento) ? (enquadramento as PadronizarOpcoes["enquadramento"]) : "auto" };
+  return {
+    tipo: TIPOS.has(tipo) ? (tipo as PadronizarOpcoes["tipo"]) : "auto",
+    enquadramento: ENQUADRAMENTOS.has(enquadramento) ? (enquadramento as PadronizarOpcoes["enquadramento"]) : "auto",
+    recorte: lerRecorte(formData.get("recorte")) ?? undefined,
+  };
 }
 
 export interface PreviewState {
