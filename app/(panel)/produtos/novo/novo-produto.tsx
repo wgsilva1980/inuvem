@@ -1,25 +1,34 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fieldClass } from "@/components/ui/field";
 import { MAX_FOTOS_IA, type FotoAnalisada, type RascunhoAtual, type RascunhoIA } from "@/lib/catalog/ai-draft-shared";
+import type { FormSalvo, FotoSalva, RascunhoSalvo } from "@/lib/catalog/drafts-shared";
 import type { CategoryOption } from "@/lib/catalog/query";
 import { miniaturaParaAnalise, prepareImageFile } from "@/lib/client/compress-image";
 import { estimarCustoUsd } from "@/lib/images/custo";
 import { NewProductForm, type Inicial } from "./new-product-form";
+import { definirFotosRascunho, descartarRascunhoAction, salvarRascunhoCampos } from "./rascunhos-actions";
 
 interface Foto {
   id: string;
-  file: File;
-  /** Prévia no navegador. */
+  nome: string;
+  /** Arquivo novo (ainda não guardado no rascunho). */
+  file?: File;
+  /** Prévia no navegador (a do arquivo, ou a do rascunho guardado). */
   url: string;
-  /** Cópia pequena que vai para a análise. */
-  mini: Blob;
+  /** Cópia pequena que vai para a análise (criada na hora, se a foto veio do rascunho). */
+  mini?: Blob;
+  /** Foto guardada no rascunho (Blob). */
+  salva?: FotoSalva;
   ia?: FotoAnalisada;
 }
+
+const urlDaFoto = (rascunhoId: number, pathname: string) => `/api/produtos/rascunhos/foto?rascunho=${rascunhoId}&p=${encodeURIComponent(pathname)}`;
 
 const CORES_QUALIDADE = ["", "text-danger", "text-danger", "text-warning", "text-success", "text-success"];
 
@@ -31,9 +40,15 @@ function copiar(texto: string) {
  * Cadastro pela foto: a pessoa sobe as fotos da peça (e, se quiser, anota o que já sabe) e a IA deixa o formulário preenchido.
  * Nada vai para a loja até a pessoa conferir e clicar em "Criar produto".
  */
-export function NovoProduto({ categories }: { categories: CategoryOption[] }) {
-  const [fotos, setFotos] = useState<Foto[]>([]);
-  const [anotacoes, setAnotacoes] = useState("");
+export function NovoProduto({ categories, rascunho = null }: { categories: CategoryOption[]; rascunho?: RascunhoSalvo | null }) {
+  const router = useRouter();
+  const [rascunhoId, setRascunhoId] = useState<number | null>(rascunho?.id ?? null);
+  const [fotos, setFotos] = useState<Foto[]>(() =>
+    (rascunho?.fotos ?? []).map((f, i) => ({ id: f.pathname, nome: f.name, url: urlDaFoto(rascunho!.id, f.pathname), salva: f, ia: rascunho?.ia?.fotos[i] })),
+  );
+  const [anotacoes, setAnotacoes] = useState(rascunho?.notas ?? "");
+  const [avisosSalvos] = useState<string[]>(rascunho?.ia?.avisos ?? []);
+  const coletarRef = useRef<() => FormSalvo>(() => ({ name: "", description: "", tags: "", categorias: [], modo: "simples", cores: "", tamanhos: "", preco: "", promocional: "", peso: "", controlar: false, estoque: "", seoTitulo: "", seoDescricao: "", iaMarcados: [] }));
   const [ajuste, setAjuste] = useState("");
   const [analisando, setAnalisando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -57,7 +72,7 @@ export function NovoProduto({ categories }: { categories: CategoryOption[] }) {
       try {
         const file = await prepareImageFile(original);
         const mini = await miniaturaParaAnalise(file);
-        setFotos((lista) => (lista.length >= MAX_FOTOS_IA ? lista : [...lista, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file, url: URL.createObjectURL(file), mini }]));
+        setFotos((lista) => (lista.length >= MAX_FOTOS_IA ? lista : [...lista, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, nome: original.name, file, url: URL.createObjectURL(file), mini }]));
       } catch (e) {
         setErro(`${original.name}: ${e instanceof Error ? e.message : "não foi possível ler a imagem."}`);
       }
@@ -68,7 +83,7 @@ export function NovoProduto({ categories }: { categories: CategoryOption[] }) {
   function remover(id: string) {
     setFotos((lista) => {
       const f = lista.find((x) => x.id === id);
-      if (f) URL.revokeObjectURL(f.url);
+      if (f?.url.startsWith("blob:")) URL.revokeObjectURL(f.url);
       return lista.filter((x) => x.id !== id);
     });
   }
@@ -90,8 +105,17 @@ export function NovoProduto({ categories }: { categories: CategoryOption[] }) {
     setAnalisando(true);
     setErro(null);
     try {
+      // fotos que vieram do rascunho ainda não têm a cópia pequena: busca e prepara
+      const minis = await Promise.all(
+        fotos.map(async (f) => {
+          if (f.mini) return f.mini;
+          const blob = await (await fetch(f.url)).blob();
+          return miniaturaParaAnalise(new File([blob], f.nome, { type: blob.type || "image/jpeg" }));
+        }),
+      );
+      setFotos((lista) => lista.map((f) => ({ ...f, mini: f.mini ?? minis[fotos.findIndex((x) => x.id === f.id)] })));
       const body = new FormData();
-      fotos.forEach((f, i) => body.append("fotos", f.mini, `foto-${i + 1}.jpg`));
+      minis.forEach((m, i) => body.append("fotos", m, `foto-${i + 1}.jpg`));
       body.set("anotacoes", anotacoes);
       if (comAjuste) {
         body.set("ajuste", ajuste);
@@ -118,7 +142,48 @@ export function NovoProduto({ categories }: { categories: CategoryOption[] }) {
     }
   }
 
-  const analisada = inicial !== null;
+  const analisada = inicial !== null || rascunho?.ia != null;
+  const avisos = inicial?.dados.avisos ?? avisosSalvos;
+
+  /** Guarda o rascunho: campos, anotações, análise da IA e as fotos novas (uma por requisição). Devolve a mensagem para mostrar. */
+  async function salvarRascunho(): Promise<string> {
+    const form = coletarRef.current();
+    const ia = analisada ? { avisos, fotos: fotos.map((f) => f.ia ?? { alt: "", qualidade: 3, observacao: "" }) } : null;
+    const r = await salvarRascunhoCampos(rascunhoId, { notas: anotacoes, form, ia });
+    if (!r.ok || !r.id) return r.message ?? "Não foi possível salvar o rascunho.";
+    const id = r.id;
+    setRascunhoId(id);
+    const caminhos: string[] = [];
+    const atualizadas = new Map<string, FotoSalva>();
+    for (const f of fotos) {
+      if (f.salva) {
+        caminhos.push(f.salva.pathname);
+        continue;
+      }
+      if (!f.file) continue;
+      const body = new FormData();
+      body.set("rascunho", String(id));
+      body.set("file", f.file);
+      const res = await fetch("/api/produtos/rascunhos/fotos", { method: "POST", body }).catch(() => null);
+      const json = (await res?.json().catch(() => null)) as (FotoSalva & { error?: string }) | null;
+      if (!res || !res.ok || !json?.pathname) return `Rascunho salvo, mas a foto ${f.nome} não foi guardada: ${json?.error ?? "falha na conexão"}. Tente salvar de novo.`;
+      atualizadas.set(f.id, json);
+      caminhos.push(json.pathname);
+    }
+    const o = await definirFotosRascunho(id, caminhos);
+    if (!o.ok) return o.message ?? "Não foi possível guardar as fotos do rascunho.";
+    if (atualizadas.size > 0) setFotos((lista) => lista.map((f) => (atualizadas.has(f.id) ? { ...f, salva: atualizadas.get(f.id)! } : f)));
+    window.history.replaceState(null, "", `/produtos/novo?rascunho=${id}`);
+    return `Rascunho salvo às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`;
+  }
+
+  async function descartar() {
+    if (rascunhoId === null) return;
+    if (!window.confirm("Descartar este rascunho? Os campos e as fotos guardadas serão apagados. O produto não é criado.")) return;
+    const r = await descartarRascunhoAction(rascunhoId);
+    if (r.ok) router.push("/produtos/rascunhos");
+    else window.alert(r.message ?? "Não foi possível descartar.");
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -219,7 +284,7 @@ export function NovoProduto({ categories }: { categories: CategoryOption[] }) {
 
         {analisada && (
           <div className="flex flex-col gap-2 border-t border-border pt-3">
-            {inicial.dados.avisos.map((a) => (
+            {avisos.map((a) => (
               <p key={a} className="text-sm text-warning">
                 ⚠ {a}
               </p>
@@ -238,7 +303,18 @@ export function NovoProduto({ categories }: { categories: CategoryOption[] }) {
         )}
       </Card>
 
-      <NewProductForm categories={categories} fotos={fotos.map((f) => ({ id: f.id, file: f.file }))} inicial={inicial} atualRef={atualRef} />
+      <NewProductForm
+        categories={categories}
+        fotos={fotos.map((f) => ({ id: f.id, file: f.file, salva: f.salva, nome: f.nome }))}
+        inicial={inicial}
+        atualRef={atualRef}
+        salvo={rascunho?.form ?? null}
+        analisado={rascunho?.ia != null}
+        coletarRef={coletarRef}
+        rascunhoId={rascunhoId}
+        onSalvarRascunho={salvarRascunho}
+        onDescartarRascunho={rascunhoId !== null ? () => void descartar() : undefined}
+      />
     </div>
   );
 }
