@@ -9,7 +9,7 @@ import { fieldClass } from "@/components/ui/field";
 import { ENQUADRAMENTO_LABEL, TAMANHO, TIPO_LABEL, type Enquadramento, type Tipo } from "@/lib/images/standard";
 import type { Recorte } from "@/lib/images/recorte";
 import { CropEditor } from "./crop-editor";
-import { moveProductImage, previewProductImage, removeProductImage, setMainProductImage, uploadProductImage, type ActionState, type PreviewState } from "./media-actions";
+import { moveProductImage, previewProductImage, previewReenquadro, reenquadrarProductImage, removeProductImage, setMainProductImage, uploadProductImage, type ActionState, type PreviewReenquadro, type PreviewState } from "./media-actions";
 
 interface Staged {
   id: string;
@@ -38,7 +38,20 @@ const formDe = (s: Pick<Staged, "file" | "tipo" | "enquadramento" | "padronizar"
   return body;
 };
 
-export function ImagesPanel({ productId, images }: { productId: number; images: ImageRow[] }) {
+interface Reenquadro {
+  imageId: string;
+  posicao: number;
+  /** Endereço mostrado no editor: a cópia do original (se houver) ou a foto atual da loja. */
+  src: string;
+  tipo: "auto" | Tipo;
+  recorte: Recorte | null;
+  preview?: PreviewReenquadro;
+  carregando: boolean;
+  aplicando: boolean;
+  erro?: string;
+}
+
+export function ImagesPanel({ productId, images, comOriginal = [] }: { productId: number; images: ImageRow[]; comOriginal?: string[] }) {
   const [busy, startTransition] = useTransition();
   const [message, setMessage] = useState<ActionState | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -50,6 +63,69 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
 
   const [staged, setStaged] = useState<Staged[]>([]);
   const [enviandoTudo, setEnviandoTudo] = useState(false);
+
+  // ---- reenquadrar uma foto que já está na loja ----
+  const [reenq, setReenq] = useState<Reenquadro | null>(null);
+  const seqReenq = useRef(0);
+  const adiarReenq = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  async function carregarPreviaReenq(base: Pick<Reenquadro, "imageId" | "tipo" | "recorte">, silenciosa: boolean) {
+    const n = ++seqReenq.current;
+    setReenq((r) => (r ? { ...r, erro: undefined, ...(silenciosa ? {} : { carregando: true }) } : r));
+    const preview = await previewReenquadro(productId, Number(base.imageId), base.tipo, base.recorte ? JSON.stringify(base.recorte) : null).catch(
+      (): PreviewReenquadro => ({ message: "Não foi possível abrir a foto. Tente de novo." }),
+    );
+    if (seqReenq.current !== n) return;
+    setReenq((r) => (r ? { ...r, carregando: false, preview, erro: preview.ok ? undefined : preview.message } : r));
+  }
+
+  function abrirReenquadro(img: ImageRow, posicao: number) {
+    clearTimeout(adiarReenq.current);
+    setMessage(null);
+    const base = { imageId: img.id, posicao, src: comOriginal.includes(img.id) ? `/api/images/original?produto=${productId}&imagem=${img.id}` : img.src, tipo: "auto" as const, recorte: null };
+    setReenq({ ...base, carregando: true, aplicando: false });
+    void carregarPreviaReenq(base, false);
+  }
+
+  function fecharReenquadro() {
+    clearTimeout(adiarReenq.current);
+    seqReenq.current++; // ignora prévia em andamento
+    setReenq(null);
+  }
+
+  function mudarTipoReenq(tipo: "auto" | Tipo) {
+    if (!reenq) return;
+    clearTimeout(adiarReenq.current);
+    const base = { imageId: reenq.imageId, tipo, recorte: null };
+    setReenq((r) => (r ? { ...r, ...base } : r));
+    void carregarPreviaReenq(base, false);
+  }
+
+  function recortarReenq(recorte: Recorte) {
+    if (!reenq) return;
+    const base = { imageId: reenq.imageId, tipo: reenq.tipo, recorte };
+    setReenq((r) => (r ? { ...r, recorte } : r));
+    clearTimeout(adiarReenq.current);
+    adiarReenq.current = setTimeout(() => void carregarPreviaReenq(base, true), 500);
+  }
+
+  async function aplicarReenq() {
+    if (!reenq?.recorte) return;
+    clearTimeout(adiarReenq.current);
+    seqReenq.current++;
+    setReenq({ ...reenq, aplicando: true, erro: undefined });
+    try {
+      const r = await reenquadrarProductImage(productId, Number(reenq.imageId), reenq.tipo, JSON.stringify(reenq.recorte));
+      if (r.ok) {
+        setReenq(null);
+        setMessage(r);
+      } else {
+        setReenq((x) => (x ? { ...x, aplicando: false, erro: r.message ?? "Falhou." } : x));
+      }
+    } catch {
+      setReenq((x) => (x ? { ...x, aplicando: false, erro: "Falhou. Tente de novo." } : x));
+    }
+  }
 
   const patch = (id: string, p: Partial<Staged>) => setStaged((list) => list.map((x) => (x.id === id ? { ...x, ...p } : x)));
 
@@ -275,6 +351,69 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
         </div>
       )}
 
+      {reenq && (
+        <div className="mt-3 flex flex-col gap-3 rounded-md border border-primary p-3" role="region" aria-label={`Reenquadrar a imagem ${reenq.posicao}`}>
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="text-sm font-semibold">Reenquadrar a imagem {reenq.posicao}</h3>
+            <button type="button" disabled={reenq.aplicando} onClick={fecharReenquadro} className="shrink-0 text-sm underline disabled:opacity-50">
+              Cancelar
+            </button>
+          </div>
+          {reenq.preview?.origem && (
+            <p className="text-xs text-muted">
+              {reenq.preview.origem === "original"
+                ? "Usando a cópia guardada do original (qualidade total): dá para refazer o enquadramento sem perder detalhes."
+                : "Usando a foto que está na loja (no máximo 1024 px): afastar o zoom mostra só o que já está na foto, e aproximar pode borrar."}
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_9rem]">
+            <div className="flex min-h-40 items-center justify-center rounded bg-border/30 p-2">
+              {reenq.carregando || !reenq.preview?.ok || !reenq.preview.tipo ? (
+                <p className="text-sm text-muted">{reenq.erro ?? "Abrindo a foto…"}</p>
+              ) : (
+                <CropEditor key={reenq.imageId} src={reenq.src} quadro={TAMANHO[reenq.preview.tipo]} fundo={reenq.preview.fundo ?? "#F5F1EC"} recorte={reenq.recorte} onChange={recortarReenq} disabled={reenq.aplicando} />
+              )}
+            </div>
+            {reenq.preview?.dataUrl && !reenq.carregando && (
+              <div className="flex flex-col items-start gap-1">
+                <p className="text-xs text-muted">Na vitrine (miniatura quadrada)</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={reenq.preview.dataUrl} alt="Como a miniatura quadrada da vitrine mostra a foto" className="aspect-square w-36 rounded border border-border object-cover" />
+              </div>
+            )}
+          </div>
+          {reenq.preview?.ok && reenq.preview.largura && reenq.preview.altura && reenq.preview.bytes && (
+            <p className="text-sm text-muted">
+              {reenq.preview.tipo ? TIPO_LABEL[reenq.preview.tipo] : ""} · {reenq.preview.largura}×{reenq.preview.altura} · {kb(reenq.preview.bytes)}
+            </p>
+          )}
+          {(reenq.preview?.avisos ?? []).map((a) => (
+            <p key={a} className="text-sm text-warning">
+              ⚠ {a}
+            </p>
+          ))}
+          {reenq.erro && reenq.preview?.ok && (
+            <p role="alert" className="text-sm text-danger">
+              {reenq.erro}
+            </p>
+          )}
+          <label className="flex max-w-xs flex-col gap-1 text-sm">
+            <span className="text-muted">Tipo da foto</span>
+            <select value={reenq.tipo} disabled={reenq.aplicando} onChange={(e) => mudarTipoReenq(e.target.value as Reenquadro["tipo"])} className={fieldClass}>
+              <option value="auto">Automático{reenq.preview?.tipo && reenq.tipo === "auto" ? ` (${TIPO_LABEL[reenq.preview.tipo]})` : ""}</option>
+              <option value="peca">{TIPO_LABEL.peca}</option>
+              <option value="modelo">{TIPO_LABEL.modelo}</option>
+            </select>
+          </label>
+          <p className="text-xs text-muted">Ao aplicar, a foto é trocada na loja mantendo a posição e as variações. Uma cópia fica guardada: dá para desfazer em Imagens.</p>
+          <div>
+            <Button type="button" disabled={reenq.aplicando || reenq.carregando || !reenq.recorte || !reenq.preview?.ok} onClick={() => void aplicarReenq()}>
+              {reenq.aplicando ? "Trocando na loja…" : "Aplicar e trocar na loja"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {images.length === 0 ? (
         <p className="mt-3 text-sm text-muted">Este produto não tem imagens.</p>
       ) : (
@@ -303,6 +442,9 @@ export function ImagesPanel({ productId, images }: { productId: number; images: 
                   </button>
                 )}
               </div>
+              <Button type="button" variant="outline" className="min-h-10" disabled={busy || reenq?.aplicando} onClick={() => abrirReenquadro(img, i + 1)}>
+                Reenquadrar
+              </Button>
               <div className="grid grid-cols-3 gap-1">
                 <Button type="button" variant="outline" className="min-h-10 px-0" disabled={busy || i === 0} aria-label="Mover para antes" onClick={() => run(() => moveProductImage(productId, Number(img.id), -1))}>
                   ←

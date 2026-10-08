@@ -15,6 +15,9 @@ import {
 } from "@/lib/catalog/images";
 import { DuplicateVariantError, InvalidVariantImageError, InvalidVariantValuesError, VariantConflictError, VariantNotFoundError } from "@/lib/catalog/update-variant";
 import { lerRecorte } from "@/lib/images/recorte";
+import { baixarImagem, verificarImagemNaLoja, type ReplaceDeps } from "@/lib/images/replace";
+import { carregarFonte, reenquadrarFoto } from "@/lib/images/reenquadrar";
+import { blobStorage } from "@/lib/images/storage";
 import { padronizarImagem, type Enquadramento, type PadronizarOpcoes, type Tipo } from "@/lib/images/standardize";
 import { query } from "@/lib/db";
 import {
@@ -23,6 +26,7 @@ import {
   deleteImage,
   getProduct,
   updateImage,
+  updateVariant,
 } from "@/lib/nuvemshop";
 import { clientForStore, getActiveStore } from "@/lib/stores";
 
@@ -189,4 +193,94 @@ export async function setMainProductImage(productId: number, imageId: number): P
     const moved = await moveImageTo({ query }, api, { storeId, actor, productId, imageId, toIndex: 0 });
     return { ok: true, message: moved ? "Imagem principal atualizada." : "Esta já é a imagem principal." } satisfies ActionState;
   });
+}
+
+/* ---------- reenquadrar foto já cadastrada ---------- */
+
+async function dependenciasDeTroca(): Promise<{ deps: ReplaceDeps; storeId: string; actor: string } | ActionState> {
+  const admin = await requireAdmin();
+  const store = await getActiveStore();
+  if (!store) return { message: "Nenhuma loja conectada." };
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return { message: "O armazenamento das cópias (Blob) não está configurado. Veja a página Imagens." };
+  const client = await clientForStore(store);
+  return {
+    storeId: store.id,
+    actor: admin.email,
+    deps: {
+      db: { query },
+      storage: blobStorage,
+      baixar: baixarImagem,
+      verificar: verificarImagemNaLoja,
+      api: {
+        getProduct: (pid) => getProduct(client, pid),
+        create: (pid, input) => createImage(client, pid, input),
+        remove: (pid, iid) => deleteImage(client, pid, iid),
+        setPosition: (pid, iid, position) => updateImage(client, pid, iid, { position }),
+        setVariantImage: (pid, vid, imageId) => updateVariant(client, pid, vid, { image_id: imageId }),
+      },
+    },
+  };
+}
+
+export interface PreviewReenquadro extends PreviewState {
+  /** De onde a foto vem: cópia do original (qualidade total) ou a foto atual da loja (até 1024 px). */
+  origem?: "original" | "loja";
+}
+
+/** Mostra como a foto já cadastrada ficaria com o recorte escolhido, sem tocar na loja. */
+export async function previewReenquadro(productId: number, imageId: number, tipo: string, recorteJson: string | null): Promise<PreviewReenquadro> {
+  await requireAdmin();
+  if (!validId(productId) || !validId(imageId)) return { message: "Foto inválida." };
+  const ctx = await dependenciasDeTroca();
+  if (!("deps" in ctx)) return ctx;
+  try {
+    const fonte = await carregarFonte(ctx.deps, { storeId: ctx.storeId, productId, imageId });
+    const r = await padronizarImagem(fonte.bytes, {
+      tipo: TIPOS.has(tipo) ? (tipo as PadronizarOpcoes["tipo"]) : "auto",
+      enquadramento: "manual",
+      recorte: lerRecorte(recorteJson) ?? undefined,
+    });
+    return {
+      ok: true,
+      origem: fonte.origem,
+      dataUrl: `data:image/jpeg;base64,${r.bytes.toString("base64")}`,
+      largura: r.largura,
+      altura: r.altura,
+      bytes: r.bytes.length,
+      tipo: r.tipo,
+      enquadramento: r.enquadramento,
+      fundo: r.fundo,
+      fundoUniforme: r.fundoUniforme,
+      avisos: r.avisos,
+      original: r.original,
+    };
+  } catch (err) {
+    return { message: err instanceof NuvemshopError ? err.userMessage : err instanceof Error ? err.message : "Não foi possível abrir a foto." };
+  }
+}
+
+/** Troca a foto na loja pela versão reenquadrada (mesma posição e variações; a cópia guardada permite desfazer em /imagens). */
+export async function reenquadrarProductImage(productId: number, imageId: number, tipo: string, recorteJson: string): Promise<ActionState> {
+  await requireAdmin();
+  if (!validId(productId) || !validId(imageId)) return { message: "Foto inválida." };
+  const recorte = lerRecorte(recorteJson);
+  if (!recorte) return { message: "Enquadramento inválido. Ajuste a foto e tente de novo." };
+  const ctx = await dependenciasDeTroca();
+  if (!("deps" in ctx)) return ctx;
+  try {
+    const r = await reenquadrarFoto(ctx.deps, {
+      storeId: ctx.storeId,
+      actor: ctx.actor,
+      productId,
+      imageId,
+      tipo: TIPOS.has(tipo) ? (tipo as Tipo | "auto") : "auto",
+      recorte,
+    });
+    revalidatePath(`/produtos/${productId}`);
+    revalidatePath("/produtos");
+    return { ok: true, message: r.ordemOk ? "Foto reenquadrada e trocada na loja." : "Foto reenquadrada, mas a ordem das imagens precisa de conferência." };
+  } catch (err) {
+    revalidatePath(`/produtos/${productId}`); // a loja pode ter mudado mesmo com erro
+    return fail(err, "image.reframe.failed");
+  }
 }
