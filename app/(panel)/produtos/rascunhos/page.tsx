@@ -33,9 +33,14 @@ export default async function RascunhosPage() {
           <h1 className="text-xl font-semibold">Rascunhos de produto</h1>
           <p className="text-sm text-muted">Cadastros começados e ainda não criados na loja. Nada aqui aparece na vitrine.</p>
         </div>
-        <Link href="/produtos/novo" className={buttonClass("primary")}>
-          Novo produto
-        </Link>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Link href="/produtos/lote-ia" className={buttonClass("outline")}>
+            Cadastro em lote
+          </Link>
+          <Link href="/produtos/novo" className={buttonClass("primary")}>
+            Novo produto
+          </Link>
+        </div>
       </div>
 
       <Card className="p-0 sm:p-0">
