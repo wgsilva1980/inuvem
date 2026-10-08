@@ -9,7 +9,7 @@ import { fieldClass } from "@/components/ui/field";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { MAX_VARIANTS, gerarCombinacoes, parseCores, parseTamanhos } from "@/lib/catalog/create";
 import type { RascunhoAtual, RascunhoIA } from "@/lib/catalog/ai-draft-shared";
-import type { FormSalvo, FotoSalva } from "@/lib/catalog/drafts-shared";
+import { aplicarEnquadramento, type EnquadramentoFoto, type FormSalvo, type FotoSalva } from "@/lib/catalog/drafts-shared";
 import type { CategoryOption } from "@/lib/catalog/query";
 import type { SugestoesCategoria } from "@/lib/catalog/store-context";
 import { textoDaDescricao } from "@/lib/seo/text";
@@ -27,6 +27,8 @@ export interface FotoNova {
   /** Já guardada no rascunho (Blob): o servidor a envia à loja sem passar pelo navegador. */
   salva?: FotoSalva;
   nome: string;
+  /** Enquadramento escolhido (ausente = automático). */
+  opcoes?: EnquadramentoFoto;
 }
 
 /** Rascunho da IA para aplicar no formulário. "completo" = primeira análise (preenche tudo); "ajuste" = só refaz os textos. */
@@ -223,12 +225,11 @@ export function NewProductForm({ categories, fotos, inicial, atualRef, salvo = n
           if (f.file) {
             const body = new FormData();
             body.set("file", f.file);
-            body.set("tipo", "auto");
-            body.set("enquadramento", "auto");
             body.set("padronizar", "1");
+            aplicarEnquadramento(body, f.opcoes);
             r = await uploadProductImage(id, body);
           } else if (f.salva && rascunhoId !== null) {
-            r = await enviarFotoRascunho(rascunhoId, id, f.salva.pathname);
+            r = await enviarFotoRascunho(rascunhoId, id, f.salva.pathname, f.opcoes);
           } else r = { ok: false, message: "Foto sem arquivo." };
         } catch {
           r = { ok: false, message: "Falhou. Tente de novo." };

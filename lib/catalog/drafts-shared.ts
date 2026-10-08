@@ -1,5 +1,28 @@
 /** Tipos e limites dos rascunhos de produto, sem dependências (usados também pelo navegador). */
+import type { Recorte } from "@/lib/images/recorte";
+
 export const MAX_FOTOS_RASCUNHO = 12;
+
+/** Como a foto será enquadrada ao subir para a loja (o mesmo que "Tipo da foto" e "Enquadramento" da tela do produto). */
+export interface EnquadramentoFoto {
+  tipo: "auto" | "peca" | "modelo";
+  enquadramento: "auto" | "ajustar" | "cortar" | "manual";
+  /** Só vale com enquadramento "manual". */
+  recorte: Recorte | null;
+}
+
+export const ENQUADRAMENTO_PADRAO: EnquadramentoFoto = { tipo: "auto", enquadramento: "auto", recorte: null };
+
+export const enquadramentoPadrao = (o: EnquadramentoFoto | null | undefined): boolean => !o || (o.tipo === "auto" && o.enquadramento === "auto");
+
+/** Põe o enquadramento nos campos do formulário de envio de foto (`tipo`, `enquadramento`, `recorte`). */
+export function aplicarEnquadramento(body: FormData, o: EnquadramentoFoto | null | undefined): void {
+  const e = o ?? ENQUADRAMENTO_PADRAO;
+  body.set("tipo", e.tipo);
+  body.set("enquadramento", e.enquadramento);
+  if (e.enquadramento === "manual" && e.recorte) body.set("recorte", JSON.stringify(e.recorte));
+  else body.delete("recorte");
+}
 
 /** Foto guardada no Blob de um rascunho. */
 export interface FotoSalva {
@@ -7,6 +30,8 @@ export interface FotoSalva {
   name: string;
   contentType: string;
   bytes: number;
+  /** Enquadramento escolhido para esta foto (ausente = automático). */
+  enquadramento?: EnquadramentoFoto;
 }
 
 /** Campos do formulário de novo produto, como a pessoa os deixou. */

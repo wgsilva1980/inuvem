@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fieldClass } from "@/components/ui/field";
 import { MAX_FOTOS_IA, type FotoAnalisada, type RascunhoAtual, type RascunhoIA } from "@/lib/catalog/ai-draft-shared";
-import type { FormSalvo, FotoSalva, RascunhoSalvo } from "@/lib/catalog/drafts-shared";
+import { ENQUADRAMENTO_PADRAO, enquadramentoPadrao, type EnquadramentoFoto, type FormSalvo, type FotoSalva, type RascunhoSalvo } from "@/lib/catalog/drafts-shared";
 import type { CategoryOption } from "@/lib/catalog/query";
 import { miniaturaParaAnalise, prepareImageFile } from "@/lib/client/compress-image";
 import { estimarCustoUsd } from "@/lib/images/custo";
+import { EnquadrarFoto } from "./enquadrar-foto";
 import { NewProductForm, type Inicial } from "./new-product-form";
 import { definirFotosRascunho, descartarRascunhoAction, salvarRascunhoCampos } from "./rascunhos-actions";
 
@@ -26,7 +27,13 @@ interface Foto {
   /** Foto guardada no rascunho (Blob). */
   salva?: FotoSalva;
   ia?: FotoAnalisada;
+  /** Como a foto será enquadrada ao subir (automático, a menos que a pessoa escolha). */
+  opcoes: EnquadramentoFoto;
+  /** Prévia da foto já enquadrada (aparece na miniatura quando o enquadramento não é o automático). */
+  previa?: string;
 }
+
+const ROTULO_ENQ: Record<EnquadramentoFoto["enquadramento"], string> = { auto: "automático", ajustar: "ajustar", cortar: "cortar", manual: "manual" };
 
 const urlDaFoto = (rascunhoId: number, pathname: string) => `/api/produtos/rascunhos/foto?rascunho=${rascunhoId}&p=${encodeURIComponent(pathname)}`;
 
@@ -44,9 +51,11 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
   const router = useRouter();
   const [rascunhoId, setRascunhoId] = useState<number | null>(rascunho?.id ?? null);
   const [fotos, setFotos] = useState<Foto[]>(() =>
-    (rascunho?.fotos ?? []).map((f, i) => ({ id: f.pathname, nome: f.name, url: urlDaFoto(rascunho!.id, f.pathname), salva: f, ia: rascunho?.ia?.fotos[i] })),
+    (rascunho?.fotos ?? []).map((f, i) => ({ id: f.pathname, nome: f.name, url: urlDaFoto(rascunho!.id, f.pathname), salva: f, ia: rascunho?.ia?.fotos[i], opcoes: f.enquadramento ?? ENQUADRAMENTO_PADRAO })),
   );
   const [anotacoes, setAnotacoes] = useState(rascunho?.notas ?? "");
+  const [enquadrandoId, setEnquadrandoId] = useState<string | null>(null);
+  const patchFoto = (id: string, p: Partial<Foto>) => setFotos((lista) => lista.map((f) => (f.id === id ? { ...f, ...p } : f)));
   const [avisosSalvos] = useState<string[]>(rascunho?.ia?.avisos ?? []);
   const coletarRef = useRef<() => FormSalvo>(() => ({ name: "", description: "", tags: "", categorias: [], modo: "simples", cores: "", tamanhos: "", preco: "", promocional: "", peso: "", controlar: false, estoque: "", seoTitulo: "", seoDescricao: "", iaMarcados: [] }));
   const [ajuste, setAjuste] = useState("");
@@ -72,7 +81,7 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
       try {
         const file = await prepareImageFile(original);
         const mini = await miniaturaParaAnalise(file);
-        setFotos((lista) => (lista.length >= MAX_FOTOS_IA ? lista : [...lista, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, nome: original.name, file, url: URL.createObjectURL(file), mini }]));
+        setFotos((lista) => (lista.length >= MAX_FOTOS_IA ? lista : [...lista, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, nome: original.name, file, url: URL.createObjectURL(file), mini, opcoes: ENQUADRAMENTO_PADRAO }]));
       } catch (e) {
         setErro(`${original.name}: ${e instanceof Error ? e.message : "não foi possível ler a imagem."}`);
       }
@@ -154,10 +163,12 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
     const id = r.id;
     setRascunhoId(id);
     const caminhos: string[] = [];
+    const opcoes: Record<string, EnquadramentoFoto> = {};
     const atualizadas = new Map<string, FotoSalva>();
     for (const f of fotos) {
       if (f.salva) {
         caminhos.push(f.salva.pathname);
+        opcoes[f.salva.pathname] = f.opcoes;
         continue;
       }
       if (!f.file) continue;
@@ -169,8 +180,9 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
       if (!res || !res.ok || !json?.pathname) return `Rascunho salvo, mas a foto ${f.nome} não foi guardada: ${json?.error ?? "falha na conexão"}. Tente salvar de novo.`;
       atualizadas.set(f.id, json);
       caminhos.push(json.pathname);
+      opcoes[json.pathname] = f.opcoes;
     }
-    const o = await definirFotosRascunho(id, caminhos);
+    const o = await definirFotosRascunho(id, caminhos, opcoes);
     if (!o.ok) return o.message ?? "Não foi possível guardar as fotos do rascunho.";
     if (atualizadas.size > 0) setFotos((lista) => lista.map((f) => (atualizadas.has(f.id) ? { ...f, salva: atualizadas.get(f.id)! } : f)));
     window.history.replaceState(null, "", `/produtos/novo?rascunho=${id}`);
@@ -209,7 +221,7 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
           className={`flex flex-col items-center gap-2 rounded-md border-2 border-dashed p-5 text-center text-sm ${arrastando ? "border-primary bg-primary/5" : "border-border"}`}
         >
           <p className="font-medium">Arraste as fotos aqui ou escolha arquivos</p>
-          <p className="text-xs text-muted">Até {MAX_FOTOS_IA} fotos (JPEG, PNG ou WEBP) da mesma peça. A primeira é a principal; a IA sugere qual fica melhor.</p>
+          <p className="text-xs text-muted">Até {MAX_FOTOS_IA} fotos (JPEG, PNG ou WEBP) da mesma peça. A primeira é a principal; a IA sugere qual fica melhor. Use “Enquadrar” em cada foto para escolher como ela sobe para a loja (automático, ajustar, cortar ou manual).</p>
           <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" id="fotos-novo-produto" onChange={(e) => e.target.files && void adicionar(e.target.files)} />
           <label htmlFor="fotos-novo-produto" className="cursor-pointer rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-border/40">
             Escolher arquivos
@@ -221,7 +233,7 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
             {fotos.map((f, i) => (
               <li key={f.id} className="flex gap-3 rounded-md border border-border p-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={f.url} alt={`Foto ${i + 1}`} className="size-24 shrink-0 rounded object-cover" />
+                <img src={!enquadramentoPadrao(f.opcoes) && f.previa ? f.previa : f.url} alt={`Foto ${i + 1}`} className="size-24 shrink-0 rounded object-cover" />
                 <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
                   <div className="flex flex-wrap items-center gap-x-2">
                     {i === 0 ? <span className="text-xs font-medium text-primary">★ Principal</span> : <span className="text-xs text-muted">Foto {i + 1}</span>}
@@ -238,7 +250,13 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
                       </button>
                     </div>
                   )}
-                  <div className="mt-auto flex gap-1">
+                  <p className="text-xs text-muted">
+                    Enquadramento: {f.opcoes.tipo === "auto" ? "tipo automático" : f.opcoes.tipo === "peca" ? "peça solta" : "modelo"}, {ROTULO_ENQ[f.opcoes.enquadramento]}
+                  </p>
+                  <div className="mt-auto flex flex-wrap gap-1">
+                    <button type="button" disabled={analisando} onClick={() => setEnquadrandoId(enquadrandoId === f.id ? null : f.id)} aria-expanded={enquadrandoId === f.id} className="min-h-8 rounded border border-border px-2 text-sm hover:bg-border/40 disabled:opacity-40">
+                      Enquadrar
+                    </button>
                     <button type="button" disabled={i === 0 || analisando} onClick={() => mover(f.id, -1)} aria-label="Mover para antes" className="min-h-8 min-w-8 rounded border border-border text-sm hover:bg-border/40 disabled:opacity-40">
                       ←
                     </button>
@@ -254,6 +272,30 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
             ))}
           </ul>
         )}
+
+        {enquadrandoId && (() => {
+          const f = fotos.find((x) => x.id === enquadrandoId);
+          if (!f) return null;
+          const posicao = fotos.indexOf(f) + 1;
+          return (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold">Enquadrar a foto {posicao}</h3>
+              <EnquadrarFoto
+                key={f.id}
+                src={f.url}
+                obterArquivo={async () => {
+                  if (f.file) return f.file;
+                  const blob = await (await fetch(f.url)).blob();
+                  return new File([blob], f.nome, { type: blob.type || "image/jpeg" });
+                }}
+                valor={f.opcoes}
+                onChange={(opcoes) => patchFoto(f.id, { opcoes })}
+                onPrevia={(previa) => patchFoto(f.id, { previa: previa ?? undefined })}
+                onConcluir={() => setEnquadrandoId(null)}
+              />
+            </div>
+          );
+        })()}
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">O que você já sabe da peça (opcional)</span>
@@ -305,7 +347,7 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
 
       <NewProductForm
         categories={categories}
-        fotos={fotos.map((f) => ({ id: f.id, file: f.file, salva: f.salva, nome: f.nome }))}
+        fotos={fotos.map((f) => ({ id: f.id, file: f.file, salva: f.salva, nome: f.nome, opcoes: f.opcoes }))}
         inicial={inicial}
         atualRef={atualRef}
         salvo={rascunho?.form ?? null}

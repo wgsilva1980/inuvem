@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/admin";
-import { RascunhoInvalidoError, RascunhoNaoEncontradoError, definirFotos, descartarRascunho, lerFoto, marcarCriado, removerFotoEnviada, salvarRascunho, type EntradaRascunho } from "@/lib/catalog/drafts";
+import { aplicarEnquadramento, type EnquadramentoFoto } from "@/lib/catalog/drafts-shared";
+import { RascunhoInvalidoError, RascunhoNaoEncontradoError, definirFotos, descartarRascunho, lerEnquadramento, lerFoto, marcarCriado, removerFotoEnviada, salvarRascunho, type EntradaRascunho } from "@/lib/catalog/drafts";
 import { query } from "@/lib/db";
 import { blobStorage } from "@/lib/images/storage";
 import { getActiveStore } from "@/lib/stores";
@@ -42,13 +43,13 @@ export async function salvarRascunhoCampos(id: number | null, entrada: EntradaRa
   }
 }
 
-/** Deixa no rascunho só as fotos listadas (pathnames), na ordem dada; as outras saem do Blob. */
-export async function definirFotosRascunho(id: number, ordem: string[]): Promise<RascunhoResultado> {
+/** Deixa no rascunho só as fotos listadas (pathnames), na ordem dada, com o enquadramento escolhido de cada uma; as outras saem do Blob. */
+export async function definirFotosRascunho(id: number, ordem: string[], opcoes?: Record<string, EnquadramentoFoto>): Promise<RascunhoResultado> {
   const { store } = await contexto();
   if (!store) return { message: "Nenhuma loja conectada." };
   if (!validId(id) || !Array.isArray(ordem)) return { message: "Rascunho inválido." };
   try {
-    await definirFotos({ query }, blobStorage, { storeId: store.id, id, ordem: ordem.filter((p): p is string => typeof p === "string").slice(0, 50) });
+    await definirFotos({ query }, blobStorage, { storeId: store.id, id, ordem: ordem.filter((p): p is string => typeof p === "string").slice(0, 50), opcoes: opcoes && typeof opcoes === "object" ? opcoes : undefined });
     revalidatePath("/produtos/rascunhos");
     return { ok: true, id };
   } catch (err) {
@@ -84,7 +85,7 @@ export async function marcarRascunhoCriado(id: number, productId: number): Promi
 }
 
 /** Envia à loja (padronizada, como qualquer foto nova) uma foto guardada no rascunho e a tira do rascunho se der certo. */
-export async function enviarFotoRascunho(id: number, productId: number, pathname: string): Promise<RascunhoResultado> {
+export async function enviarFotoRascunho(id: number, productId: number, pathname: string, opcoes?: EnquadramentoFoto): Promise<RascunhoResultado> {
   const { store } = await contexto();
   if (!store) return { message: "Nenhuma loja conectada." };
   if (!validId(id) || !validId(productId) || typeof pathname !== "string") return { message: "Foto inválida." };
@@ -93,9 +94,8 @@ export async function enviarFotoRascunho(id: number, productId: number, pathname
     if (!lida) return { message: "Foto não encontrada no rascunho." };
     const body = new FormData();
     body.set("file", new File([new Uint8Array(lida.bytes)], lida.foto.name, { type: lida.foto.contentType }));
-    body.set("tipo", "auto");
-    body.set("enquadramento", "auto");
     body.set("padronizar", "1");
+    aplicarEnquadramento(body, lerEnquadramento(opcoes) ?? lida.foto.enquadramento ?? null);
     const r = await uploadProductImage(productId, body);
     if (!r.ok) return { message: r.message ?? "Falhou." };
     await removerFotoEnviada({ query }, blobStorage, { storeId: store.id, id, pathname });
