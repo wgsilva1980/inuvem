@@ -18,6 +18,7 @@ const FIXED: Record<string, string> = {
   "imagem.enviar": "Imagem enviada (arquivo)",
   "imagem.remover": "Imagem removida",
   "imagem.reordenar": "Imagens reordenadas",
+  "imagem.reenquadrar": "Foto reenquadrada manualmente",
   "categoria.criar": "Categoria criada",
   "categoria.atualizar": "Categoria editada",
   "categoria.apagar": "Categoria apagada",

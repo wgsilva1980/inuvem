@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getProductImages } from "@/lib/catalog/images";
 import { getProductDetail, listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
+import { fotosComOriginal } from "@/lib/images/reenquadrar";
 import { getActiveStore } from "@/lib/stores";
 import { Alert } from "@/components/ui/alert";
 import { ImagesPanel } from "./images-panel";
@@ -21,10 +22,11 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
   const store = await getActiveStore();
   if (!store) notFound();
   const db = { query };
-  const [product, categories, images] = await Promise.all([
+  const [product, categories, images, comOriginal] = await Promise.all([
     getProductDetail(db, store.id, productId),
     listCategoryOptions(db, store.id),
     getProductImages(db, store.id, productId),
+    fotosComOriginal(db, store.id, productId),
   ]);
   if (!product) notFound();
 
@@ -52,7 +54,7 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
 
       <VariantsManage productId={productId} attributes={product.attributes} />
 
-      <ImagesPanel productId={productId} images={images} />
+      <ImagesPanel productId={productId} images={images} comOriginal={comOriginal} />
 
       <DeleteProduct productId={productId} name={product.name} />
     </main>
