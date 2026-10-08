@@ -10,6 +10,7 @@ import { RichTextEditor } from "@/components/rich-text-editor";
 import { MAX_VARIANTS, gerarCombinacoes, parseCores, parseTamanhos } from "@/lib/catalog/create";
 import type { RascunhoAtual, RascunhoIA } from "@/lib/catalog/ai-draft-shared";
 import type { CategoryOption } from "@/lib/catalog/query";
+import type { SugestoesCategoria } from "@/lib/catalog/store-context";
 import { textoDaDescricao } from "@/lib/seo/text";
 import { uploadProductImage } from "../[id]/media-actions";
 import { criarProdutoComFotos, type NovoProdutoResultado } from "./actions";
@@ -66,6 +67,27 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
   const [promoPadrao, setPromoPadrao] = useState("");
   const [estoquePadrao, setEstoquePadrao] = useState("");
   const [linhas, setLinhas] = useState<Record<string, Linha>>({});
+
+  // Referência da loja: o que costuma ser feito nas categorias escolhidas (preço, tamanhos, peso). Só sugere; nunca preenche sozinho.
+  const [sugestoes, setSugestoes] = useState<SugestoesCategoria | null>(null);
+  const categoriasChave = [...cats].sort((a, b) => a - b).join(",");
+  useEffect(() => {
+    if (!categoriasChave) {
+      setSugestoes(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const espera = setTimeout(() => {
+      fetch(`/api/produtos/ia/sugestoes?categorias=${categoriasChave}`, { signal: ctrl.signal })
+        .then((r) => (r.ok ? (r.json() as Promise<SugestoesCategoria>) : null))
+        .then((j) => j && setSugestoes(j))
+        .catch(() => undefined);
+    }, 300);
+    return () => {
+      clearTimeout(espera);
+      ctrl.abort();
+    };
+  }, [categoriasChave]);
 
   // O assistente deixa o rascunho pronto: aplica nos campos (a pessoa confere e edita antes de criar).
   const versaoAplicada = useRef(0);
@@ -272,6 +294,47 @@ export function NewProductForm({ categories, fotos, inicial, atualRef }: { categ
             </span>
           </label>
         </fieldset>
+
+        {sugestoes && (sugestoes.preco || sugestoes.tamanhos || sugestoes.pesoKg) && (
+          <div className="flex flex-col gap-2 rounded-md border border-border bg-border/20 p-3 text-sm">
+            <p className="font-medium">
+              💡 Referência da loja{" "}
+              <span className="font-normal text-muted">
+                (nas categorias escolhidas, {sugestoes.produtos} {sugestoes.produtos === 1 ? "produto publicado" : "produtos publicados"}; é só uma sugestão)
+              </span>
+            </p>
+            {sugestoes.preco && (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>
+                  Preço: costuma ficar entre R$ {sugestoes.preco.minimo} e R$ {sugestoes.preco.maximo} (mediana R$ {sugestoes.preco.mediana}, {sugestoes.preco.produtos} produtos).
+                </span>
+                <button type="button" onClick={() => (setPrecoPadrao(sugestoes.preco!.mediana), limparIa("preco"))} className="underline">
+                  Usar R$ {sugestoes.preco.mediana}
+                </button>
+              </p>
+            )}
+            {sugestoes.tamanhos && modo === "variacoes" && (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>
+                  Tamanhos: o mais usado é {sugestoes.tamanhos.lista.join(", ")} ({sugestoes.tamanhos.produtos} de {sugestoes.tamanhos.de} produtos).
+                </span>
+                <button type="button" onClick={() => (setTamanhosTexto(sugestoes.tamanhos!.lista.join(", ")), limparIa("tamanhos"))} className="underline">
+                  Usar
+                </button>
+              </p>
+            )}
+            {sugestoes.pesoKg && (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>
+                  Peso: o mais comum é {sugestoes.pesoKg.valor} kg ({sugestoes.pesoKg.produtos} produtos).
+                </span>
+                <button type="button" onClick={() => (setPeso(sugestoes.pesoKg!.valor), limparIa("peso"))} className="underline">
+                  Usar
+                </button>
+              </p>
+            )}
+          </div>
+        )}
 
         {modo === "simples" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
