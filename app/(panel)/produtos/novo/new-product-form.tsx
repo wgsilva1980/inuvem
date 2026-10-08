@@ -1,21 +1,62 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MutableRefObject } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fieldClass } from "@/components/ui/field";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { MAX_VARIANTS, gerarCombinacoes, parseCores, parseTamanhos } from "@/lib/catalog/create";
+import type { RascunhoAtual, RascunhoIA } from "@/lib/catalog/ai-draft-shared";
 import type { CategoryOption } from "@/lib/catalog/query";
-import { criarProduto, type NovoProdutoState } from "./actions";
+import { textoDaDescricao } from "@/lib/seo/text";
+import { uploadProductImage } from "../[id]/media-actions";
+import { criarProdutoComFotos, type NovoProdutoResultado } from "./actions";
 
 type Linha = { preco?: string; promo?: string; sku?: string; estoque?: string };
 const label = "flex flex-col gap-1 text-sm";
 
-export function NewProductForm({ categories }: { categories: CategoryOption[] }) {
-  const [state, action, pending] = useActionState<NovoProdutoState | null, FormData>(criarProduto, null);
-  const err = (name: string) => state?.fieldErrors?.[name];
+/** Foto escolhida no cadastro: o arquivo vai para a loja depois que o produto é criado. */
+export interface FotoNova {
+  id: string;
+  file: File;
+}
+
+/** Rascunho da IA para aplicar no formulário. "completo" = primeira análise (preenche tudo); "ajuste" = só refaz os textos. */
+export interface Inicial {
+  versao: number;
+  modo: "completo" | "ajuste";
+  dados: RascunhoIA;
+}
+
+type FotoEstado = { estado: "enviando" | "ok" | "erro"; mensagem?: string };
+
+/** Etiqueta dos campos preenchidos pela IA; some quando a pessoa edita o campo. */
+function IaTag({ show }: { show: boolean }) {
+  if (!show) return null;
+  return <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">✨ Sugerido pela IA</span>;
+}
+
+export function NewProductForm({ categories, fotos, inicial, atualRef }: { categories: CategoryOption[]; fotos: FotoNova[]; inicial: Inicial | null; atualRef: MutableRefObject<() => RascunhoAtual> }) {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [resultado, setResultado] = useState<NovoProdutoResultado | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [criadoId, setCriadoId] = useState<number | null>(null);
+  const [fotoEstado, setFotoEstado] = useState<Record<string, FotoEstado>>({});
+  const err = (name: string) => resultado?.fieldErrors?.[name];
+
+  const [nome, setNome] = useState("");
+  const [descInicial, setDescInicial] = useState("");
+  const [descVersao, setDescVersao] = useState(0);
+  const [tags, setTags] = useState("");
+  const [cats, setCats] = useState<Set<number>>(new Set());
+  const [seoTitulo, setSeoTitulo] = useState("");
+  const [seoDescricao, setSeoDescricao] = useState("");
+  const [peso, setPeso] = useState("");
+  const [ia, setIa] = useState<Set<string>>(new Set());
+  const limparIa = (k: string) => setIa((prev) => (prev.has(k) ? new Set([...prev].filter((x) => x !== k)) : prev));
 
   const [modo, setModo] = useState<"simples" | "variacoes">("simples");
   const [controlar, setControlar] = useState(false);
@@ -26,6 +67,62 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
   const [estoquePadrao, setEstoquePadrao] = useState("");
   const [linhas, setLinhas] = useState<Record<string, Linha>>({});
 
+  // O assistente deixa o rascunho pronto: aplica nos campos (a pessoa confere e edita antes de criar).
+  const versaoAplicada = useRef(0);
+  useEffect(() => {
+    if (!inicial || inicial.versao === versaoAplicada.current) return;
+    versaoAplicada.current = inicial.versao;
+    const d = inicial.dados;
+    const marcar = new Set<string>(["name", "description", "seo_title", "seo_description"]);
+    setNome(d.nome);
+    setDescInicial(d.descricaoHtml);
+    setDescVersao((v) => v + 1);
+    setSeoTitulo(d.seoTitulo);
+    setSeoDescricao(d.seoDescricao);
+    if (d.tags) {
+      setTags(d.tags);
+      marcar.add("tags");
+    }
+    if (inicial.modo === "completo") {
+      if (d.categoriaIds.length > 0) {
+        setCats(new Set(d.categoriaIds.filter((id) => categories.some((c) => c.id === id))));
+        marcar.add("categories");
+      }
+      if (d.cores.length > 0 && coresTexto.trim() === "") {
+        setCoresTexto(d.cores.join(", "));
+        marcar.add("cores");
+      }
+      if (d.tamanhos.length > 0 && tamanhosTexto.trim() === "") {
+        setTamanhosTexto(d.tamanhos.join(", "));
+        marcar.add("tamanhos");
+      }
+      if (d.cores.length > 0 || d.tamanhos.length > 0) setModo("variacoes");
+      if (d.preco && precoPadrao.trim() === "") {
+        setPrecoPadrao(d.preco);
+        marcar.add("preco");
+      }
+      if (d.promocional && promoPadrao.trim() === "") {
+        setPromoPadrao(d.promocional);
+        marcar.add("promocional");
+      }
+      if (d.pesoKg && peso.trim() === "") {
+        setPeso(d.pesoKg);
+        marcar.add("peso");
+      }
+    }
+    setIa((prev) => new Set([...prev, ...marcar]));
+  });
+
+  // A tela mostra o rascunho atual para o assistente (pedido de ajuste parte do que está nos campos).
+  atualRef.current = () => {
+    const html = (formRef.current?.elements.namedItem("description") as HTMLInputElement | null)?.value ?? descInicial;
+    return { nome, descricao: textoDaDescricao(html, 2000), tags, seoTitulo, seoDescricao };
+  };
+
+  // Campos que a IA não tem como saber ficam em destaque depois da análise.
+  const analisado = inicial !== null;
+  const destaque = (vazio: boolean) => (analisado && vazio ? "border-warning ring-1 ring-warning/60" : "");
+
   const cores = useMemo(() => parseCores(coresTexto), [coresTexto]);
   const tamanhos = useMemo(() => parseTamanhos(tamanhosTexto), [tamanhosTexto]);
   const combos = useMemo(() => gerarCombinacoes(cores, tamanhos), [cores, tamanhos]);
@@ -33,25 +130,83 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
 
   const editar = (chave: string, campo: keyof Linha, valor: string) => setLinhas((prev) => ({ ...prev, [chave]: { ...prev[chave], [campo]: valor } }));
 
+  /** Cria o produto (uma vez) e envia as fotos, uma a uma, com a padronização automática; as que falharem podem ser reenviadas. */
+  async function enviar(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (enviando) return;
+    const dados = new FormData(e.currentTarget);
+    setEnviando(true);
+    setResultado(null);
+    try {
+      let id = criadoId;
+      if (id === null) {
+        const r = await criarProdutoComFotos(dados);
+        if (r.id === undefined) {
+          setResultado(r);
+          return;
+        }
+        id = r.id;
+        setCriadoId(id);
+      }
+      let falhou = false;
+      for (const f of fotos) {
+        if (fotoEstado[f.id]?.estado === "ok") continue;
+        setFotoEstado((prev) => ({ ...prev, [f.id]: { estado: "enviando" } }));
+        const body = new FormData();
+        body.set("file", f.file);
+        body.set("tipo", "auto");
+        body.set("enquadramento", "auto");
+        body.set("padronizar", "1");
+        let r;
+        try {
+          r = await uploadProductImage(id, body);
+        } catch {
+          r = { ok: false, message: "Falhou. Tente de novo." };
+        }
+        if (r.ok) setFotoEstado((prev) => ({ ...prev, [f.id]: { estado: "ok" } }));
+        else {
+          falhou = true;
+          setFotoEstado((prev) => ({ ...prev, [f.id]: { estado: "erro", mensagem: r.message ?? "Falhou." } }));
+        }
+      }
+      if (!falhou) router.push(`/produtos/${id}?criado=1`);
+    } catch {
+      setResultado({ message: "Falha inesperada. Tente de novo." });
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const fotosPendentes = fotos.filter((f) => fotoEstado[f.id]?.estado !== "ok").length;
+  const travado = enviando || criadoId !== null;
+
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form ref={formRef} onSubmit={enviar} className="flex flex-col gap-4">
+      <fieldset disabled={travado} className="contents">
       <Card className="flex flex-col gap-4">
         <h2 className="text-base font-semibold">Dados do produto</h2>
         <label className={label}>
-          <span className="font-medium">Nome</span>
-          <input name="name" required maxLength={255} className={fieldClass} aria-invalid={!!err("name")} />
+          <span className="font-medium">
+            Nome
+            <IaTag show={ia.has("name")} />
+          </span>
+          <input name="name" required maxLength={255} value={nome} onChange={(e) => (setNome(e.target.value), limparIa("name"))} className={fieldClass} aria-invalid={!!err("name")} />
           {err("name") && <span className="text-danger">{err("name")}</span>}
         </label>
         <div className="flex flex-col gap-1 text-sm">
           <label htmlFor="description-editor" className="font-medium">
             Descrição
+            <IaTag show={ia.has("description")} />
           </label>
-          <RichTextEditor name="description" defaultValue="" id="description-editor" />
+          <RichTextEditor key={descVersao} name="description" defaultValue={descInicial} id="description-editor" onChange={() => limparIa("description")} />
           {err("description") && <span className="text-danger">{err("description")}</span>}
         </div>
         <label className={label}>
-          <span className="font-medium">Tags (separadas por vírgula)</span>
-          <input name="tags" className={fieldClass} />
+          <span className="font-medium">
+            Tags (separadas por vírgula)
+            <IaTag show={ia.has("tags")} />
+          </span>
+          <input name="tags" value={tags} onChange={(e) => (setTags(e.target.value), limparIa("tags"))} className={fieldClass} />
           {err("tags") && <span className="text-danger">{err("tags")}</span>}
         </label>
         <label className="flex items-start gap-2 text-sm">
@@ -64,7 +219,10 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
       </Card>
 
       <Card>
-        <h2 className="text-base font-semibold">Categorias</h2>
+        <h2 className="text-base font-semibold">
+          Categorias
+          <IaTag show={ia.has("categories")} />
+        </h2>
         {categories.length === 0 ? (
           <p className="mt-2 text-sm text-muted">Nenhuma categoria sincronizada.</p>
         ) : (
@@ -72,7 +230,21 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
             {categories.map((c) => (
               <li key={c.id}>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" name="categories" value={c.id} />
+                  <input
+                    type="checkbox"
+                    name="categories"
+                    value={c.id}
+                    checked={cats.has(c.id)}
+                    onChange={(e) => {
+                      setCats((prev) => {
+                        const n = new Set(prev);
+                        if (e.target.checked) n.add(c.id);
+                        else n.delete(c.id);
+                        return n;
+                      });
+                      limparIa("categories");
+                    }}
+                  />
                   <span>{c.name}</span>
                 </label>
               </li>
@@ -104,13 +276,16 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
         {modo === "simples" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
             <label className={label}>
-              <span className="text-muted">Preço (R$)</span>
-              <input name="preco" inputMode="decimal" required className={fieldClass} aria-invalid={!!err("preco")} />
+              <span className="text-muted">
+                Preço (R$)
+                <IaTag show={ia.has("preco")} />
+              </span>
+              <input name="preco" value={precoPadrao} onChange={(e) => (setPrecoPadrao(e.target.value), limparIa("preco"))} inputMode="decimal" required className={`${fieldClass} ${destaque(precoPadrao.trim() === "")}`} aria-invalid={!!err("preco")} />
               {err("preco") && <span className="text-danger">{err("preco")}</span>}
             </label>
             <label className={label}>
               <span className="text-muted">Promocional (R$)</span>
-              <input name="promocional" inputMode="decimal" className={fieldClass} />
+              <input name="promocional" value={promoPadrao} onChange={(e) => setPromoPadrao(e.target.value)} inputMode="decimal" className={fieldClass} />
               {err("promocional") && <span className="text-danger">{err("promocional")}</span>}
             </label>
             <label className={label}>
@@ -119,8 +294,11 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
               {err("sku") && <span className="text-danger">{err("sku")}</span>}
             </label>
             <label className={label}>
-              <span className="text-muted">Peso (kg)</span>
-              <input name="peso" inputMode="decimal" className={fieldClass} />
+              <span className="text-muted">
+                Peso (kg)
+                <IaTag show={ia.has("peso")} />
+              </span>
+              <input name="peso" value={peso} onChange={(e) => (setPeso(e.target.value), limparIa("peso"))} inputMode="decimal" className={`${fieldClass} ${destaque(peso.trim() === "")}`} />
               {err("peso") && <span className="text-danger">{err("peso")}</span>}
             </label>
             <label className="flex items-end gap-2 pb-2 text-sm sm:col-span-2">
@@ -139,21 +317,30 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className={label}>
-                <span className="font-medium">Cores</span>
-                <textarea value={coresTexto} onChange={(e) => setCoresTexto(e.target.value)} rows={3} placeholder="Preta, Branca, Azul Claro" className={fieldClass} />
+                <span className="font-medium">
+                  Cores
+                  <IaTag show={ia.has("cores")} />
+                </span>
+                <textarea value={coresTexto} onChange={(e) => (setCoresTexto(e.target.value), limparIa("cores"))} rows={3} placeholder="Preta, Branca, Azul Claro" className={`${fieldClass} ${destaque(coresTexto.trim() === "")}`} />
                 <span className="text-xs text-muted">Separe por vírgula ou linha. A grafia é padronizada (“azul claro” vira “Azul Claro”).</span>
               </label>
               <label className={label}>
-                <span className="font-medium">Tamanhos</span>
-                <textarea value={tamanhosTexto} onChange={(e) => setTamanhosTexto(e.target.value)} rows={3} placeholder="PP, P, M, G, GG" className={fieldClass} />
+                <span className="font-medium">
+                  Tamanhos
+                  <IaTag show={ia.has("tamanhos")} />
+                </span>
+                <textarea value={tamanhosTexto} onChange={(e) => (setTamanhosTexto(e.target.value), limparIa("tamanhos"))} rows={3} placeholder="PP, P, M, G, GG" className={`${fieldClass} ${destaque(tamanhosTexto.trim() === "")}`} />
                 <span className="text-xs text-muted">Tamanhos ficam em maiúsculas. Para tamanho único, escreva ÚNICO.</span>
               </label>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
               <label className={label}>
-                <span className="text-muted">Preço padrão (R$)</span>
-                <input value={precoPadrao} onChange={(e) => setPrecoPadrao(e.target.value)} inputMode="decimal" className={fieldClass} />
+                <span className="text-muted">
+                  Preço padrão (R$)
+                  <IaTag show={ia.has("preco")} />
+                </span>
+                <input value={precoPadrao} onChange={(e) => (setPrecoPadrao(e.target.value), limparIa("preco"))} inputMode="decimal" className={`${fieldClass} ${destaque(precoPadrao.trim() === "")}`} />
               </label>
               <label className={label}>
                 <span className="text-muted">Promocional padrão (R$)</span>
@@ -161,7 +348,7 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
               </label>
               <label className={label}>
                 <span className="text-muted">Peso (kg), todas</span>
-                <input name="peso_v" inputMode="decimal" className={fieldClass} aria-invalid={!!err("peso_v")} />
+                <input name="peso_v" value={peso} onChange={(e) => (setPeso(e.target.value), limparIa("peso"))} inputMode="decimal" className={`${fieldClass} ${destaque(peso.trim() === "")}`} aria-invalid={!!err("peso_v")} />
                 {err("peso_v") && <span className="text-danger">{err("peso_v")}</span>}
               </label>
               <label className="flex items-end gap-2 pb-2 text-sm">
@@ -239,24 +426,77 @@ export function NewProductForm({ categories }: { categories: CategoryOption[] })
       <Card className="flex flex-col gap-4">
         <h2 className="text-base font-semibold">SEO</h2>
         <label className={label}>
-          <span className="font-medium">Título (até 70 caracteres)</span>
-          <input name="seo_title" maxLength={70} className={fieldClass} />
+          <span className="font-medium">
+            Título (até 70 caracteres)
+            <IaTag show={ia.has("seo_title")} />
+          </span>
+          <input name="seo_title" maxLength={70} value={seoTitulo} onChange={(e) => (setSeoTitulo(e.target.value), limparIa("seo_title"))} className={fieldClass} />
           {err("seo_title") && <span className="text-danger">{err("seo_title")}</span>}
         </label>
         <label className={label}>
-          <span className="font-medium">Descrição (até 320 caracteres)</span>
-          <textarea name="seo_description" rows={3} maxLength={320} className={fieldClass} />
+          <span className="font-medium">
+            Descrição (até 320 caracteres)
+            <IaTag show={ia.has("seo_description")} />
+          </span>
+          <textarea name="seo_description" rows={3} maxLength={320} value={seoDescricao} onChange={(e) => (setSeoDescricao(e.target.value), limparIa("seo_description"))} className={fieldClass} />
           {err("seo_description") && <span className="text-danger">{err("seo_description")}</span>}
         </label>
       </Card>
 
+      </fieldset>
+
+      {fotos.length > 0 && criadoId !== null && (
+        <Card className="flex flex-col gap-2">
+          <h2 className="text-base font-semibold">Envio das fotos</h2>
+          <p className="text-sm text-muted">O produto foi criado como rascunho. As fotos são padronizadas e enviadas uma a uma.</p>
+          <ul className="flex flex-col gap-1 text-sm">
+            {fotos.map((f, i) => {
+              const st = fotoEstado[f.id];
+              return (
+                <li key={f.id} className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 truncate">
+                    {i + 1}. {f.file.name}
+                  </span>
+                  <span className={st?.estado === "ok" ? "text-success" : st?.estado === "erro" ? "text-danger" : "text-muted"}>
+                    {st?.estado === "ok" ? "enviada" : st?.estado === "enviando" ? "enviando…" : st?.estado === "erro" ? `falhou: ${st.mensagem}` : "na fila"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {!enviando && fotosPendentes > 0 && (
+            <p className="text-sm">
+              Algumas fotos não foram enviadas. Use o botão abaixo para tentar de novo, ou{" "}
+              <a href={`/produtos/${criadoId}?criado=1`} className="underline">
+                abra o produto
+              </a>{" "}
+              e adicione as fotos por lá.
+            </p>
+          )}
+        </Card>
+      )}
+
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-card px-4 py-3 shadow-lg">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 text-sm" aria-live="polite">
-            {state?.message ? <Alert tone="danger" className="border-0 p-0">{state.message}</Alert> : <span className="text-muted">Nada é enviado à loja até você clicar em “Criar produto”.</span>}
+            {resultado?.message ? (
+              <Alert tone="danger" className="border-0 p-0">
+                {resultado.message}
+              </Alert>
+            ) : (
+              <span className="text-muted">{criadoId !== null ? "Produto criado como rascunho." : "Nada é enviado à loja até você clicar em “Criar produto”."}</span>
+            )}
           </div>
-          <Button type="submit" disabled={pending || (modo === "variacoes" && (combos.length === 0 || grandeDemais))} className="min-h-11">
-            {pending ? "Criando…" : "Criar produto"}
+          <Button type="submit" disabled={enviando || (criadoId !== null && fotosPendentes === 0) || (criadoId === null && modo === "variacoes" && (combos.length === 0 || grandeDemais))} className="min-h-11">
+            {enviando
+              ? criadoId === null
+                ? "Criando…"
+                : "Enviando fotos…"
+              : criadoId !== null
+                ? "Tentar enviar as fotos de novo"
+                : fotos.length > 0
+                  ? `Criar produto e enviar ${fotos.length} ${fotos.length === 1 ? "foto" : "fotos"}`
+                  : "Criar produto"}
           </Button>
         </div>
       </div>

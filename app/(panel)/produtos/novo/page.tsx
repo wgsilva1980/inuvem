@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
-import { NewProductForm } from "./new-product-form";
+import { NovoProduto } from "./novo-produto";
 
 export default async function NovoProdutoPage() {
   await requireAdmin();
@@ -25,9 +25,9 @@ export default async function NovoProdutoPage() {
           ← Produtos
         </Link>
         <h1 className="text-xl font-semibold">Novo produto</h1>
-        <p className="text-sm text-muted">O produto é criado direto na Nuvemshop. As fotos você adiciona na tela do produto, logo depois de criar.</p>
+        <p className="text-sm text-muted">O produto é criado direto na Nuvemshop, sempre como rascunho até você marcar “Publicar”. Comece pelas fotos para a IA preencher o cadastro, ou preencha tudo à mão.</p>
       </div>
-      <NewProductForm categories={categories} />
+      <NovoProduto categories={categories} />
     </main>
   );
 }
