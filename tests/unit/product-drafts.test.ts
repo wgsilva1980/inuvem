@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { loadMigrations, runMigrations } from "@/lib/db/migrate";
 import type { Db } from "@/lib/sync/repo";
 import type { BackupStorage } from "@/lib/images/storage";
+import { ENQUADRAMENTO_PADRAO, aplicarEnquadramento, enquadramentoPadrao } from "@/lib/catalog/drafts-shared";
 import {
   MAX_FOTOS_RASCUNHO,
   RascunhoInvalidoError,
@@ -12,6 +13,7 @@ import {
   contarRascunhos,
   definirFotos,
   descartarRascunho,
+  lerEnquadramento,
   lerFoto,
   listarRascunhos,
   marcarCriado,
@@ -183,5 +185,51 @@ describe("rascunhos de produto", () => {
     await salvar(a, form({ name: "A2" })); // mexeu no A: vai para o topo
     expect((await listarRascunhos(db, storeId)).map((r) => r.titulo)).toEqual(["A2", "B"]);
     expect(b).toBeGreaterThan(a);
+  });
+});
+
+describe("enquadramento das fotos do rascunho", () => {
+  const manual = { tipo: "modelo", enquadramento: "manual", recorte: { x: 0.1, y: 0.2, w: 0.5 } } as const;
+
+  it("lerEnquadramento aceita só o que faz sentido", () => {
+    expect(lerEnquadramento(manual)).toEqual(manual);
+    expect(lerEnquadramento({ tipo: "peca", enquadramento: "cortar", recorte: { x: 1, y: 1, w: 1 } })).toEqual({ tipo: "peca", enquadramento: "cortar", recorte: null }); // recorte só vale no manual
+    expect(lerEnquadramento({ tipo: "manual", enquadramento: "auto" })).toBeNull();
+    expect(lerEnquadramento({ tipo: "auto", enquadramento: "esticar" })).toBeNull();
+    expect(lerEnquadramento({ tipo: "auto", enquadramento: "manual", recorte: { x: "a", y: 0, w: 1 } })).toEqual({ tipo: "auto", enquadramento: "manual", recorte: null });
+    expect(lerEnquadramento(null)).toBeNull();
+    expect(lerEnquadramento("x")).toBeNull();
+  });
+
+  it("definirFotos guarda o enquadramento de cada foto; o automático não ocupa espaço; sem entrada mantém o que tinha", async () => {
+    const st = new FakeStorage();
+    const id = await salvar();
+    const [a, b, c] = [await foto(st, id, "a.jpg"), await foto(st, id, "b.jpg"), await foto(st, id, "c.jpg")];
+    let r = await definirFotos(db, st, { storeId, id, ordem: [a.pathname, b.pathname, c.pathname], opcoes: { [a.pathname]: manual, [b.pathname]: ENQUADRAMENTO_PADRAO, [c.pathname]: { tipo: "x" } } });
+    expect(r.map((f) => f.enquadramento)).toEqual([manual, undefined, undefined]);
+    expect((await obterRascunho(db, storeId, id))!.fotos[0]!.enquadramento).toEqual(manual);
+
+    // reordenar sem informar opções mantém o enquadramento
+    r = await definirFotos(db, st, { storeId, id, ordem: [c.pathname, a.pathname] });
+    expect(r.map((f) => f.name)).toEqual(["c.jpg", "a.jpg"]);
+    expect(r[1]!.enquadramento).toEqual(manual);
+
+    // voltar ao automático remove o enquadramento guardado
+    r = await definirFotos(db, st, { storeId, id, ordem: [a.pathname], opcoes: { [a.pathname]: ENQUADRAMENTO_PADRAO } });
+    expect(r[0]!.enquadramento).toBeUndefined();
+    expect(st.files.has(b.pathname)).toBe(false);
+  });
+
+  it("aplicarEnquadramento preenche o formulário de envio (recorte só no manual)", () => {
+    const body = new FormData();
+    aplicarEnquadramento(body, manual);
+    expect([body.get("tipo"), body.get("enquadramento")]).toEqual(["modelo", "manual"]);
+    expect(JSON.parse(String(body.get("recorte")))).toEqual(manual.recorte);
+    aplicarEnquadramento(body, { tipo: "peca", enquadramento: "ajustar", recorte: null });
+    expect([body.get("tipo"), body.get("enquadramento"), body.get("recorte")]).toEqual(["peca", "ajustar", null]);
+    aplicarEnquadramento(body, undefined);
+    expect([body.get("tipo"), body.get("enquadramento")]).toEqual(["auto", "auto"]);
+    expect(enquadramentoPadrao(undefined)).toBe(true);
+    expect(enquadramentoPadrao(manual)).toBe(false);
   });
 });

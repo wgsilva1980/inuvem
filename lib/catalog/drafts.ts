@@ -2,7 +2,8 @@ import { z } from "zod";
 import { UPLOAD_TYPES, safeFilename } from "@/lib/catalog/images";
 import type { BackupStorage } from "@/lib/images/storage";
 import type { Db } from "@/lib/sync/repo";
-import { MAX_FOTOS_RASCUNHO, type FormSalvo, type FotoSalva, type IaSalva, type RascunhoResumo, type RascunhoSalvo } from "./drafts-shared";
+import { lerRecorte } from "@/lib/images/recorte";
+import { MAX_FOTOS_RASCUNHO, type EnquadramentoFoto, type FormSalvo, type FotoSalva, type IaSalva, type RascunhoResumo, type RascunhoSalvo } from "./drafts-shared";
 
 export { MAX_FOTOS_RASCUNHO };
 
@@ -35,6 +36,16 @@ const iaSchema = z.object({
   avisos: z.array(z.string().max(500)).max(10).catch([]),
   fotos: z.array(z.object({ alt: texto(300), qualidade: z.number().int().min(1).max(5).catch(3), observacao: texto(500) })).max(MAX_FOTOS_RASCUNHO).catch([]),
 });
+
+/** Valida o enquadramento que vem do navegador; o que não faz sentido vira nulo (a foto sobe no automático). */
+export function lerEnquadramento(raw: unknown): EnquadramentoFoto | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { tipo, enquadramento, recorte } = raw as Record<string, unknown>;
+  if (tipo !== "auto" && tipo !== "peca" && tipo !== "modelo") return null;
+  if (enquadramento !== "auto" && enquadramento !== "ajustar" && enquadramento !== "cortar" && enquadramento !== "manual") return null;
+  const r = enquadramento === "manual" ? lerRecorte(recorte) : null;
+  return { tipo, enquadramento, recorte: r };
+}
 
 interface Linha {
   id: string;
@@ -143,17 +154,30 @@ export async function adicionarFoto(
   return foto;
 }
 
-/** Deixa no rascunho só as fotos de `ordem` (pathnames), nessa ordem; as demais são apagadas do Blob. */
-export async function definirFotos(db: Db, storage: BackupStorage, args: { storeId: string; id: number; ordem: string[] }): Promise<FotoSalva[]> {
+/**
+ * Deixa no rascunho só as fotos de `ordem` (pathnames), nessa ordem; as demais são apagadas do Blob. `opcoes` (por pathname) guarda o
+ * enquadramento escolhido de cada foto; foto sem entrada mantém o que já tinha.
+ */
+export async function definirFotos(
+  db: Db,
+  storage: BackupStorage,
+  args: { storeId: string; id: number; ordem: string[]; opcoes?: Record<string, unknown> },
+): Promise<FotoSalva[]> {
   const rascunho = await obterRascunho(db, args.storeId, args.id);
   if (!rascunho || rascunho.status !== "rascunho") throw new RascunhoNaoEncontradoError();
   const porCaminho = new Map(rascunho.fotos.map((f) => [f.pathname, f]));
   const novas: FotoSalva[] = [];
   for (const p of args.ordem) {
     const f = porCaminho.get(p);
-    if (f && !novas.includes(f)) novas.push(f);
+    if (!f || novas.some((x) => x.pathname === f.pathname)) continue;
+    if (args.opcoes && p in args.opcoes) {
+      const o = lerEnquadramento(args.opcoes[p]);
+      const { enquadramento: _antigo, ...resto } = f; // eslint-disable-line @typescript-eslint/no-unused-vars
+      novas.push(o && !(o.tipo === "auto" && o.enquadramento === "auto") ? { ...resto, enquadramento: o } : resto);
+    } else novas.push(f);
   }
-  const removidas = rascunho.fotos.filter((f) => !novas.includes(f)).map((f) => f.pathname);
+  const mantidas = new Set(novas.map((f) => f.pathname));
+  const removidas = rascunho.fotos.filter((f) => !mantidas.has(f.pathname)).map((f) => f.pathname);
   await db.query(`UPDATE product_drafts SET photos = $3::jsonb, updated_at = clock_timestamp() WHERE store_id = $1::uuid AND id = $2::bigint`, [args.storeId, args.id, JSON.stringify(novas)]);
   if (removidas.length > 0) await storage.del?.(removidas).catch(() => undefined);
   return novas;
