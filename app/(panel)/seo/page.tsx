@@ -10,6 +10,7 @@ import { contarParaAplicar, listarSeo, resumoSeo, type LinhaSeo } from "@/lib/se
 import { getActiveStore } from "@/lib/stores";
 import { ApplyRunner, GenerateRunner } from "./runners";
 import { SeoEditor } from "./seo-editor";
+import { SeoTabs } from "./seo-tabs";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +67,8 @@ export default async function SeoPage({ searchParams }: { searchParams: Promise<
           O Claude escreve, para cada produto, o <strong>título de SEO</strong> (até 70 caracteres, terminando em “| Donatelle Concept”) e a <strong>descrição de SEO</strong> (até 320), usando o nome, as categorias, as variações, a descrição atual e a foto principal. Gerar não altera a loja; você revisa, edita se quiser e só então grava.
         </p>
       </div>
+
+      <SeoTabs atual="/seo" />
 
       {!configurado && (
         <Card className="text-sm">

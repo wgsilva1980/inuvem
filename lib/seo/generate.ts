@@ -24,9 +24,9 @@ export interface SugestaoSeo {
 export type FotoSeo = { bytes: Buffer; mediaType: "image/jpeg" } | null;
 export type GeradorSeo = (foto: FotoSeo, contexto: ContextoSeo) => Promise<SugestaoSeo>;
 
-const respostaSchema = z.object({ titulo_base: z.string(), descricao: z.string() });
+export const respostaSchema = z.object({ titulo_base: z.string(), descricao: z.string() });
 
-const SCHEMA_JSON = {
+export const SCHEMA_JSON = {
   type: "object",
   properties: {
     titulo_base: { type: "string", description: `Título do produto SEM o nome da loja, no máximo ${PARTE_TITULO_MAX} caracteres.` },
