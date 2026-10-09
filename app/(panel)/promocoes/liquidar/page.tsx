@@ -9,7 +9,7 @@ import { descontoBase, listarParados } from "@/lib/promotions/parados";
 import { resumoVendas } from "@/lib/sales/sync";
 import { getActiveStore } from "@/lib/stores";
 import { LiquidarForm } from "./liquidar-form";
-import { SincronizarVendas } from "./sincronizar-vendas";
+import { SincronizarPedidos } from "../../vendas/sincronizar-pedidos";
 
 export const dynamic = "force-dynamic";
 
@@ -49,12 +49,12 @@ export default async function LiquidarPage({ searchParams }: { searchParams: Pro
       </div>
 
       <Card>
-        <SincronizarVendas ultima={resumo.sincronizadoEm} janelaDias={resumo.janelaDias} />
+        <SincronizarPedidos ultima={resumo.sincronizadoEm} />
       </Card>
 
       {parados === null ? (
         <Card>
-          <p className="text-sm text-muted">Leia as vendas da loja para descobrir o que está parado. É só leitura: nada é alterado na loja.</p>
+          <p className="text-sm text-muted">Leia os pedidos da loja para descobrir o que está parado. É só leitura: nada é alterado na loja.</p>
         </Card>
       ) : (
         <>

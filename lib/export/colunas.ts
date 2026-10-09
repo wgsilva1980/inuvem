@@ -2,6 +2,7 @@ import type { LinhaProduto } from "@/lib/catalog/export";
 import { SITUACAO_LABEL, situacaoDoCupom } from "@/lib/coupons/lote";
 import type { ContactExport } from "@/lib/contacts/repo";
 import type { Coupon } from "@/lib/nuvemshop/coupons";
+import type { ProdutoVendido } from "@/lib/orders/stats";
 import { KIND_LABEL, type ContactKind } from "@/lib/contacts/schema";
 import type { Coluna } from "./xlsx";
 
@@ -73,4 +74,13 @@ export const COLUNAS_CUPONS = (hoje: string): Coluna<Coupon>[] => [
   { titulo: "Pedido mínimo (R$)", valor: (c) => num(c.min_price == null ? null : String(c.min_price)), largura: 18, formato: "#,##0.00" },
   { titulo: "Só primeira compra", valor: (c) => sn(c.first_consumer_purchase ?? null), largura: 18 },
   { titulo: "Acumula com outros descontos", valor: (c) => sn(c.combines_with_other_discounts ?? null), largura: 26 },
+];
+
+export const COLUNAS_VENDAS: Coluna<ProdutoVendido>[] = [
+  { titulo: "ID do produto", valor: (p) => p.product_id, largura: 14 },
+  { titulo: "Produto", valor: (p) => p.nome, largura: 44 },
+  { titulo: "Peças vendidas", valor: (p) => p.unidades, largura: 15 },
+  { titulo: "Valor vendido (R$)", valor: (p) => p.valor, largura: 18, formato: "#,##0.00" },
+  { titulo: "Pedidos", valor: (p) => p.pedidos, largura: 10 },
+  { titulo: "Estoque atual", valor: (p) => p.estoque, largura: 14 },
 ];

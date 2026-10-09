@@ -18,6 +18,7 @@ export async function redactCustomer(db: Db, nuvemshopStoreId: number, customerI
   const lojas = await db.query<{ id: string }>("SELECT id FROM stores WHERE nuvemshop_store_id = $1", [nuvemshopStoreId]);
   if (lojas.length === 0) return 0;
   const storeId = lojas[0]!.id;
+  await db.query("UPDATE orders SET customer_id = NULL WHERE store_id = $1::uuid AND customer_id = $2::bigint", [storeId, customerId]);
   await db.query("DELETE FROM contacts WHERE store_id = $1::uuid AND nuvemshop_customer_id = $2::bigint", [storeId, customerId]);
   const rows = await db.query<{ id: string }>("DELETE FROM customers WHERE store_id = $1::uuid AND id = $2::bigint RETURNING id", [storeId, customerId]);
   return rows.length;
