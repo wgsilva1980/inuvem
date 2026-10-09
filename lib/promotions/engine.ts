@@ -1,7 +1,8 @@
 import { createRevertJob, stepJob, type BulkApi } from "@/lib/bulk/engine";
-import { describeOperation, planOperation } from "@/lib/bulk/operations";
+import { describeOperation } from "@/lib/bulk/operations";
 import { JobStateError, cancelJob, createJob, getJob, getJobCounts, loadMirrorProducts, startJob, type JobCounts } from "@/lib/bulk/repo";
 import type { Db } from "@/lib/sync/repo";
+import { planoDaPromocao, resumoPercentuais } from "./plan";
 import { PromocaoError, getPromotion, listDue, type PromoStatus, type Promocao } from "./repo";
 
 export interface PassoPromocao {
@@ -27,14 +28,14 @@ async function iniciar(db: Db, p: Promocao, actor: string): Promise<void> {
   const claimed = await db.query("UPDATE promotions SET status = 'aplicando', started_at = now() WHERE id = $1::uuid AND status = 'agendada' RETURNING id", [p.id]);
   if (claimed.length === 0) return; // outro passo já pegou
   try {
-    const plan = planOperation(p.operation, await loadMirrorProducts(db, p.store_id, p.product_ids.map(Number)));
+    const plan = planoDaPromocao(p.operation, p.percents, await loadMirrorProducts(db, p.store_id, p.product_ids.map(Number)));
     if (plan.items.length === 0) {
       const motivos = [...new Set(plan.ignorados.map((i) => i.motivo))].slice(0, 3).join("; ");
       await marcar(db, p.id, "encerrada", "ended_at = now(), nota = $3", [`Nada a alterar${motivos ? `: ${motivos}` : ""}.`]);
       await audit(db, p, actor, "promocao.iniciar", { produtos: 0 });
       return;
     }
-    const jobId = await createJob(db, { storeId: p.store_id, actor, operation: p.operation, descricao: `Promoção “${p.nome}” — início: ${describeOperation(p.operation)}`, plan });
+    const jobId = await createJob(db, { storeId: p.store_id, actor, operation: p.operation, descricao: `Promoção “${p.nome}” — início: ${p.percents ? `descontos por produto (${resumoPercentuais(p.operation, p.percents)})` : describeOperation(p.operation)}`, plan });
     try {
       await startJob(db, p.store_id, jobId);
     } catch (err) {

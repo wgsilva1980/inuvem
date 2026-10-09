@@ -19,6 +19,8 @@ export interface Promocao {
   store_id: string;
   nome: string;
   operation: BulkOperation;
+  /** Desconto próprio de cada produto (liquidação); null = o percentual da operação vale para todos. */
+  percents: Record<string, number> | null;
   product_ids: string[];
   starts_at: string;
   ends_at: string;
@@ -32,7 +34,7 @@ export interface Promocao {
   ended_at: string | null;
 }
 
-const COLUMNS = `id, store_id, nome, operation, product_ids::text[] AS product_ids, starts_at::text AS starts_at, ends_at::text AS ends_at, status, apply_job_id, revert_job_id,
+const COLUMNS = `id, store_id, nome, operation, percents, product_ids::text[] AS product_ids, starts_at::text AS starts_at, ends_at::text AS ends_at, status, apply_job_id, revert_job_id,
   nota, created_by, created_at::text AS created_at, started_at::text AS started_at, ended_at::text AS ended_at`;
 
 /** Data e hora digitadas na tela (aaaa-mm-ddThh:mm) valem no horário de Brasília. */
@@ -41,7 +43,7 @@ const SP = "AT TIME ZONE 'America/Sao_Paulo'";
 
 export async function createPromotion(
   db: Db,
-  args: { storeId: string; actor: string; nome: string; operation: BulkOperation; productIds: number[]; inicioLocal: string; fimLocal: string },
+  args: { storeId: string; actor: string; nome: string; operation: BulkOperation; productIds: number[]; inicioLocal: string; fimLocal: string; percents?: Record<string, number> },
 ): Promise<string> {
   const nome = args.nome.trim().slice(0, 120);
   if (nome === "") throw new PromocaoError("Dê um nome para a promoção.");
@@ -49,6 +51,14 @@ export async function createPromotion(
   if (args.productIds.length === 0) throw new PromocaoError("Nenhum produto selecionado.");
   const op = operationSchema.parse(args.operation);
   if (op.type !== "promocao" || op.mode !== "desconto") throw new PromocaoError("Operação inválida para uma promoção.");
+
+  if (args.percents) {
+    const ids = new Set(args.productIds.map(String));
+    for (const [pid, pct] of Object.entries(args.percents)) {
+      if (!ids.has(pid)) throw new PromocaoError("Desconto informado para um produto fora da seleção.");
+      if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) throw new PromocaoError("Cada desconto precisa ser maior que 0% e menor que 100%.");
+    }
+  }
 
   const [range] = await db.query<{ ok: boolean; futuro: boolean }>(
     `SELECT ($2::timestamp ${SP}) > ($1::timestamp ${SP}) AS ok, ($2::timestamp ${SP}) > now() AS futuro`,
@@ -67,9 +77,9 @@ export async function createPromotion(
   if (conflito[0]) throw new PromocaoError(`Há produtos desta seleção na promoção “${conflito[0].nome}”, que se sobrepõe a estas datas. Ajuste as datas ou os produtos.`);
 
   const rows = await db.query<{ id: string }>(
-    `INSERT INTO promotions (store_id, nome, operation, product_ids, starts_at, ends_at, created_by)
-     VALUES ($1::uuid, $2, $3::jsonb, $4::bigint[], ($5::timestamp ${SP}), ($6::timestamp ${SP}), $7) RETURNING id`,
-    [args.storeId, nome, JSON.stringify(op), args.productIds, args.inicioLocal, args.fimLocal, args.actor],
+    `INSERT INTO promotions (store_id, nome, operation, percents, product_ids, starts_at, ends_at, created_by)
+     VALUES ($1::uuid, $2, $3::jsonb, $8::jsonb, $4::bigint[], ($5::timestamp ${SP}), ($6::timestamp ${SP}), $7) RETURNING id`,
+    [args.storeId, nome, JSON.stringify(op), args.productIds, args.inicioLocal, args.fimLocal, args.actor, args.percents ? JSON.stringify(args.percents) : null],
   );
   return rows[0]!.id;
 }
