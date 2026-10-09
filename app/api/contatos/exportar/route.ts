@@ -1,6 +1,6 @@
 import { requireAdminApi } from "@/lib/auth/admin";
 import { query } from "@/lib/db";
-import { listContactsForExport } from "@/lib/contacts/repo";
+import { ORIGENS, SEGMENTOS, listContactsForExport } from "@/lib/contacts/repo";
 import { KINDS } from "@/lib/contacts/schema";
 import { COLUNAS_CONTATOS } from "@/lib/export/colunas";
 import { gerarXlsx, respostaXlsx } from "@/lib/export/xlsx";
@@ -24,11 +24,17 @@ export async function GET(req: Request) {
   const sit = p.get("situacao");
   const status = sit === "todos" || sit === "inativos" ? sit : "ativos";
 
-  const { items, truncated } = await listContactsForExport({ query }, store.id, { q, kind, status }, MAX);
+  const o = p.get("origem");
+  const origem = ORIGENS.find((x) => x === o);
+  const sg = p.get("segmento");
+  const segmento = SEGMENTOS.find((x) => x === sg);
+  const sort = p.get("ordem") === "gasto" ? "gasto" : "nome";
+
+  const { items, truncated } = await listContactsForExport({ query }, store.id, { q, kind, status, origem, segmento, sort }, MAX);
   const buf = await gerarXlsx("Contatos", COLUNAS_CONTATOS, items);
   await query(
     `INSERT INTO audit_log (store_id, actor_email, acao, entidade, depois) VALUES ($1::uuid, $2, 'contato.exportar', 'contato', $3::jsonb)`,
-    [store.id, admin.email, JSON.stringify({ linhas: items.length, filtros: { q: q ? "(busca)" : null, tipo: kind ?? null, situacao: status } })],
+    [store.id, admin.email, JSON.stringify({ linhas: items.length, filtros: { q: q ? "(busca)" : null, tipo: kind ?? null, situacao: status, origem: origem ?? null, segmento: segmento ?? null } })],
   );
   const res = respostaXlsx(buf, "contatos");
   if (truncated) res.headers.set("x-export-truncado", "1");

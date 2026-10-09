@@ -16,3 +16,9 @@ export function formatDate(iso: string | null): string {
   const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
 }
+
+/** Valor em reais (R$ 1.234,56) a partir de "1234.56". */
+export function formatBRL(v: string | number | null): string {
+  const n = typeof v === "string" ? Number(v) : v;
+  return n === null || n === undefined || Number.isNaN(n) ? "" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}

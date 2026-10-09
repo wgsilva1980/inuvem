@@ -1,5 +1,5 @@
 import type { LinhaProduto } from "@/lib/catalog/export";
-import type { Contact } from "@/lib/contacts/repo";
+import type { ContactExport } from "@/lib/contacts/repo";
 import { KIND_LABEL, type ContactKind } from "@/lib/contacts/schema";
 import type { Coluna } from "./xlsx";
 
@@ -26,7 +26,7 @@ export const COLUNAS_PRODUTOS: Coluna<LinhaProduto>[] = [
   { titulo: "Atualizado na loja em", valor: (l) => l.atualizado_em, largura: 20 },
 ];
 
-export const COLUNAS_CONTATOS: Coluna<Contact>[] = [
+export const COLUNAS_CONTATOS: Coluna<ContactExport>[] = [
   { titulo: "Nome", valor: (c) => c.name, largura: 36 },
   { titulo: "Nome fantasia", valor: (c) => c.trade_name, largura: 28 },
   { titulo: "Tipo", valor: (c) => (c.kind ? (KIND_LABEL[c.kind as ContactKind] ?? c.kind) : ""), largura: 14 },
@@ -46,6 +46,10 @@ export const COLUNAS_CONTATOS: Coluna<Contact>[] = [
   { titulo: "UF", valor: (c) => c.state, largura: 5 },
   { titulo: "Nascimento", valor: (c) => c.birth_date, largura: 12 },
   { titulo: "Cliente desde", valor: (c) => c.customer_since, largura: 13 },
+  { titulo: "Origem", valor: (c) => (c.from_store ? "Loja" : "Cadastrado aqui"), largura: 14 },
+  { titulo: "Total gasto na loja (R$)", valor: (c) => num(c.total_spent), largura: 22, formato: "#,##0.00" },
+  { titulo: "Aceita novidades", valor: (c) => sn(c.accepts_marketing), largura: 16 },
+  { titulo: "Cliente da loja desde", valor: (c) => c.store_customer_since, largura: 20 },
   { titulo: "Situação", valor: (c) => (c.active ? "Ativo" : "Inativo"), largura: 10 },
   { titulo: "Observações", valor: (c) => c.notes, largura: 40 },
 ];
