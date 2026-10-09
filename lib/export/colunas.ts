@@ -1,5 +1,7 @@
 import type { LinhaProduto } from "@/lib/catalog/export";
+import { SITUACAO_LABEL, situacaoDoCupom } from "@/lib/coupons/lote";
 import type { ContactExport } from "@/lib/contacts/repo";
+import type { Coupon } from "@/lib/nuvemshop/coupons";
 import { KIND_LABEL, type ContactKind } from "@/lib/contacts/schema";
 import type { Coluna } from "./xlsx";
 
@@ -52,4 +54,23 @@ export const COLUNAS_CONTATOS: Coluna<ContactExport>[] = [
   { titulo: "Cliente da loja desde", valor: (c) => c.store_customer_since, largura: 20 },
   { titulo: "Situação", valor: (c) => (c.active ? "Ativo" : "Inativo"), largura: 10 },
   { titulo: "Observações", valor: (c) => c.notes, largura: 40 },
+];
+
+const dataBr = (d: string | null | undefined) => {
+  const m = d?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+};
+
+export const COLUNAS_CUPONS = (hoje: string): Coluna<Coupon>[] => [
+  { titulo: "Código", valor: (c) => c.code, largura: 22 },
+  { titulo: "Tipo", valor: (c) => (c.type === "percentage" ? "Percentual" : c.type === "absolute" ? "Valor fixo (R$)" : (c.type ?? "")), largura: 16 },
+  { titulo: "Valor", valor: (c) => num(c.value == null ? null : String(c.value)), largura: 10, formato: "#,##0.00" },
+  { titulo: "Situação", valor: (c) => SITUACAO_LABEL[situacaoDoCupom(c, hoje)], largura: 12 },
+  { titulo: "Usos", valor: (c) => num(c.used == null ? null : String(c.used)), largura: 8 },
+  { titulo: "Limite de usos", valor: (c) => (c.max_uses == null || c.max_uses === "" ? "Sem limite" : Number(c.max_uses)), largura: 14 },
+  { titulo: "Válido de", valor: (c) => dataBr(c.start_date), largura: 12 },
+  { titulo: "Válido até", valor: (c) => dataBr(c.end_date), largura: 12 },
+  { titulo: "Pedido mínimo (R$)", valor: (c) => num(c.min_price == null ? null : String(c.min_price)), largura: 18, formato: "#,##0.00" },
+  { titulo: "Só primeira compra", valor: (c) => sn(c.first_consumer_purchase ?? null), largura: 18 },
+  { titulo: "Acumula com outros descontos", valor: (c) => sn(c.combines_with_other_discounts ?? null), largura: 26 },
 ];
