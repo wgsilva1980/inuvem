@@ -11,3 +11,4 @@ export * from "./webhooks";
 export * from "./oauth";
 export * from "./customers";
 export * from "./orders";
+export * from "./coupons";
