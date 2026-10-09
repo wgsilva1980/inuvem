@@ -73,8 +73,8 @@ export const PROPRIEDADES_PADRAO = ["COR", "TAMANHO"] as const;
 const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 /** "Cor", "COR,", " cores " -> "cor": para reconhecer o que a propriedade significa, ignorando caixa, acento e vírgula sobrando. */
 const chave = (nome: string) => semAcento(nome).toLowerCase().replace(/[\s,;.:]+$/g, "").replace(/^[\s,;.:]+/g, "");
-const ehCor = (nome: string) => ["cor", "cores"].includes(chave(nome));
-const ehTamanho = (nome: string) => ["tam", "tamanho", "tamanhos", "tamamho"].includes(chave(nome));
+export const ehCor = (nome: string) => ["cor", "cores"].includes(chave(nome));
+export const ehTamanho = (nome: string) => ["tam", "tamanho", "tamanhos", "tamamho"].includes(chave(nome));
 
 /** Conectivos que ficam em minúsculas no meio do nome de uma cor ("Verde de Água"). */
 const CONECTIVOS = new Set(["de", "da", "do", "das", "dos", "e", "com", "em"]);

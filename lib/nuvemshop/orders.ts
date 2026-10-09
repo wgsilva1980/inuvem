@@ -9,13 +9,28 @@ export const orderSchema = z
     id: z.number(),
     number: z.number().nullish(),
     created_at: text,
+    updated_at: text,
     total: num,
+    discount: num,
     currency: text,
     status: text,
     payment_status: text,
     shipping_status: text,
     customer: z.object({ id: z.number().nullish(), email: text }).passthrough().nullish(),
-    products: z.array(z.object({ product_id: z.number().nullish(), name: z.unknown().optional(), quantity: num }).passthrough()).nullish(),
+    products: z
+      .array(
+        z
+          .object({
+            product_id: z.number().nullish(),
+            variant_id: z.number().nullish(),
+            name: z.unknown().optional(),
+            quantity: num,
+            price: num,
+            variant_values: z.unknown().optional(),
+          })
+          .passthrough(),
+      )
+      .nullish(),
   })
   .passthrough();
 export type Order = z.infer<typeof orderSchema>;
@@ -39,12 +54,13 @@ export interface ListOrdersParams {
   page?: number;
   per_page?: number;
   created_at_min?: string;
+  updated_at_min?: string;
 }
 
-/** Uma página de pedidos pagos a partir de uma data; os que não passam no schema são contados à parte. */
+/** Uma página de pedidos (qualquer situação: o painel filtra depois); os que não passam no schema são contados à parte. */
 export async function listOrdersPage(c: NuvemshopClient, params: ListOrdersParams = {}): Promise<Page<Order> & { invalidos: number; campos: string[] }> {
   const { page = 1, per_page = 200, ...query } = params;
-  const result = await c.getPage<unknown>("/orders", { ...query, payment_status: "paid" }, page, per_page);
+  const result = await c.getPage<unknown>("/orders", query, page, per_page);
   const items: Order[] = [];
   const campos = new Set<string>();
   let invalidos = 0;

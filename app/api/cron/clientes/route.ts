@@ -20,9 +20,37 @@ export async function GET(request: Request) {
     const { tickPromocoes } = await import("@/lib/promotions/engine");
     const { bulkApiDaLoja } = await import("@/lib/promotions/service");
     const loja = await getActiveStore();
-    if (loja) promocoes = await tickPromocoes({ query }, await bulkApiDaLoja(loja), { storeId: loja.id, budgetMs: 20_000 });
+    if (loja) promocoes = await tickPromocoes({ query }, await bulkApiDaLoja(loja), { storeId: loja.id, budgetMs: 15_000 });
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "cron.promocoes_failed", message: err instanceof Error ? err.message : String(err) }));
+  }
+  let pedidos: { lidos: number; concluido: boolean } | undefined;
+  try {
+    const { query } = await import("@/lib/db");
+    const { getActiveStore } = await import("@/lib/stores");
+    const { ultimaSincronizacaoPedidos } = await import("@/lib/orders/sync");
+    const { passoPedidosDaLoja } = await import("@/lib/orders/service");
+    const loja = await getActiveStore();
+    // só depois da primeira leitura feita à mão; então traz os pedidos alterados desde a última vez
+    if (loja && (await ultimaSincronizacaoPedidos({ query }, loja.id))) {
+      const limitePedidos = Date.now() + 12_000;
+      let page: number | undefined;
+      let inicio: string | undefined;
+      pedidos = { lidos: 0, concluido: false };
+      for (;;) {
+        const passo = await passoPedidosDaLoja({ page, inicio, budgetMs: Math.max(1_000, limitePedidos - Date.now()), actor: "cron" });
+        pedidos.lidos += passo.lidos;
+        if (passo.concluido) {
+          pedidos.concluido = true;
+          break;
+        }
+        if (Date.now() >= limitePedidos) break;
+        page = passo.proxima ?? undefined;
+        inicio = passo.inicio;
+      }
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ level: "error", event: "cron.pedidos_failed", message: err instanceof Error ? err.message : String(err) }));
   }
   try {
     const { ultimaSincronizacao } = await import("@/lib/customers/sync");
@@ -30,17 +58,17 @@ export async function GET(request: Request) {
     const { getActiveStore } = await import("@/lib/stores");
     const store = await getActiveStore();
     if (!store) return Response.json({ skipped: "Nenhuma loja conectada." });
-    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes });
+    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos });
 
     let page: number | undefined;
     let inicio: string | undefined;
-    const limite = Date.now() + 30_000;
+    const limite = Date.now() + 25_000;
     let lidos = 0;
     for (;;) {
       const passo = await passoClientesDaLoja({ page, inicio, budgetMs: Math.max(1_000, limite - Date.now()), actor: "cron" });
       lidos += passo.lidos;
-      if (passo.concluido) return Response.json({ done: true, lidos, promocoes });
-      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes });
+      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos });
+      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos });
       page = passo.proxima ?? undefined;
       inicio = passo.inicio;
     }
