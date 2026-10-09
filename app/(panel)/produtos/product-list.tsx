@@ -45,9 +45,14 @@ export function ProductList({ items, total, filterQuery }: { items: CatalogItem[
           <span>Selecionar página</span>
         </label>
         {total > 0 && (
-          <Link href={`/lote/novo${filterQuery ? `?${filterQuery}` : ""}`} className={buttonClass("outline", "min-h-9 px-3 py-1")}>
-            Aplicar a todos os {total} {total === 1 ? "resultado" : "resultados"} do filtro
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/lote/novo${filterQuery ? `?${filterQuery}` : ""}`} className={buttonClass("outline", "min-h-9 px-3 py-1")}>
+              Aplicar a todos os {total} {total === 1 ? "resultado" : "resultados"} do filtro
+            </Link>
+            <Link href={`/promocoes/nova${filterQuery ? `?${filterQuery}` : ""}`} className={buttonClass("outline", "min-h-9 px-3 py-1")}>
+              Agendar promoção
+            </Link>
+          </div>
         )}
       </div>
 
@@ -97,6 +102,9 @@ export function ProductList({ items, total, filterQuery }: { items: CatalogItem[
               <button type="button" className={buttonClass("outline")} onClick={() => setSelected(new Set())}>
                 Limpar seleção
               </button>
+              <Link href={`/promocoes/nova?ids=${[...selected].join(",")}`} className={buttonClass("outline")}>
+                Agendar promoção
+              </Link>
               <Link href={`/lote/novo?ids=${[...selected].join(",")}`} className={buttonClass("primary")}>
                 Ações em lote
               </Link>
