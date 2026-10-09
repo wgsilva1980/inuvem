@@ -3,6 +3,7 @@ import { z } from "zod";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Category, Product } from "@/lib/nuvemshop/types";
 import { verifyWebhookSignature } from "@/lib/nuvemshop/webhook-verify";
+import { aplicarRegraRepublicar } from "@/lib/automations/in-stock";
 import { aplicarRegraSemEstoque } from "@/lib/automations/out-of-stock";
 import { removeCategoryFromMirror, upsertCategories, upsertProducts, type Db } from "@/lib/sync/repo";
 
@@ -98,6 +99,16 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
         return "falhou" as const;
       });
       if (regra === "despublicado") deps.log?.({ event: "webhook.produto_despublicado_sem_estoque", product: id });
+      // Regra inversa (opcional): o estoque voltou num produto que a regra acima despublicou -> publica de novo.
+      // (não se aplica ao produto que acabou de ser despublicado acima: `produto` ainda é o estado de antes da regra)
+      const volta =
+        regra === "despublicado"
+          ? ("nao_se_aplica" as const)
+          : await aplicarRegraRepublicar(db, { storeId, produto, setPublished: api.setPublished?.bind(api) }).catch((err) => {
+              deps.log?.({ event: "webhook.regra_republicar_falhou", message: err instanceof Error ? err.message : String(err) });
+              return "falhou" as const;
+            });
+      if (volta === "republicado") deps.log?.({ event: "webhook.produto_republicado_estoque_voltou", product: id });
       return;
     }
     case "category/created":

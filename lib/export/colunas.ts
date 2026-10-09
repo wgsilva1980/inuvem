@@ -3,6 +3,7 @@ import { SITUACAO_LABEL, situacaoDoCupom } from "@/lib/coupons/lote";
 import type { ContactExport } from "@/lib/contacts/repo";
 import type { Coupon } from "@/lib/nuvemshop/coupons";
 import type { ProdutoVendido } from "@/lib/orders/stats";
+import type { LinhaReposicao } from "@/lib/stock/insights";
 import { KIND_LABEL, type ContactKind } from "@/lib/contacts/schema";
 import type { Coluna } from "./xlsx";
 
@@ -83,4 +84,18 @@ export const COLUNAS_VENDAS: Coluna<ProdutoVendido>[] = [
   { titulo: "Valor vendido (R$)", valor: (p) => p.valor, largura: 18, formato: "#,##0.00" },
   { titulo: "Pedidos", valor: (p) => p.pedidos, largura: 10 },
   { titulo: "Estoque atual", valor: (p) => p.estoque, largura: 14 },
+];
+
+export const COLUNAS_REPOSICAO: Coluna<LinhaReposicao>[] = [
+  { titulo: "Situação", valor: (l) => (l.situacao === "esgotado" ? "Esgotado" : "Acabando"), largura: 12 },
+  { titulo: "ID do produto", valor: (l) => l.product_id, largura: 14 },
+  { titulo: "Produto", valor: (l) => l.produto, largura: 44 },
+  { titulo: "Variação", valor: (l) => l.variacao, largura: 22 },
+  { titulo: "SKU", valor: (l) => l.sku, largura: 18 },
+  { titulo: "Estoque", valor: (l) => l.estoque, largura: 10 },
+  { titulo: "Vendidas na janela", valor: (l) => l.vendidas, largura: 18 },
+  { titulo: "Ritmo (un/dia)", valor: (l) => Math.round(l.ritmo * 100) / 100, largura: 14, formato: "0.00" },
+  { titulo: "Dias restantes", valor: (l) => (l.diasRestantes === null ? "Esgotado" : Math.round(l.diasRestantes * 10) / 10), largura: 14 },
+  { titulo: "Sugestão de reposição", valor: (l) => l.sugerido, largura: 20 },
+  { titulo: "Publicado na loja", valor: (l) => sn(l.publicado), largura: 16 },
 ];
