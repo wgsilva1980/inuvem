@@ -8,10 +8,13 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { fieldBase } from "@/components/ui/field";
 import { Pagination } from "@/components/ui/pagination";
-import { listContacts } from "@/lib/contacts/repo";
+import { formatBRL } from "@/lib/contacts/format";
+import { ORIGENS, SEGMENTOS, SEGMENTO_LABEL, listContacts, } from "@/lib/contacts/repo";
+import { ultimaSincronizacao } from "@/lib/customers/sync";
 import { KINDS, KIND_LABEL } from "@/lib/contacts/schema";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
+import { SincronizarClientes } from "./sincronizar-clientes";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,9 @@ const paramsSchema = z.object({
   tipo: z.string().optional().catch(undefined),
   situacao: z.enum(["todos", "ativos", "inativos"]).catch("ativos"),
   pagina: z.coerce.number().int().min(1).max(100000).catch(1),
+  origem: z.enum(ORIGENS).optional().catch(undefined),
+  segmento: z.enum(SEGMENTOS).optional().catch(undefined),
+  ordem: z.enum(["nome", "gasto"]).catch("nome"),
   excluido: z.string().optional().catch(undefined),
 });
 
@@ -35,13 +41,17 @@ export default async function ContatosPage({ searchParams }: { searchParams: Pro
   }
   const sp = paramsSchema.parse(await searchParams);
   const kind = sp.tipo && ([...KINDS, "sem_tipo"] as string[]).includes(sp.tipo) ? sp.tipo : undefined;
-  const result = await listContacts({ query }, store.id, { q: sp.q, kind, status: sp.situacao, page: sp.pagina });
+  const result = await listContacts({ query }, store.id, { q: sp.q, kind, status: sp.situacao, origem: sp.origem, segmento: sp.segmento, sort: sp.ordem, page: sp.pagina });
+  const ultima = await ultimaSincronizacao({ query }, store.id);
 
   const href = (page: number) => {
     const p = new URLSearchParams();
     if (sp.q) p.set("q", sp.q);
     if (kind) p.set("tipo", kind);
     if (sp.situacao !== "ativos") p.set("situacao", sp.situacao);
+    if (sp.origem) p.set("origem", sp.origem);
+    if (sp.segmento) p.set("segmento", sp.segmento);
+    if (sp.ordem !== "nome") p.set("ordem", sp.ordem);
     if (page > 1) p.set("pagina", String(page));
     const qs = p.toString();
     return qs ? `/contatos?${qs}` : "/contatos";
@@ -51,6 +61,9 @@ export default async function ContatosPage({ searchParams }: { searchParams: Pro
   if (sp.q) exportParams.set("q", sp.q);
   if (kind) exportParams.set("tipo", kind);
   if (sp.situacao !== "ativos") exportParams.set("situacao", sp.situacao);
+  if (sp.origem) exportParams.set("origem", sp.origem);
+  if (sp.segmento) exportParams.set("segmento", sp.segmento);
+  if (sp.ordem !== "nome") exportParams.set("ordem", sp.ordem);
   const exportHref = `/api/contatos/exportar${exportParams.size ? `?${exportParams}` : ""}`;
 
   return (
@@ -72,6 +85,9 @@ export default async function ContatosPage({ searchParams }: { searchParams: Pro
         </div>
       </div>
       {sp.excluido === "1" && <Alert tone="success">Contato excluído.</Alert>}
+      <Card>
+        <SincronizarClientes ultima={ultima} />
+      </Card>
 
       <Card>
         <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -97,6 +113,32 @@ export default async function ContatosPage({ searchParams }: { searchParams: Pro
               <option value="ativos">Ativos</option>
               <option value="inativos">Inativos</option>
               <option value="todos">Todos</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Origem</span>
+            <select name="origem" defaultValue={sp.origem ?? ""} className={fieldBase}>
+              <option value="">Todas</option>
+              <option value="loja">Da loja</option>
+              <option value="manual">Cadastrados aqui</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Segmento</span>
+            <select name="segmento" defaultValue={sp.segmento ?? ""} className={fieldBase}>
+              <option value="">Todos</option>
+              {SEGMENTOS.map((s) => (
+                <option key={s} value={s}>
+                  {SEGMENTO_LABEL[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Ordenar por</span>
+            <select name="ordem" defaultValue={sp.ordem} className={fieldBase}>
+              <option value="nome">Nome</option>
+              <option value="gasto">Maior gasto na loja</option>
             </select>
           </label>
           <div className="flex gap-2 sm:col-span-4">
@@ -130,6 +172,8 @@ export default async function ContatosPage({ searchParams }: { searchParams: Pro
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2 text-sm">
+                    {c.from_store && <Badge tone="success">Loja</Badge>}
+                    {c.total_spent !== null && Number(c.total_spent) > 0 && <span className="text-xs text-muted">{formatBRL(c.total_spent)}</span>}
                     {c.kind && <Badge>{KIND_LABEL[c.kind as keyof typeof KIND_LABEL] ?? c.kind}</Badge>}
                     {c.person_type === "juridica" && <Badge>PJ</Badge>}
                     {!c.active && <Badge tone="warning">Inativo</Badge>}

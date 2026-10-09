@@ -12,6 +12,7 @@ const FIXED: Record<string, string> = {
   "contato.atualizar": "Contato editado",
   "contato.apagar": "Contato excluído",
   "contato.exportar": "Contatos exportados para Excel",
+  "cliente.sincronizar": "Clientes da loja sincronizados",
   "usuario.adicionar": "Usuário adicionado",
   "usuario.remover": "Usuário removido",
   "imagem.adicionar": "Imagem adicionada (por endereço)",

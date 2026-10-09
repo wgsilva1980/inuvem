@@ -9,3 +9,5 @@ export * from "./stock-price";
 export * from "./locations";
 export * from "./webhooks";
 export * from "./oauth";
+export * from "./customers";
+export * from "./orders";

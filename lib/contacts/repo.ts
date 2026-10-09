@@ -35,10 +35,27 @@ const COLUMNS = `id::text AS id, kind, person_type, name, trade_name, document, 
   zip, street, number, complement, district, city, state, to_char(birth_date, 'YYYY-MM-DD') AS birth_date, gender, marital_status, profession,
   nationality, to_char(customer_since, 'YYYY-MM-DD') AS customer_since, active, notes`;
 
+export const ORIGENS = ["loja", "manual"] as const;
+export const SEGMENTOS = ["compraram", "sem_compra", "melhores", "novos", "marketing"] as const;
+export type Origem = (typeof ORIGENS)[number];
+export type Segmento = (typeof SEGMENTOS)[number];
+export const SEGMENTO_LABEL: Record<Segmento, string> = {
+  compraram: "Já compraram",
+  sem_compra: "Cadastradas sem compra",
+  melhores: "Melhores clientes (20% que mais gastaram)",
+  novos: "Novas (últimos 30 dias)",
+  marketing: "Aceitam receber novidades",
+};
+
 export interface ContactFilters {
   q?: string;
   kind?: string;
   status?: "todos" | "ativos" | "inativos";
+  /** Contatos que vieram da loja (clientes sincronizados) ou cadastrados à mão. */
+  origem?: Origem;
+  /** Recortes dos clientes da loja (só valem para quem está ligado a um cliente). */
+  segmento?: Segmento;
+  sort?: "nome" | "gasto";
   page?: number;
 }
 
@@ -56,7 +73,20 @@ export interface ContactListItem {
   phone: string | null;
   email: string | null;
   active: boolean;
+  /** Veio da loja (cliente sincronizado). */
+  from_store: boolean;
+  /** Total gasto na loja (R$, texto do banco); null se não está ligado a um cliente. */
+  total_spent: string | null;
 }
+
+/** Contato com os dados do cliente da loja, para exportar. */
+export type ContactExport = Contact & { from_store: boolean; total_spent: string | null; accepts_marketing: boolean | null; store_customer_since: string | null };
+
+/** Contatos já com os dados do cliente da loja ao lado (prefixo `cu_`), para filtrar e ordenar sem ambiguidade de colunas. */
+const BASE = `WITH base AS (
+  SELECT c.*, cu.total_spent AS cu_total_spent, cu.accepts_marketing AS cu_marketing, cu.created_at_remote AS cu_created
+  FROM contacts c LEFT JOIN customers cu ON cu.store_id = c.store_id AND cu.id = c.nuvemshop_customer_id
+)`;
 
 /** WHERE (e parâmetros) dos filtros de contatos: busca (nome, fantasia, e-mail, telefone, CPF/CNPJ, cidade), tipo e situação. */
 export function buildContactsWhere(storeId: string, f: ContactFilters): { clause: string; params: unknown[] } {
@@ -78,27 +108,56 @@ export function buildContactsWhere(storeId: string, f: ContactFilters): { clause
   else if (f.kind) where.push(`kind = ${add(f.kind)}`);
   if (f.status === "ativos") where.push("active");
   else if (f.status === "inativos") where.push("NOT active");
+  if (f.origem === "loja") where.push("nuvemshop_customer_id IS NOT NULL");
+  else if (f.origem === "manual") where.push("nuvemshop_customer_id IS NULL");
+  switch (f.segmento) {
+    case "compraram":
+      where.push("cu_total_spent > 0");
+      break;
+    case "sem_compra":
+      where.push("nuvemshop_customer_id IS NOT NULL AND coalesce(cu_total_spent, 0) = 0");
+      break;
+    case "melhores":
+      where.push("cu_total_spent > 0 AND cu_total_spent >= (SELECT percentile_cont(0.8) WITHIN GROUP (ORDER BY total_spent) FROM customers WHERE store_id = $1::uuid AND total_spent > 0)");
+      break;
+    case "novos":
+      where.push("cu_created >= now() - interval '30 days'");
+      break;
+    case "marketing":
+      where.push("cu_marketing IS TRUE");
+      break;
+  }
   return { clause: where.join(" AND "), params };
 }
+
+const ordem = (f: ContactFilters) => (f.sort === "gasto" ? "cu_total_spent DESC NULLS LAST, lower(name), id" : "lower(name), id");
 
 /** Lista com busca (nome, fantasia, e-mail, telefone, CPF/CNPJ), tipo e situação, paginada. */
 export async function listContacts(db: Db, storeId: string, f: ContactFilters): Promise<{ items: ContactListItem[]; total: number; page: number; pages: number }> {
   const { clause, params } = buildContactsWhere(storeId, f);
-  const total = Number((await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM contacts WHERE ${clause}`, params))[0]?.n ?? 0);
+  const total = Number((await db.query<{ n: string }>(`${BASE} SELECT count(*)::text AS n FROM base WHERE ${clause}`, params))[0]?.n ?? 0);
   const pages = Math.max(1, Math.ceil(total / CONTACTS_PAGE_SIZE));
   const page = Math.min(Math.max(1, f.page ?? 1), pages);
   const items = await db.query<ContactListItem>(
-    `SELECT id::text AS id, name, trade_name, kind, person_type, city, state, mobile, phone, email, active
-     FROM contacts WHERE ${clause} ORDER BY lower(name), id LIMIT ${CONTACTS_PAGE_SIZE} OFFSET ${(page - 1) * CONTACTS_PAGE_SIZE}`,
+    `${BASE}
+     SELECT id::text AS id, name, trade_name, kind, person_type, city, state, mobile, phone, email, active,
+            nuvemshop_customer_id IS NOT NULL AS from_store, cu_total_spent::text AS total_spent
+     FROM base WHERE ${clause} ORDER BY ${ordem(f)} LIMIT ${CONTACTS_PAGE_SIZE} OFFSET ${(page - 1) * CONTACTS_PAGE_SIZE}`,
     params,
   );
   return { items, total, page, pages };
 }
 
 /** Todos os contatos que casam com os filtros (sem paginação), no limite pedido, para exportar. */
-export async function listContactsForExport(db: Db, storeId: string, f: ContactFilters, limit: number): Promise<{ items: Contact[]; truncated: boolean }> {
+export async function listContactsForExport(db: Db, storeId: string, f: ContactFilters, limit: number): Promise<{ items: ContactExport[]; truncated: boolean }> {
   const { clause, params } = buildContactsWhere(storeId, f);
-  const rows = await db.query<Contact>(`SELECT ${COLUMNS} FROM contacts WHERE ${clause} ORDER BY lower(name), id LIMIT ${limit + 1}`, params);
+  const rows = await db.query<ContactExport>(
+    `${BASE}
+     SELECT ${COLUMNS}, nuvemshop_customer_id IS NOT NULL AS from_store, cu_total_spent::text AS total_spent, cu_marketing AS accepts_marketing,
+            to_char(cu_created AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS store_customer_since
+     FROM base WHERE ${clause} ORDER BY ${ordem(f)} LIMIT ${limit + 1}`,
+    params,
+  );
   return { items: rows.slice(0, limit), truncated: rows.length > limit };
 }
 
@@ -149,8 +208,34 @@ export async function updateContact(db: Db, args: { storeId: string; actor: stri
 }
 
 export async function deleteContact(db: Db, args: { storeId: string; actor: string; id: number }): Promise<boolean> {
-  const rows = await db.query<{ name: string }>("DELETE FROM contacts WHERE store_id = $1::uuid AND id = $2::bigint RETURNING name", [args.storeId, args.id]);
+  const rows = await db.query<{ name: string; customer_id: string | null }>(
+    "DELETE FROM contacts WHERE store_id = $1::uuid AND id = $2::bigint RETURNING name, nuvemshop_customer_id::text AS customer_id",
+    [args.storeId, args.id],
+  );
   if (rows.length === 0) return false;
+  // contato que veio da loja: a sincronização não o recria
+  if (rows[0]!.customer_id !== null) await db.query("UPDATE customers SET ignored = true WHERE store_id = $1::uuid AND id = $2::bigint", [args.storeId, rows[0]!.customer_id]);
   await audit(db, { storeId: args.storeId, actor: args.actor, acao: "contato.apagar", id: args.id, depois: { nome: rows[0]!.name } });
   return true;
+}
+
+export interface ClienteDaLoja {
+  customer_id: string;
+  total_spent: string;
+  last_order_id: string | null;
+  accepts_marketing: boolean | null;
+  created_at_remote: string | null;
+  email: string | null;
+}
+
+/** Dados do cliente da loja ligado a este contato (null se o contato é só do painel). */
+export async function getClienteDaLoja(db: Db, storeId: string, contactId: number): Promise<ClienteDaLoja | null> {
+  const rows = await db.query<ClienteDaLoja>(
+    `SELECT cu.id::text AS customer_id, cu.total_spent::text AS total_spent, cu.last_order_id::text AS last_order_id, cu.accepts_marketing,
+            to_char(cu.created_at_remote AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS created_at_remote, cu.email
+     FROM contacts c JOIN customers cu ON cu.store_id = c.store_id AND cu.id = c.nuvemshop_customer_id
+     WHERE c.store_id = $1::uuid AND c.id = $2::bigint`,
+    [storeId, contactId],
+  );
+  return rows[0] ?? null;
 }
