@@ -6,6 +6,8 @@ const FIXED: Record<string, string> = {
   "variante.apagar": "Variante excluída",
   "produto.propriedades": "Propriedades do produto editadas",
   "produto.apagar": "Produto excluído",
+  "categoria.seo": "SEO da categoria gravado",
+  "pagina.seo": "SEO da página gravado",
   "cupom.criar": "Cupons criados em lote",
   "cupom.desativar": "Cupons desativados",
   "cupom.exportar": "Cupons exportados para Excel",

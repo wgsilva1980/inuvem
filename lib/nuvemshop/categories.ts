@@ -5,6 +5,8 @@ import { categorySchema, type Category, type I18n } from "./types";
 export interface CategoryInput {
   name?: I18n;
   description?: I18n;
+  seo_title?: I18n;
+  seo_description?: I18n;
   handle?: I18n;
   parent?: number | null;
 }
