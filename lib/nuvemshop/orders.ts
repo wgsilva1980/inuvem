@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { NuvemshopClient } from "./client";
+import type { NuvemshopClient, Page } from "./client";
 
 const text = z.string().nullish();
 const num = z.union([z.number(), z.string()]).nullish();
@@ -15,7 +15,7 @@ export const orderSchema = z
     payment_status: text,
     shipping_status: text,
     customer: z.object({ id: z.number().nullish(), email: text }).passthrough().nullish(),
-    products: z.array(z.object({ name: z.unknown().optional(), quantity: num }).passthrough()).nullish(),
+    products: z.array(z.object({ product_id: z.number().nullish(), name: z.unknown().optional(), quantity: num }).passthrough()).nullish(),
   })
   .passthrough();
 export type Order = z.infer<typeof orderSchema>;
@@ -33,4 +33,26 @@ export async function listCustomerOrders(c: NuvemshopClient, customer: { id: num
     if (r.success && r.data.customer?.id === customer.id) out.push(r.data);
   }
   return out.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))).slice(0, limit);
+}
+
+export interface ListOrdersParams {
+  page?: number;
+  per_page?: number;
+  created_at_min?: string;
+}
+
+/** Uma página de pedidos pagos a partir de uma data; os que não passam no schema são contados à parte. */
+export async function listOrdersPage(c: NuvemshopClient, params: ListOrdersParams = {}): Promise<Page<Order> & { invalidos: number; campos: string[] }> {
+  const { page = 1, per_page = 200, ...query } = params;
+  const result = await c.getPage<unknown>("/orders", { ...query, payment_status: "paid" }, page, per_page);
+  const items: Order[] = [];
+  const campos = new Set<string>();
+  let invalidos = 0;
+  for (const raw of result.items) {
+    if (raw && typeof raw === "object") for (const k of Object.keys(raw)) campos.add(k);
+    const r = orderSchema.safeParse(raw);
+    if (r.success) items.push(r.data);
+    else invalidos++;
+  }
+  return { ...result, items, invalidos, campos: [...campos].sort() };
 }

@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/admin";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { describeOperation, planOperation } from "@/lib/bulk/operations";
+import { describeOperation } from "@/lib/bulk/operations";
 import { loadMirrorProducts } from "@/lib/bulk/repo";
 import { query } from "@/lib/db";
+import { planoDaPromocao, resumoPercentuais } from "@/lib/promotions/plan";
 import { STATUS_LABEL, getPromotion } from "@/lib/promotions/repo";
 import { getActiveStore } from "@/lib/stores";
 import { PromoAcoes } from "../promo-acoes";
@@ -26,7 +27,7 @@ export default async function PromocaoPage({ params }: { params: Promise<{ id: s
   if (!p) notFound();
 
   // enquanto não começou, mostra o que seria aplicado com os preços de agora
-  const plano = p.status === "agendada" ? planOperation(p.operation, await loadMirrorProducts(db, store.id, p.product_ids.map(Number))) : null;
+  const plano = p.status === "agendada" ? planoDaPromocao(p.operation, p.percents, await loadMirrorProducts(db, store.id, p.product_ids.map(Number))) : null;
   const variantes = plano ? plano.items.reduce((n, it) => n + it.changes.variants.length, 0) : 0;
 
   return (
@@ -39,7 +40,7 @@ export default async function PromocaoPage({ params }: { params: Promise<{ id: s
           <h1 className="text-xl font-semibold">{p.nome}</h1>
           <Badge tone={p.status === "ativa" ? "success" : p.status === "aplicando" || p.status === "encerrando" ? "warning" : "neutral"}>{STATUS_LABEL[p.status]}</Badge>
         </div>
-        <p className="text-sm text-muted">{describeOperation(p.operation)}</p>
+        <p className="text-sm text-muted">{p.percents ? `Descontos por produto (${resumoPercentuais(p.operation, p.percents)})` : describeOperation(p.operation)}</p>
       </div>
 
       <Card>

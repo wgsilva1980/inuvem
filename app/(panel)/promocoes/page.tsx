@@ -23,9 +23,14 @@ export default async function PromocoesPage() {
           <h1 className="text-xl font-semibold">Promoções</h1>
           <p className="text-sm text-muted">Descontos com início e fim: o preço promocional entra na hora marcada e volta ao que era no fim.</p>
         </div>
-        <Link href="/produtos" className={buttonClass("primary")}>
-          Escolher produtos
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/promocoes/liquidar" className={buttonClass("outline")}>
+            Liquidar os parados
+          </Link>
+          <Link href="/produtos" className={buttonClass("primary")}>
+            Escolher produtos
+          </Link>
+        </div>
       </div>
       <Card className="p-0 sm:p-0">
         {promos.length === 0 ? (

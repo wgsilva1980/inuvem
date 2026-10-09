@@ -6,6 +6,7 @@ const FIXED: Record<string, string> = {
   "variante.apagar": "Variante excluída",
   "produto.propriedades": "Propriedades do produto editadas",
   "produto.apagar": "Produto excluído",
+  "venda.sincronizar": "Vendas da loja lidas",
   "promocao.criar": "Promoção agendada",
   "promocao.cancelar": "Promoção cancelada",
   "promocao.iniciar": "Promoção iniciada (descontos aplicados)",
