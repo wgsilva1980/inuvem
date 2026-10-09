@@ -52,6 +52,12 @@ export async function aplicarRegraSemEstoque(
        VALUES ($1::uuid, $2, $3, 'produto', $4, $5::jsonb, $6::jsonb, $7::jsonb, true)`,
       [storeId, ator, ACAO_DESPUBLICAR, String(produto.id), JSON.stringify({ published: true }), JSON.stringify({ published: false, ...base }), JSON.stringify({ status: "ok" })],
     );
+    // lembra que foi a regra que tirou o produto da loja: só esses podem voltar sozinhos quando o estoque voltar
+    await db.query(
+      `INSERT INTO auto_unpublished (store_id, product_id) VALUES ($1::uuid, $2::bigint)
+       ON CONFLICT (store_id, product_id) DO UPDATE SET unpublished_at = now()`,
+      [storeId, produto.id],
+    );
     return "despublicado";
   } catch (err) {
     const resultado = err instanceof NuvemshopError ? { status: err.status, mensagem: err.apiMessage ?? err.message } : { mensagem: err instanceof Error ? err.message : String(err) };
@@ -79,6 +85,7 @@ export async function contarPublicadosSemEstoque(db: Db, storeId: string): Promi
 
 export interface AcaoAutomatica {
   id: string;
+  acao: string;
   created_at: string;
   product_id: string;
   produto: string | null;
@@ -88,10 +95,10 @@ export interface AcaoAutomatica {
 
 export async function ultimasAcoesAutomaticas(db: Db, storeId: string, limite = 20): Promise<AcaoAutomatica[]> {
   return db.query<AcaoAutomatica>(
-    `SELECT a.id::text, a.created_at::text, a.entidade_id AS product_id, p.name AS produto, a.sucesso, a.resultado_api->>'mensagem' AS mensagem
+    `SELECT a.id::text, a.acao, a.created_at::text, a.entidade_id AS product_id, p.name AS produto, a.sucesso, a.resultado_api->>'mensagem' AS mensagem
      FROM audit_log a LEFT JOIN products p ON p.store_id = a.store_id AND p.id::text = a.entidade_id
-     WHERE a.store_id = $1::uuid AND a.acao = $2 ORDER BY a.id DESC LIMIT $3`,
-    [storeId, ACAO_DESPUBLICAR, limite],
+     WHERE a.store_id = $1::uuid AND a.acao = ANY($2::text[]) ORDER BY a.id DESC LIMIT $3`,
+    [storeId, [ACAO_DESPUBLICAR, "produto.republicar_com_estoque"], limite],
   );
 }
 
