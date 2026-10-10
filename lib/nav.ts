@@ -3,6 +3,11 @@ export const NAV_LINKS = [
   { href: "/produtos", label: "Produtos" },
   { href: "/categorias", label: "Categorias" },
   { href: "/contatos", label: "Contatos" },
+  { href: "/cashback", label: "Cashback" },
+] as const;
+
+/** Itens do submenu "Administração". */
+export const ADMIN_LINKS = [
   { href: "/promocoes", label: "Promoções" },
   { href: "/cupons", label: "Cupons" },
   { href: "/vendas", label: "Vendas" },
@@ -10,11 +15,6 @@ export const NAV_LINKS = [
   { href: "/estoque", label: "Estoque" },
   { href: "/carrinhos", label: "Carrinhos" },
   { href: "/expedicao", label: "Expedição" },
-  { href: "/cashback", label: "Cashback" },
-] as const;
-
-/** Itens do submenu "Administração". */
-export const ADMIN_LINKS = [
   { href: "/imagens", label: "Imagens" },
   { href: "/seo", label: "SEO" },
   { href: "/conteudo", label: "Conteúdo" },
