@@ -101,6 +101,15 @@ export async function ItensView({ tipo, filtro: filtroParam }: { tipo: TipoItem;
         </Card>
       )}
 
+      {store && !erro && tipo === "pagina" && linhas.length === 0 && (
+        <Card className="text-sm">
+          <p className="font-medium">A loja não devolveu nenhuma página.</p>
+          <p className="text-muted">
+            Se você tem páginas (Quem somos, Política de privacidade…) e elas não aparecem, é provável que a Nuvemshop não as exponha por esta API (por exemplo, páginas feitas no editor do tema). Rode o <a href="/diagnostico" className="underline">Diagnóstico da API</a> e veja a linha “Páginas da loja”: ela mostra o que a loja respondeu.
+          </p>
+        </Card>
+      )}
+
       {store && !erro && (
         <Card className="flex flex-col gap-3">
           <p className="text-sm">

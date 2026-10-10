@@ -28,17 +28,24 @@ function avaliar(sonda: Sonda, amostras: unknown[]): Pick<ResultadoSonda, "statu
   };
 }
 
+const listaDe = (r: unknown): unknown[] => (Array.isArray(r) ? r : []);
+
 export async function executarSonda(client: NuvemshopClient, sonda: Sonda): Promise<ResultadoSonda> {
   const inicio = Date.now();
   const base = { id: sonda.id, titulo: sonda.titulo, caminho: sonda.caminho, usadoPor: sonda.usadoPor };
   try {
-    const amostras = sonda.forma === "objeto" ? [await client.get<unknown>(sonda.caminho)] : (await client.getPage<unknown>(sonda.caminho, {}, 1, AMOSTRA)).items;
+    // Leitura direta (não getPage): o getPage trata 404 como lista vazia, e aqui precisamos distinguir "não há itens" de "o recurso não existe".
+    const amostras = sonda.forma === "objeto" ? [await client.get<unknown>(sonda.caminho)] : listaDe(await client.get<unknown>(sonda.caminho, { page: 1, per_page: AMOSTRA }));
     return { ...base, ...avaliar(sonda, amostras), itensLidos: amostras.length, ms: Date.now() - inicio };
   } catch (err) {
     const ms = Date.now() - inicio;
     if (err instanceof NuvemshopError) {
       if (err.status === 401 || err.status === 403) return { ...base, status: "sem_permissao", mensagem: "A Nuvemshop negou a leitura. O app provavelmente não tem a permissão deste recurso: confira a lista de permissões e, se faltar, reautorize o app.", campos: [], recebidos: [], itensLidos: 0, ms };
-      if (err.status === 404) return { ...base, status: "indisponivel", mensagem: "A Nuvemshop respondeu que este recurso não existe (404) para esta loja ou versão da API. O painel usa o modo alternativo, quando há um.", campos: [], recebidos: [], itensLidos: 0, ms };
+      if (err.status === 404 && sonda.forma === "lista" && /last page|empty|vazi/i.test(err.apiMessage ?? "")) {
+        // a Nuvemshop responde 404 ("Last page is 0") a uma lista sem itens
+        return { ...base, ...avaliar(sonda, []), mensagem: `A loja respondeu que não há itens neste recurso (404: ${err.apiMessage}). Se você tem itens desse tipo no admin da loja, eles não são expostos por esta API.`, itensLidos: 0, ms };
+      }
+      if (err.status === 404) return { ...base, status: "indisponivel", mensagem: `A Nuvemshop respondeu que este recurso não existe (404${err.apiMessage ? `: ${err.apiMessage}` : ""}) para esta loja ou versão da API. O painel usa o modo alternativo, quando há um.`, campos: [], recebidos: [], itensLidos: 0, ms };
       return { ...base, status: "erro", mensagem: err.userMessage, campos: [], recebidos: [], itensLidos: 0, ms };
     }
     return { ...base, status: "erro", mensagem: err instanceof Error ? err.message.slice(0, 200) : "Falha inesperada.", campos: [], recebidos: [], itensLidos: 0, ms };
