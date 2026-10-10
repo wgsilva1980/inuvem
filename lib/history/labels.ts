@@ -54,6 +54,8 @@ const FIXED: Record<string, string> = {
   "bloco.atualizar": "Bloco de conteúdo atualizado",
   "bloco.excluir": "Bloco de conteúdo excluído",
   "pagina.criar": "Página da loja criada (texto escrito com a IA)",
+  "email.reescrever": "E-mail da loja reescrito com a IA (rascunho)",
+  "email.colado": "Texto novo do e-mail colado na loja (marcado pelo usuário)",
   "lote.completar": "Lote: COR e TAMANHO completados no produto",
 };
 
