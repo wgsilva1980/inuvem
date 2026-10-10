@@ -14,3 +14,4 @@ export * from "./orders";
 export * from "./coupons";
 export * from "./pages";
 export * from "./checkouts";
+export * from "./email-templates";
