@@ -13,6 +13,7 @@ export const ADMIN_LINKS = [
   { href: "/vendas", label: "Vendas" },
   { href: "/custos", label: "Custos" },
   { href: "/estoque", label: "Estoque" },
+  { href: "/qualidade", label: "Qualidade" },
   { href: "/carrinhos", label: "Carrinhos" },
   { href: "/expedicao", label: "Expedição" },
   { href: "/reativacao", label: "Reativação" },
