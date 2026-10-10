@@ -108,6 +108,13 @@ describe("uma leitura de teste", () => {
     expect((await executarSonda(cliente({ "/coupons": [] }).c, sonda("cupons"))).status).toBe("sem_dados");
     expect((await executarSonda(cliente({ "/customers": new NuvemshopError("403", 403, null) }).c, sonda("clientes"))).status).toBe("sem_permissao");
     expect((await executarSonda(cliente({}).c, sonda("emails"))).status).toBe("indisponivel");
+    // 404 "Last page is 0" = lista sem itens (não é recurso inexistente); outro 404 mostra o texto da API
+    const vazia = await executarSonda(cliente({ "/pages": new NuvemshopError("404", 404, null, "Last page is 0") }).c, sonda("paginas"));
+    expect(vazia.status).toBe("sem_dados");
+    expect(vazia.mensagem).toMatch(/não há itens.*Last page is 0/);
+    const inexistente = await executarSonda(cliente({ "/pages": new NuvemshopError("404", 404, null, "Resource not found") }).c, sonda("paginas"));
+    expect(inexistente.status).toBe("indisponivel");
+    expect(inexistente.mensagem).toMatch(/Resource not found/);
     const erro = await executarSonda(cliente({ "/pages": new NuvemshopError("500", 500, null, "caiu") }).c, sonda("paginas"));
     expect(erro.status).toBe("erro");
     expect((await executarSonda(cliente({ "/pages": new Error("rede") }).c, sonda("paginas"))).status).toBe("erro");
