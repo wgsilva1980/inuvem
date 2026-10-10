@@ -57,7 +57,7 @@ export async function resumoDeHoje(db: Db, storeId: string, appUrl: string, agor
   return montarResumo(await painelDoDia(db, storeId, agora), { appUrl, dataTexto: dataTexto(agora) });
 }
 
-export type ResultadoEnvio = { enviado: true; destinatarios: number; resumo: Pick<ResumoMontado, "assunto" | "urgentes" | "atencao" | "total"> } | { enviado: false; motivo: string };
+export type ResultadoEnvio = { enviado: true; destinatarios: number; aviso?: string; resumo: Pick<ResumoMontado, "assunto" | "urgentes" | "atencao" | "total"> } | { enviado: false; motivo: string };
 
 /**
  * Envia o resumo do dia. Automático (cron): só se estiver ligado, ainda não enviado hoje (Brasília) e, se a opção estiver marcada, só quando há algo
@@ -79,19 +79,22 @@ export async function enviarResumoDoDia(
   if (destinatarios.length === 0) return { enviado: false, motivo: "Nenhum destinatário administrador." };
   const resumo = await resumoDeHoje(db, args.storeId, args.appUrl, agora);
   if (!args.manual && cfg.onlyIfAction && resumo.urgentes + resumo.atencao === 0) return { enviado: false, motivo: "Nada urgente nem de atenção (opção “só enviar quando houver ação”)." };
+  let envio;
   try {
-    await enviarEmail({ para: destinatarios, assunto: args.manual ? `[teste] ${resumo.assunto}` : resumo.assunto, html: resumo.html, texto: resumo.texto }, args.config ?? configDoEmail(), args.fetchImpl);
+    envio = await enviarEmail({ para: destinatarios, assunto: args.manual ? `[teste] ${resumo.assunto}` : resumo.assunto, html: resumo.html, texto: resumo.texto }, args.config ?? configDoEmail(), args.fetchImpl);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Falha ao enviar.";
     if (!args.manual) await db.query("UPDATE digest_settings SET last_error = $2, last_error_at = now() WHERE store_id = $1::uuid", [args.storeId, msg.slice(0, 500)]);
     await db.query(`INSERT INTO audit_log (store_id, actor_email, acao, entidade, depois, sucesso) VALUES ($1::uuid, $2, 'resumo.enviar', 'loja', $3::jsonb, false)`, [args.storeId, args.actor, JSON.stringify({ erro: msg.slice(0, 300), manual: Boolean(args.manual) })]);
     throw err;
   }
-  if (!args.manual) await db.query("UPDATE digest_settings SET last_sent_on = $2::date, last_error = NULL, last_error_at = NULL WHERE store_id = $1::uuid", [args.storeId, hoje]);
+  const falhas = envio.falhas.length;
+  const avisoFalhas = falhas > 0 ? `Não foi possível enviar para ${falhas} de ${destinatarios.length} destinatário(s): ${envio.falhas[0]?.erro ?? ""}`.slice(0, 500) : null;
+  if (!args.manual) await db.query("UPDATE digest_settings SET last_sent_on = $2::date, last_error = $3, last_error_at = CASE WHEN $3::text IS NULL THEN NULL ELSE now() END WHERE store_id = $1::uuid", [args.storeId, hoje, avisoFalhas]);
   await db.query(`INSERT INTO audit_log (store_id, actor_email, acao, entidade, depois, sucesso) VALUES ($1::uuid, $2, 'resumo.enviar', 'loja', $3::jsonb, true)`, [
     args.storeId,
     args.actor,
-    JSON.stringify({ destinatarios: destinatarios.length, urgentes: resumo.urgentes, atencao: resumo.atencao, tarefas: resumo.total, manual: Boolean(args.manual) }),
+    JSON.stringify({ destinatarios: envio.enviados.length, falhas, urgentes: resumo.urgentes, atencao: resumo.atencao, tarefas: resumo.total, manual: Boolean(args.manual) }),
   ]);
-  return { enviado: true, destinatarios: destinatarios.length, resumo: { assunto: resumo.assunto, urgentes: resumo.urgentes, atencao: resumo.atencao, total: resumo.total } };
+  return { enviado: true, destinatarios: envio.enviados.length, ...(avisoFalhas ? { aviso: avisoFalhas } : {}), resumo: { assunto: resumo.assunto, urgentes: resumo.urgentes, atencao: resumo.atencao, total: resumo.total } };
 }

@@ -53,6 +53,10 @@ describe("envio pelo Resend", () => {
     expect((chamadas[0]!.init.headers as Record<string, string>).authorization).toBe("Bearer re_123");
     expect(JSON.parse(chamadas[0]!.init.body as string)).toEqual({ from: REMETENTE_PADRAO, to: ["a@b.com"], subject: "Oi", html: "<p>x</p>", text: "x" });
     const negado = (async () => new Response(JSON.stringify({ message: "domínio não verificado" }), { status: 403 })) as unknown as typeof fetch;
+    const parcial = (async (_u: unknown, init?: RequestInit) => (String(init?.body).includes("fora@x.com") ? new Response(JSON.stringify({ message: "só para o dono" }), { status: 403 }) : new Response("{}", { status: 200 }))) as unknown as typeof fetch;
+    const r = await enviarEmail({ para: ["dono@x.com", "fora@x.com"], assunto: "", html: "", texto: "" }, { apiKey: "k", from: "f" }, parcial);
+    expect(r.enviados).toEqual(["dono@x.com"]);
+    expect(r.falhas).toHaveLength(1);
     await expect(enviarEmail({ para: ["a@b.com"], assunto: "", html: "", texto: "" }, { apiKey: "k", from: "f" }, negado)).rejects.toThrow(/recusou \(403\).*domínio não verificado/);
     const caiu = (async () => { throw new Error("rede"); }) as unknown as typeof fetch;
     await expect(enviarEmail({ para: ["a@b.com"], assunto: "", html: "", texto: "" }, { apiKey: "k", from: "f" }, caiu)).rejects.toBeInstanceOf(EmailEnvioError);
@@ -110,11 +114,10 @@ describe("envio do resumo do dia", () => {
     await salvarConfigResumo(db, { storeId, actor, enabled: true, recipients: ["dona@loja.com", "socio@loja.com"], onlyIfAction: false });
     const r = await enviar();
     expect(r).toMatchObject({ enviado: true, destinatarios: 2 });
-    expect(enviados).toHaveLength(1);
-    expect(enviados[0]!.para).toEqual(["dona@loja.com", "socio@loja.com"]);
+    expect(enviados.map((e) => e.para)).toEqual([["dona@loja.com"], ["socio@loja.com"]]); // um e-mail por pessoa
     expect((await obterConfigResumo(db, storeId)).lastSentOn).toBe("2026-10-10");
     expect(await enviar()).toEqual({ enviado: false, motivo: "Já enviado hoje." });
-    expect(enviados).toHaveLength(1);
+    expect(enviados).toHaveLength(2);
     expect(await enviar({ agora: new Date("2026-10-11T10:00:00Z") })).toMatchObject({ enviado: true }); // no dia seguinte envia de novo
     expect((await pg.query("SELECT acao, sucesso FROM audit_log WHERE acao = 'resumo.enviar'")).rows).toHaveLength(2);
     expect(JSON.stringify((await pg.query("SELECT depois FROM audit_log")).rows)).not.toMatch(/dona@loja|socio@loja/); // o Histórico não guarda e-mails
