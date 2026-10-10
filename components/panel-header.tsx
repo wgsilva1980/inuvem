@@ -74,7 +74,7 @@ export function PanelHeader({ email, signOut }: { email: string; signOut: () => 
               </svg>
             </button>
             {adminOpen && (
-              <div id="submenu-admin" className="absolute right-0 top-full z-20 mt-1 flex min-w-48 flex-col rounded-lg border border-border bg-card p-1 shadow-lg">
+              <div id="submenu-admin" className="absolute right-0 top-full z-20 mt-1 flex max-h-[75vh] min-w-48 flex-col overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
                 {ADMIN_LINKS.map((l) => (
                   <Link key={l.href} href={l.href} className={linkClass(l.href)} aria-current={isActive(pathname, l.href) ? "page" : undefined}>
                     {l.label}
@@ -108,7 +108,7 @@ export function PanelHeader({ email, signOut }: { email: string; signOut: () => 
       </div>
 
       {open && (
-        <div id="menu-mobile" className="absolute inset-x-0 top-full z-20 mt-1 rounded-lg border border-border bg-card p-2 shadow-lg md:hidden">
+        <div id="menu-mobile" className="absolute inset-x-0 top-full z-20 mt-1 max-h-[80vh] overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-lg md:hidden">
           <nav aria-label="Principal" className="flex flex-col">
             {LINKS.map((l) => (
               <Link
