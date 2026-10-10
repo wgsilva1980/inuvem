@@ -9,6 +9,7 @@ export interface PedidoMapeado {
   status: string | null;
   payment_status: string | null;
   shipping_status: string | null;
+  tracking_code: string | null;
   customer_id: number | null;
   updated_at_remote: string | null;
 }
@@ -79,6 +80,7 @@ export function mapearPedido(o: Order): { pedido: PedidoMapeado; itens: ItemMape
       status: o.status ?? null,
       payment_status: o.payment_status ?? null,
       shipping_status: o.shipping_status ?? null,
+      tracking_code: o.shipping_tracking_number?.trim().slice(0, 60) || null,
       customer_id: o.customer?.id ?? null,
       updated_at_remote: data(o.updated_at),
     },
