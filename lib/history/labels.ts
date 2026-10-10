@@ -65,6 +65,8 @@ const FIXED: Record<string, string> = {
   "custo.importar": "Custos importados de planilha",
   "custo.ler_loja": "Custos trazidos da loja",
   "custo.margem_minima": "Margem mínima alterada",
+  "resumo.enviar": "Resumo diário por e-mail enviado",
+  "resumo.configurar": "Resumo diário configurado",
   "lote.completar": "Lote: COR e TAMANHO completados no produto",
 };
 

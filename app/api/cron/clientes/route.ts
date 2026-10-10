@@ -52,13 +52,28 @@ export async function GET(request: Request) {
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "cron.pedidos_failed", message: err instanceof Error ? err.message : String(err) }));
   }
+  let resumo: { enviado: boolean; motivo?: string } | undefined;
+  try {
+    // Resumo diário por e-mail: depois dos pedidos lidos, para as vendas de ontem estarem completas. Uma falha aqui não derruba o resto.
+    const { query } = await import("@/lib/db");
+    const { getActiveStore } = await import("@/lib/stores");
+    const { enviarResumoDoDia } = await import("@/lib/digest/service");
+    const loja = await getActiveStore();
+    if (loja) {
+      const r = await enviarResumoDoDia({ query }, { storeId: loja.id, actor: "cron", appUrl: getEnv().APP_URL });
+      resumo = r.enviado ? { enviado: true } : { enviado: false, motivo: r.motivo };
+    }
+  } catch (err) {
+    resumo = { enviado: false, motivo: "falhou" };
+    console.error(JSON.stringify({ level: "error", event: "cron.resumo_failed", message: err instanceof Error ? err.message : String(err) }));
+  }
   try {
     const { ultimaSincronizacao } = await import("@/lib/customers/sync");
     const { query } = await import("@/lib/db");
     const { getActiveStore } = await import("@/lib/stores");
     const store = await getActiveStore();
     if (!store) return Response.json({ skipped: "Nenhuma loja conectada." });
-    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos });
+    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos, resumo });
 
     let page: number | undefined;
     let inicio: string | undefined;
@@ -67,8 +82,8 @@ export async function GET(request: Request) {
     for (;;) {
       const passo = await passoClientesDaLoja({ page, inicio, budgetMs: Math.max(1_000, limite - Date.now()), actor: "cron" });
       lidos += passo.lidos;
-      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos });
-      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos });
+      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos, resumo });
+      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos, resumo });
       page = passo.proxima ?? undefined;
       inicio = passo.inicio;
     }
