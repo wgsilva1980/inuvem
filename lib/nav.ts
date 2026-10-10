@@ -17,6 +17,7 @@ export const ADMIN_LINKS = [
   { href: "/seo", label: "SEO" },
   { href: "/conteudo", label: "Conteúdo" },
   { href: "/emails", label: "E-mails" },
+  { href: "/selos", label: "Selos" },
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
   { href: "/automacoes", label: "Automações" },
