@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { MAX_PRODUCTS_PER_JOB, listarFaltando } from "@/lib/bulk/operations";
 import { loadMirrorProducts } from "@/lib/bulk/repo";
 import { resolveSelection } from "@/lib/bulk/selection";
+import { listarBlocos } from "@/lib/content/blocks";
 import { catalogParamsSchema, filtersQueryString } from "@/lib/catalog/params";
 import { listCategoryOptions } from "@/lib/catalog/query";
 import { query } from "@/lib/db";
@@ -26,6 +27,7 @@ export default async function NovoLotePage({ searchParams }: { searchParams: Pro
   const categories = await listCategoryOptions(db, store.id);
   // Produtos da seleção que estão sem COR e/ou TAMANHO: para a operação "Completar", em que o usuário digita o que falta.
   const { faltando, semNome } = listarFaltando(await loadMirrorProducts(db, store.id, selection.ids));
+  const blocos = (await listarBlocos(db, store.id)).map((b) => ({ id: b.id, name: b.name }));
   const selecao = sp.ids ? `ids=${selection.ids.join(",")}` : filtersQueryString(catalogParamsSchema.parse(sp));
 
   return (
@@ -51,7 +53,7 @@ export default async function NovoLotePage({ searchParams }: { searchParams: Pro
           </p>
         </Card>
       ) : (
-        <OperationForm selecao={selecao} total={selection.ids.length} categories={categories} faltando={faltando} semNome={semNome} />
+        <OperationForm selecao={selecao} total={selection.ids.length} categories={categories} faltando={faltando} semNome={semNome} blocos={blocos} />
       )}
     </main>
   );
