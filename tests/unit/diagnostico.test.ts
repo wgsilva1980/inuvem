@@ -109,15 +109,15 @@ describe("uma leitura de teste", () => {
     expect((await executarSonda(cliente({ "/customers": new NuvemshopError("403", 403, null) }).c, sonda("clientes"))).status).toBe("sem_permissao");
     expect((await executarSonda(cliente({}).c, sonda("emails"))).status).toBe("indisponivel");
     // 404 "Last page is 0" = lista sem itens (não é recurso inexistente); outro 404 mostra o texto da API
-    const vazia = await executarSonda(cliente({ "/pages": new NuvemshopError("404", 404, null, "Last page is 0") }).c, sonda("paginas"));
+    const vazia = await executarSonda(cliente({ "/email_templates": new NuvemshopError("404", 404, null, "Last page is 0") }).c, sonda("emails"));
     expect(vazia.status).toBe("sem_dados");
     expect(vazia.mensagem).toMatch(/não há itens.*Last page is 0/);
-    const inexistente = await executarSonda(cliente({ "/pages": new NuvemshopError("404", 404, null, "Resource not found") }).c, sonda("paginas"));
+    const inexistente = await executarSonda(cliente({ "/email_templates": new NuvemshopError("404", 404, null, "Resource not found") }).c, sonda("emails"));
     expect(inexistente.status).toBe("indisponivel");
     expect(inexistente.mensagem).toMatch(/Resource not found/);
-    const erro = await executarSonda(cliente({ "/pages": new NuvemshopError("500", 500, null, "caiu") }).c, sonda("paginas"));
+    const erro = await executarSonda(cliente({ "/email_templates": new NuvemshopError("500", 500, null, "caiu") }).c, sonda("emails"));
     expect(erro.status).toBe("erro");
-    expect((await executarSonda(cliente({ "/pages": new Error("rede") }).c, sonda("paginas"))).status).toBe("erro");
+    expect((await executarSonda(cliente({ "/email_templates": new Error("rede") }).c, sonda("emails"))).status).toBe("erro");
   });
 
   it("recurso de objeto único (/store)", async () => {

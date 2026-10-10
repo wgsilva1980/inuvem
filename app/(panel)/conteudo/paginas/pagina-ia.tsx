@@ -19,7 +19,6 @@ export function PaginaIa() {
   const [tipo, setTipo] = useState<TipoPagina>("trocas");
   const [fatos, setFatos] = useState("");
   const [gerando, setGerando] = useState(false);
-  const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
@@ -27,7 +26,6 @@ export function PaginaIa() {
   const [, setTick] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
   const [versao, setVersao] = useState(0);
-  const [publicar, setPublicar] = useState(false);
 
   async function gerar() {
     setGerando(true);
@@ -47,20 +45,24 @@ export function PaginaIa() {
     }
   }
 
-  async function criar() {
-    setCriando(true);
+  async function copiar(que: "texto" | "html" | "titulo") {
     setErro(null);
     setOk(null);
+    const html = lerHtml();
     try {
-      const res = await fetch("/api/conteudo/paginas/criar", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ titulo, html: lerHtml(), publicar }) });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; publicada?: boolean };
-      if (!res.ok) throw new Error(data.error ?? "Não foi possível criar a página.");
-      setOk(data.publicada ? "Página criada e publicada na loja." : "Página criada na loja como rascunho (não publicada). Publique pelo painel da Nuvemshop quando quiser.");
-      setRascunho(null);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao criar a página.");
-    } finally {
-      setCriando(false);
+      if (que === "titulo") await navigator.clipboard.writeText(titulo);
+      else if (que === "html") await navigator.clipboard.writeText(html);
+      else {
+        const plano = html.replace(/<\/(p|h[1-6]|li)>/gi, "\n").replace(/<[^>]*>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([plano], { type: "text/plain" }) })]);
+        } catch {
+          await navigator.clipboard.writeText(html);
+        }
+      }
+      setOk(que === "titulo" ? "Título copiado." : que === "html" ? "HTML copiado." : "Texto copiado com a formatação.");
+    } catch {
+      setErro("Não consegui copiar; selecione o texto no editor e copie à mão.");
     }
   }
 
@@ -124,15 +126,21 @@ export function PaginaIa() {
           <div ref={editorRef}>
             <RichTextEditor key={versao} name="pagina_html" defaultValue={rascunho.html} id="pagina-editor" onChange={() => setTick((n) => n + 1)} />
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={publicar} disabled={faltam > 0} onChange={(e) => setPublicar(e.target.checked)} />
-            Publicar agora{faltam > 0 ? ` (ainda há ${faltam} “[preencher: …]”)` : " (desmarcado = fica como rascunho)"}
-          </label>
-          <div>
-            <Button type="button" onClick={criar} disabled={criando || titulo.trim().length < 2}>
-              {criando ? "Criando…" : publicar ? "Criar e publicar a página" : "Criar página como rascunho"}
+          {faltam > 0 && <p className="text-sm text-warning">Ainda há {faltam} “[preencher: …]” no texto. Complete antes de colar na loja.</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => copiar("titulo")} disabled={titulo.trim().length < 2}>
+              Copiar título
+            </Button>
+            <Button type="button" className="min-h-11" onClick={() => copiar("texto")}>
+              Copiar texto com formatação
+            </Button>
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => copiar("html")}>
+              Copiar HTML
             </Button>
           </div>
+          <p className="text-xs text-muted">
+            A Nuvemshop não deixa o painel criar páginas. No admin da Nuvemshop, vá em Loja online → Páginas → Criar, cole o título e o texto (se a formatação não vier, use “Copiar HTML” e cole no modo de código do editor). Publique só depois de revisar.
+          </p>
         </Card>
       )}
     </div>

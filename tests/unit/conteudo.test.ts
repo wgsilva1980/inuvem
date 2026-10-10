@@ -11,9 +11,7 @@ import { createJob, getJobItems, loadMirrorProducts, startJob } from "@/lib/bulk
 import { aplicarBloco, marcaAbre, removerBloco, temBloco } from "@/lib/content/aplicar";
 import { BlocoError, excluirBloco, listarBlocos, obterBloco, salvarBloco, usoDosBlocos, validarBloco } from "@/lib/content/blocks";
 import { gerarPagina, pendenciasNoTexto } from "@/lib/content/pagina-ia";
-import { PaginaConteudoError, criarPaginaNaLoja } from "@/lib/content/pagina-service";
 import { acaoLabel } from "@/lib/history/labels";
-import type { NuvemshopClient } from "@/lib/nuvemshop/client";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import { pt, type Product, type ProductInput, type Variant, type VariantInput } from "@/lib/nuvemshop/types";
 
@@ -241,17 +239,5 @@ describe("páginas com a IA", () => {
     expect(r.html).not.toMatch(/script|onclick/);
     expect(r.faltando).toEqual(["canal de contato", "quem paga o frete"]);
     expect(pendenciasNoTexto(r.html)).toBe(1);
-  });
-
-  it("cria como rascunho por padrão, audita, e recusa publicar com pendências", async () => {
-    const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
-    const c = { post: async (path: string, body: Record<string, unknown>) => (posts.push({ path, body }), { id: 77, title: body.title }) } as unknown as NuvemshopClient;
-    const r = await criarPaginaNaLoja(db, c, { storeId, actor, titulo: "Trocas", html: "<p>7 dias</p>", publicar: false });
-    expect(r).toEqual({ id: 77, publicada: false });
-    expect(posts[0]).toMatchObject({ path: "/pages", body: { title: { pt: "Trocas" }, content: { pt: "<p>7 dias</p>" }, publish: false } });
-    expect((await pg.query("SELECT acao FROM audit_log")).rows).toEqual([{ acao: "pagina.criar" }]);
-    await expect(criarPaginaNaLoja(db, c, { storeId, actor, titulo: "Trocas", html: "<p>[preencher: prazo]</p>", publicar: true })).rejects.toThrow(PaginaConteudoError);
-    await expect(criarPaginaNaLoja(db, c, { storeId, actor, titulo: "T", html: "<p>x</p>", publicar: false })).rejects.toThrow(/título/);
-    expect(posts).toHaveLength(1);
   });
 });

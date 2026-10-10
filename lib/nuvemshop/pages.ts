@@ -3,7 +3,10 @@ import type { NuvemshopClient } from "./client";
 import { semTextosVazios } from "./categories";
 import { i18nSchema, pt, type I18n } from "./types";
 
-/** Página institucional da loja (Sobre nós, Trocas…). Só o que o painel usa; o resto passa direto. */
+/**
+ * Página institucional da loja (Sobre nós, Trocas…). ATENÇÃO: a API pública da Nuvemshop NÃO tem recurso de páginas (GET /pages responde 404 na
+ * loja real, confirmado pelo Diagnóstico em 10/10/2026), então nada na tela usa estas funções; ficam só para o caso de a API passar a oferecer.
+ */
 export const storePageSchema = z
   .object({
     id: z.number(),
@@ -69,9 +72,4 @@ export async function updateStorePage(c: NuvemshopClient, id: number, changes: P
     throw new PaginaAlteradaError(`A loja alterou ${perdeu.join(", ")} da página ao salvar; o que havia antes foi restaurado. Nada foi gravado.`);
   }
   return depois;
-}
-
-/** Cria uma página nova na loja. Por padrão ela é criada NÃO publicada (rascunho) até alguém revisar. */
-export async function createStorePage(c: NuvemshopClient, input: { title: string; content: string; publish?: boolean }): Promise<StorePage> {
-  return storePageSchema.parse(await c.post("/pages", { title: { pt: input.title }, content: { pt: input.content }, publish: input.publish ?? false }));
 }

@@ -20,7 +20,7 @@ export default async function PaginasIaPage() {
     <main className="flex max-w-4xl flex-col gap-4 pb-20">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Páginas da loja com a IA</h1>
-        <p className="text-sm text-muted">Você diz os fatos; a IA escreve o rascunho. O que faltar vira “[preencher: …]”: ela não inventa prazo, valor nem política.</p>
+        <p className="text-sm text-muted">Você diz os fatos; a IA escreve o rascunho e você cola no admin da Nuvemshop (a API não deixa o painel criar páginas). O que faltar vira “[preencher: …]”: ela não inventa prazo, valor nem política.</p>
       </div>
       <ConteudoTabs atual="/conteudo/paginas" />
       <PaginaIa />
