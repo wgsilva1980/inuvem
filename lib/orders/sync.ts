@@ -23,11 +23,12 @@ export async function gravarPedidos(db: Db, storeId: string, mapeados: Array<{ p
   const ids = pedidos.map((p) => p.id);
 
   const gravados = await db.query<{ novo: boolean }>(
-    `INSERT INTO orders (store_id, id, number, created_at_remote, total, discount, status, payment_status, shipping_status, customer_id, updated_at_remote, synced_at)
-     SELECT $1::uuid, m.id, m.number, m.created_at_remote, m.total, m.discount, m.status, m.payment_status, m.shipping_status, m.customer_id, m.updated_at_remote, now()
-     FROM jsonb_to_recordset($2::jsonb) AS m(id bigint, number int, created_at_remote timestamptz, total numeric, discount numeric, status text, payment_status text, shipping_status text, customer_id bigint, updated_at_remote timestamptz)
+    `INSERT INTO orders (store_id, id, number, created_at_remote, total, discount, status, payment_status, shipping_status, tracking_code, customer_id, updated_at_remote, synced_at)
+     SELECT $1::uuid, m.id, m.number, m.created_at_remote, m.total, m.discount, m.status, m.payment_status, m.shipping_status, m.tracking_code, m.customer_id, m.updated_at_remote, now()
+     FROM jsonb_to_recordset($2::jsonb) AS m(id bigint, number int, created_at_remote timestamptz, total numeric, discount numeric, status text, payment_status text, shipping_status text, tracking_code text, customer_id bigint, updated_at_remote timestamptz)
      ON CONFLICT (store_id, id) DO UPDATE SET number = EXCLUDED.number, created_at_remote = EXCLUDED.created_at_remote, total = EXCLUDED.total, discount = EXCLUDED.discount,
        status = EXCLUDED.status, payment_status = EXCLUDED.payment_status, shipping_status = EXCLUDED.shipping_status,
+       tracking_code = coalesce(EXCLUDED.tracking_code, orders.tracking_code),
        customer_id = coalesce(EXCLUDED.customer_id, orders.customer_id), updated_at_remote = EXCLUDED.updated_at_remote, synced_at = now()
      RETURNING (xmax = 0) AS novo`,
     [storeId, JSON.stringify(pedidos)],

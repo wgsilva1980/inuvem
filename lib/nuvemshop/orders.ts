@@ -16,6 +16,8 @@ export const orderSchema = z
     status: text,
     payment_status: text,
     shipping_status: text,
+    shipping_tracking_number: text,
+    shipping_tracking_url: text,
     customer: z.object({ id: z.number().nullish(), email: text }).passthrough().nullish(),
     products: z
       .array(
@@ -71,4 +73,20 @@ export async function listOrdersPage(c: NuvemshopClient, params: ListOrdersParam
     else invalidos++;
   }
   return { ...result, items, invalidos, campos: [...campos].sort() };
+}
+
+export const getOrder = async (c: NuvemshopClient, id: number): Promise<Order> => orderSchema.parse(await c.get(`/orders/${id}`));
+
+/**
+ * Marca o pedido como enviado na loja (`POST /orders/{id}/fulfill`) com o código de rastreio. `notificar` pede que a própria Nuvemshop
+ * avise a cliente por e-mail. Devolve o pedido como a loja o tem depois.
+ */
+export async function fulfillOrder(c: NuvemshopClient, id: number, args: { codigo: string; url?: string | null; notificar: boolean }): Promise<Order> {
+  return orderSchema.parse(
+    await c.post(`/orders/${id}/fulfill`, {
+      shipping_tracking_number: args.codigo,
+      ...(args.url ? { shipping_tracking_url: args.url } : {}),
+      notify_customer: args.notificar,
+    }),
+  );
 }
