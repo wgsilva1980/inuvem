@@ -146,7 +146,7 @@ export function LoteIa() {
       if (rascunhoId !== undefined) await descartarRascunhoAction(rascunhoId); // tentativa anterior que não terminou
       const r0 = await salvarRascunhoCampos(null, {
         notas: g.notas,
-        form: { name: g.rotulo, description: "", tags: "", categorias: [], modo: "simples", cores: "", tamanhos: "", preco: "", promocional: "", peso: "", controlar: false, estoque: "", seoTitulo: "", seoDescricao: "", iaMarcados: [] },
+        form: { name: g.rotulo, description: "", tags: "", categorias: [], modo: "simples", cores: "", tamanhos: "", preco: "", promocional: "", peso: "", controlar: true, estoque: "", seoTitulo: "", seoDescricao: "", iaMarcados: [] },
         ia: null,
       });
       if (!r0.ok || !r0.id) throw new Error(r0.message ?? "Não foi possível criar o rascunho.");
