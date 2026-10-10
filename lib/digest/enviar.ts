@@ -25,13 +25,13 @@ export function configDoEmail(env: Record<string, string | undefined> = process.
 
 export const emailConfigurado = (env: Record<string, string | undefined> = process.env): boolean => Boolean(env.RESEND_API_KEY?.trim());
 
-export async function enviarEmail(email: Email, config: ConfigEmail, fetchImpl: typeof fetch = fetch): Promise<void> {
+async function enviarUm(para: string[], email: Email, config: ConfigEmail, fetchImpl: typeof fetch): Promise<void> {
   let res: Response;
   try {
     res = await fetchImpl("https://api.resend.com/emails", {
       method: "POST",
       headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ from: config.from, to: email.para, subject: email.assunto, html: email.html, text: email.texto }),
+      body: JSON.stringify({ from: config.from, to: para, subject: email.assunto, html: email.html, text: email.texto }),
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
@@ -39,6 +39,31 @@ export async function enviarEmail(email: Email, config: ConfigEmail, fetchImpl: 
   }
   if (res.ok) return;
   const corpo = (await res.json().catch(() => ({}))) as { message?: string };
-  if (res.status === 401 || res.status === 403) throw new EmailEnvioError(`O serviço de e-mail recusou (${res.status}). Confira a chave RESEND_API_KEY e se o remetente/destinatário são permitidos.${corpo.message ? ` Detalhe: ${corpo.message.slice(0, 200)}` : ""}`);
-  throw new EmailEnvioError(`O serviço de e-mail respondeu ${res.status}.${corpo.message ? ` ${corpo.message.slice(0, 200)}` : ""}`);
+  if (res.status === 401 || res.status === 403) throw new EmailEnvioError(`O serviço de e-mail recusou (${res.status}). Confira a chave RESEND_API_KEY e se o remetente/destinatário são permitidos.${corpo.message ? ` Detalhe: ${corpo.message.slice(0, 400)}` : ""}`);
+  throw new EmailEnvioError(`O serviço de e-mail respondeu ${res.status}.${corpo.message ? ` ${corpo.message.slice(0, 400)}` : ""}`);
+}
+
+export interface ResultadoEmail {
+  enviados: string[];
+  falhas: { para: string; erro: string }[];
+}
+
+/**
+ * Manda um e-mail separado para cada destinatário (ninguém vê os outros, e um endereço recusado — como no remetente de teste do Resend, que só entrega
+ * para o dono da conta — não derruba os demais). Se TODOS falharem, lança o primeiro erro; se só alguns falharem, devolve as falhas para quem chamou registrar.
+ */
+export async function enviarEmail(email: Email, config: ConfigEmail, fetchImpl: typeof fetch = fetch): Promise<ResultadoEmail> {
+  const r: ResultadoEmail = { enviados: [], falhas: [] };
+  let primeiro: unknown;
+  for (const para of email.para) {
+    try {
+      await enviarUm([para], email, config, fetchImpl);
+      r.enviados.push(para);
+    } catch (err) {
+      primeiro ??= err;
+      r.falhas.push({ para, erro: err instanceof Error ? err.message : "Falha ao enviar." });
+    }
+  }
+  if (r.enviados.length === 0 && primeiro) throw primeiro;
+  return r;
 }

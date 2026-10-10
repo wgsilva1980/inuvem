@@ -15,9 +15,9 @@ export function ResumoForm({ enabled, recipients, onlyIfAction, admins, emailPro
     setEnviando(true);
     setMsg(null);
     const res = await fetch("/api/resumo/enviar", { method: "POST" });
-    const d = (await res.json().catch(() => ({}))) as { error?: string; destinatarios?: number };
+    const d = (await res.json().catch(() => ({}))) as { error?: string; destinatarios?: number; aviso?: string };
     setEnviando(false);
-    setMsg(res.ok ? { ok: true, texto: `Teste enviado para ${d.destinatarios} destinatário(s). Confira a caixa de entrada e o spam.` } : { ok: false, texto: d.error ?? "Não foi possível enviar." });
+    setMsg(res.ok ? { ok: !d.aviso, texto: `Teste enviado para ${d.destinatarios} destinatário(s). Confira a caixa de entrada e o spam.${d.aviso ? ` ${d.aviso}` : ""}` } : { ok: false, texto: d.error ?? "Não foi possível enviar." });
   }
 
   return (
