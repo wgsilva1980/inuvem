@@ -1,5 +1,7 @@
 import { MODELO_REVISAO, RevisaoConfigError } from "@/lib/images/review";
+import { CategoriaAlteradaError } from "@/lib/nuvemshop/categories";
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
+import { PaginaAlteradaError } from "@/lib/nuvemshop/pages";
 import type { CategoryInput } from "@/lib/nuvemshop/categories";
 import type { PageInput, StorePage } from "@/lib/nuvemshop/pages";
 import { pt, type Category } from "@/lib/nuvemshop/types";
@@ -130,6 +132,7 @@ export interface ItemApis {
 
 const limpar = (s: string) => s.replace(/\s+/g, " ").trim();
 const mensagemDe = (err: unknown) => (err instanceof NuvemshopError ? err.userMessage : err instanceof Error ? err.message : String(err));
+const ehAlteradaPorErro = (err: unknown) => err instanceof CategoriaAlteradaError || err instanceof PaginaAlteradaError;
 
 async function auditar(db: Db, e: { storeId: string; actor: string; tipo: TipoItem; id: number; antes: unknown; depois: unknown; resultado: unknown; sucesso: boolean }) {
   await db.query(
@@ -180,6 +183,7 @@ export async function aplicarSeoItem(
       if (changed) await apis.pagina.update(args.id, { seo_title: { pt: titulo }, seo_description: { pt: descricao } });
     }
   } catch (err) {
+    if (ehAlteradaPorErro(err)) throw new SeoItemError(err instanceof Error ? err.message : "Falha ao gravar.");
     if (!(err instanceof SeoItemError)) {
       await auditar(db, { storeId: args.storeId, actor: args.actor, tipo: args.tipo, id: args.id, antes: null, depois, resultado: { erro: mensagemDe(err) }, sucesso: false });
     }

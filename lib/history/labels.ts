@@ -11,6 +11,7 @@ const FIXED: Record<string, string> = {
   "cupom.criar": "Cupons criados em lote",
   "cupom.desativar": "Cupons desativados",
   "cupom.exportar": "Cupons exportados para Excel",
+  "categoria.restaurar": "Categoria restaurada (dados originais devolvidos à loja)",
   "carrinho.contatar": "Carrinho abandonado marcado como contatado",
   "carrinho.cupom": "Cupom de recuperação criado para um carrinho",
   "estoque.exportar": "Reposição de estoque exportada para Excel",
