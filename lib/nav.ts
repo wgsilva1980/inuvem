@@ -7,6 +7,7 @@ export const NAV_LINKS = [
   { href: "/cupons", label: "Cupons" },
   { href: "/vendas", label: "Vendas" },
   { href: "/estoque", label: "Estoque" },
+  { href: "/carrinhos", label: "Carrinhos" },
 ] as const;
 
 /** Itens do submenu "Administração". */
