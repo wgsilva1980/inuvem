@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { Card } from "@/components/ui/card";
+import { pendentesDeRestauracao } from "@/lib/categories/restore";
 import { loadCategories, productCountsByCategory } from "@/lib/categories/manage";
 import { descendantIds, flattenTree } from "@/lib/categories/tree";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
+import { RestaurarCategorias } from "./restaurar-categorias";
 import { CreateCategoryForm, DeleteCategoryButton, EditCategoryForm, type ParentOption } from "./category-forms";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,7 @@ export default async function CategoriasPage() {
   }
   const db = { query };
   const [rows, counts] = await Promise.all([loadCategories(db, store.id), productCountsByCategory(db, store.id)]);
+  const pendentes = await pendentesDeRestauracao(db, store.id);
   const flat = flattenTree(rows);
   const label = (r: { name: string; depth: number }) => `${"— ".repeat(r.depth)}${r.name}`;
   const allOptions: ParentOption[] = flat.map((r) => ({ id: r.id, label: label(r) }));
@@ -31,6 +34,16 @@ export default async function CategoriasPage() {
         <h1 className="text-xl font-semibold">Categorias</h1>
         <p className="text-sm text-muted">{rows.length} {rows.length === 1 ? "categoria" : "categorias"}</p>
       </div>
+
+      {pendentes.length > 0 && (
+        <Card className="flex flex-col gap-2">
+          <h2 className="text-base font-semibold">Restaurar categorias</h2>
+          <p className="text-sm text-muted">
+            Há {pendentes.length} categoria(s) com os dados originais guardados (nome, endereço, descrição e categoria pai). Restaurar devolve esses dados à loja e mantém o SEO que está lá agora.
+          </p>
+          <RestaurarCategorias quantas={pendentes.length} />
+        </Card>
+      )}
 
       <Card>
         <h2 className="text-base font-semibold">Nova categoria</h2>
