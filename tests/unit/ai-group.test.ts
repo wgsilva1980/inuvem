@@ -97,7 +97,7 @@ describe("rascunhoParaForm", () => {
 
   it("preenche o formulário e marca como sugerido pela IA o que veio dela", () => {
     const f = rascunhoParaForm(base);
-    expect(f).toMatchObject({ name: "Vestido Midi Azul", modo: "variacoes", cores: "Azul", tamanhos: "P, M", preco: "189,90", categorias: [10], peso: "", controlar: false });
+    expect(f).toMatchObject({ name: "Vestido Midi Azul", modo: "variacoes", cores: "Azul", tamanhos: "P, M", preco: "189,90", categorias: [10], peso: "", controlar: true });
     expect(f.iaMarcados).toEqual(expect.arrayContaining(["name", "description", "seo_title", "seo_description", "tags", "categories", "cores", "tamanhos", "preco"]));
     expect(f.iaMarcados).not.toContain("peso");
     expect(f.iaMarcados).not.toContain("promocional");

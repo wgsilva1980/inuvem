@@ -73,7 +73,7 @@ export function rascunhoParaForm(d: RascunhoIA): FormSalvo {
     preco: d.preco,
     promocional: d.promocional,
     peso: d.pesoKg,
-    controlar: false,
+    controlar: true,
     estoque: "",
     seoTitulo: d.seoTitulo,
     seoDescricao: d.seoDescricao,

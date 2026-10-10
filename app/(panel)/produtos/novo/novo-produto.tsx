@@ -57,7 +57,7 @@ export function NovoProduto({ categories, rascunho = null }: { categories: Categ
   const [enquadrandoId, setEnquadrandoId] = useState<string | null>(null);
   const patchFoto = (id: string, p: Partial<Foto>) => setFotos((lista) => lista.map((f) => (f.id === id ? { ...f, ...p } : f)));
   const [avisosSalvos] = useState<string[]>(rascunho?.ia?.avisos ?? []);
-  const coletarRef = useRef<() => FormSalvo>(() => ({ name: "", description: "", tags: "", categorias: [], modo: "simples", cores: "", tamanhos: "", preco: "", promocional: "", peso: "", controlar: false, estoque: "", seoTitulo: "", seoDescricao: "", iaMarcados: [] }));
+  const coletarRef = useRef<() => FormSalvo>(() => ({ name: "", description: "", tags: "", categorias: [], modo: "simples", cores: "", tamanhos: "", preco: "", promocional: "", peso: "", controlar: true, estoque: "", seoTitulo: "", seoDescricao: "", iaMarcados: [] }));
   const [ajuste, setAjuste] = useState("");
   const [analisando, setAnalisando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);

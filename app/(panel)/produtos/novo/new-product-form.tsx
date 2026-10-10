@@ -41,6 +41,12 @@ export interface Inicial {
 type FotoEstado = { estado: "enviando" | "ok" | "erro"; mensagem?: string };
 
 /** Etiqueta dos campos preenchidos pela IA; some quando a pessoa edita o campo. */
+/** Quantidade digitada (vazia/inválida conta 0) — só para os totais da grade de estoque. */
+const qtd = (v: string) => {
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
 function IaTag({ show }: { show: boolean }) {
   if (!show) return null;
   return <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">✨ Sugerido pela IA</span>;
@@ -86,7 +92,7 @@ export function NewProductForm({ categories, fotos, inicial, atualRef, salvo = n
   const limparIa = (k: string) => setIa((prev) => (prev.has(k) ? new Set([...prev].filter((x) => x !== k)) : prev));
 
   const [modo, setModo] = useState<"simples" | "variacoes">(salvo?.modo ?? "simples");
-  const [controlar, setControlar] = useState(salvo?.controlar ?? false);
+  const [controlar, setControlar] = useState(salvo?.controlar ?? true);
   const [coresTexto, setCoresTexto] = useState(salvo?.cores ?? "");
   const [tamanhosTexto, setTamanhosTexto] = useState(salvo?.tamanhos ?? "");
   const [precoPadrao, setPrecoPadrao] = useState(salvo?.preco ?? "");
@@ -480,7 +486,7 @@ export function NewProductForm({ categories, fotos, inicial, atualRef, salvo = n
               </label>
               {controlar && (
                 <label className={label}>
-                  <span className="text-muted">Estoque padrão</span>
+                  <span className="text-muted">Estoque padrão (cada variação)</span>
                   <input value={estoquePadrao} onChange={(e) => setEstoquePadrao(e.target.value)} inputMode="numeric" className={fieldClass} />
                 </label>
               )}
@@ -499,6 +505,51 @@ export function NewProductForm({ categories, fotos, inicial, atualRef, salvo = n
                 <p className="text-sm font-medium">
                   {combos.length} {combos.length === 1 ? "variante" : "variantes"}
                 </p>
+                {controlar && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm font-medium">Estoque de cada variação</p>
+                    <div className="overflow-x-auto rounded-md border border-border">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-muted">
+                            <th className="p-2 font-medium">Cor</th>
+                            {tamanhos.map((t) => (
+                              <th key={t} className="p-2 font-medium">{t}</th>
+                            ))}
+                            <th className="p-2 font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cores.map((cor) => (
+                            <tr key={cor} className="border-t border-border">
+                              <th className="p-2 text-left font-medium">{cor}</th>
+                              {tamanhos.map((t) => {
+                                const chave = `${cor}|${t}`;
+                                const i = combos.findIndex((c) => c.cor === cor && c.tamanho === t);
+                                return (
+                                  <td key={t} className="p-1">
+                                    <input aria-label={`Estoque ${cor} ${t}`} value={linhas[chave]?.estoque ?? estoquePadrao} onChange={(e) => editar(chave, "estoque", e.target.value)} inputMode="numeric" className={`${fieldClass} w-20`} aria-invalid={!!err(`v_${i}_estoque`)} />
+                                  </td>
+                                );
+                              })}
+                              <td className="p-2 font-medium">{tamanhos.reduce((s, t) => s + qtd(linhas[`${cor}|${t}`]?.estoque ?? estoquePadrao), 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-border font-medium">
+                            <th className="p-2 text-left">Total</th>
+                            {tamanhos.map((t) => (
+                              <td key={t} className="p-2">{cores.reduce((s, cor) => s + qtd(linhas[`${cor}|${t}`]?.estoque ?? estoquePadrao), 0)}</td>
+                            ))}
+                            <td className="p-2">{combos.reduce((s, c) => s + qtd(linhas[`${c.cor}|${c.tamanho}`]?.estoque ?? estoquePadrao), 0)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                    {combos.map((c, i) => err(`v_${i}_estoque`) && <p key={`${c.cor}|${c.tamanho}`} className="text-sm text-danger">{c.cor} / {c.tamanho}: {err(`v_${i}_estoque`)}</p>)}
+                  </div>
+                )}
                 <ul className="flex flex-col gap-3">
                   {combos.map((c, i) => {
                     const chave = `${c.cor}|${c.tamanho}`;
@@ -527,13 +578,7 @@ export function NewProductForm({ categories, fotos, inicial, atualRef, salvo = n
                             <input name={`v_${i}_sku`} value={l.sku ?? ""} onChange={(e) => editar(chave, "sku", e.target.value)} maxLength={255} placeholder="Automático" className={fieldClass} />
                             {err(`v_${i}_sku`) && <span className="text-danger">{err(`v_${i}_sku`)}</span>}
                           </label>
-                          {controlar && (
-                            <label className={label}>
-                              <span className="text-muted">Estoque</span>
-                              <input name={`v_${i}_estoque`} value={l.estoque ?? estoquePadrao} onChange={(e) => editar(chave, "estoque", e.target.value)} inputMode="numeric" className={fieldClass} aria-invalid={!!err(`v_${i}_estoque`)} />
-                              {err(`v_${i}_estoque`) && <span className="text-danger">{err(`v_${i}_estoque`)}</span>}
-                            </label>
-                          )}
+                          {controlar && <input type="hidden" name={`v_${i}_estoque`} value={l.estoque ?? estoquePadrao} />}
                         </div>
                       </li>
                     );
