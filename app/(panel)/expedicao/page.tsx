@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { query } from "@/lib/db";
 import { coberturaDosPedidos } from "@/lib/orders/stats";
 import { ultimaSincronizacaoPedidos } from "@/lib/orders/sync";
+import { sinaisDeRisco } from "@/lib/risk/signals";
 import { filaDeExpedicao } from "@/lib/shipping/queue";
 import { getActiveStore } from "@/lib/stores";
 import { SincronizarPedidos } from "../vendas/sincronizar-pedidos";
@@ -33,6 +34,7 @@ export default async function ExpedicaoPage({ searchParams }: { searchParams: Pr
   const ultima = await ultimaSincronizacaoPedidos(db, store.id);
   const cobertura = await coberturaDosPedidos(db, store.id);
   const fila = ultima ? await filaDeExpedicao(db, store.id, sp.atraso) : [];
+  const sinais = ultima ? await sinaisDeRisco(db, store.id, fila.map((p) => p.id)) : new Map<string, string[]>();
   const atrasados = fila.filter((p) => p.atrasado);
   const mostrados = sp.filtro === "atrasados" ? atrasados : fila;
   const pill = (ativo: boolean) => `rounded-full border px-3 py-1 ${ativo ? "border-primary bg-primary text-primary-foreground" : "border-border-strong hover:bg-border/40"}`;
@@ -100,6 +102,7 @@ export default async function ExpedicaoPage({ searchParams }: { searchParams: Pr
               total: p.total,
               rastreio: p.rastreio,
               unidades: p.unidades,
+              sinais: sinais.get(p.id) ?? [],
               itens: p.itens.map((i) => ({ nome: i.nome, variacao: i.variacao, quantidade: i.quantidade, foto: i.foto })),
             }))}
           />

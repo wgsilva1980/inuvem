@@ -57,6 +57,9 @@ const FIXED: Record<string, string> = {
   "email.reescrever": "E-mail da loja reescrito com a IA (rascunho)",
   "email.colado": "Texto novo do e-mail colado na loja (marcado pelo usuário)",
   "selos.configurar": "Selos da vitrine configurados",
+  "cashback.regras": "Regras do cashback alteradas",
+  "cashback.emitir": "Cupom de cashback criado para um pedido",
+  "cashback.cancelar": "Cupom de cashback cancelado",
   "lote.completar": "Lote: COR e TAMANHO completados no produto",
 };
 

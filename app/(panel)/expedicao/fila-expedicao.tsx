@@ -17,6 +17,8 @@ export interface PedidoFila {
   total: number;
   rastreio: string | null;
   unidades: number;
+  /** Sinais para conferir o pedido antes de enviar (vazio = nenhum). */
+  sinais?: string[];
   itens: Array<{ nome: string; variacao: string; quantidade: number; foto: string | null }>;
 }
 
@@ -148,7 +150,9 @@ export function FilaExpedicao({ pedidos }: { pedidos: PedidoFila[] }) {
                         {brl(p.total)} · há {p.diasParado} {p.diasParado === 1 ? "dia" : "dias"} · {p.unidades} {p.unidades === 1 ? "peça" : "peças"}
                       </span>
                       {p.atrasado && <Badge tone="danger">Atrasado</Badge>}
+                      {(p.sinais?.length ?? 0) >= 2 ? <Badge tone="warning">Conferir antes de enviar</Badge> : (p.sinais?.length ?? 0) === 1 ? <Badge>Atenção</Badge> : null}
                     </span>
+                    {(p.sinais?.length ?? 0) > 0 && <span className="mt-1 block text-xs text-muted">{p.sinais!.join(" · ")}</span>}
                     <span className="mt-1 flex flex-wrap gap-2">
                       {p.itens.slice(0, 4).map((i, n) => (
                         <span key={n} className="flex items-center gap-1 text-xs text-muted">
