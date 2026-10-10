@@ -2,6 +2,8 @@ import { requireAdminApi } from "@/lib/auth/admin";
 import { query } from "@/lib/db";
 import { RevisaoConfigError } from "@/lib/images/review";
 import { listarParados } from "@/lib/promotions/parados";
+import { limitarDesconto } from "@/lib/costs/math";
+import { margemMinima } from "@/lib/costs/repo";
 import { criarSugeridor, sugestaoPorRegra } from "@/lib/promotions/sugestao";
 import { resumoVendas } from "@/lib/sales/sync";
 import { isSameOrigin } from "@/lib/security";
@@ -36,12 +38,21 @@ export async function POST(request: Request) {
     limit: 500,
   });
   const escolhidos = itens.filter((p) => ids.includes(p.id));
+  // com custo informado, o desconto nunca passa do que a margem mínima permite (a IA não conhece o custo)
+  const minimo = await margemMinima(db, store.id);
+  const respeitarMargem = (sugestoes: Array<{ id: string; percent: number; motivo: string }>) =>
+    sugestoes.map((s) => {
+      const p = escolhidos.find((x) => x.id === s.id);
+      if (!p) return s;
+      const r = limitarDesconto(s.percent, p.precoMin, p.custo, minimo);
+      return r.limitado ? { ...s, percent: r.percent, motivo: `${s.motivo} Limitado a ${r.percent}% para não passar do custo${minimo > 0 ? ` e da margem mínima de ${minimo.toLocaleString("pt-BR")}%` : ""}.` } : s;
+    });
   try {
-    const sugestoes = await criarSugeridor()(escolhidos);
+    const sugestoes = respeitarMargem(await criarSugeridor()(escolhidos));
     return Response.json({ ia: true, sugestoes });
   } catch (err) {
-    if (err instanceof RevisaoConfigError) return Response.json({ ia: false, aviso: err.message, sugestoes: escolhidos.map(sugestaoPorRegra) });
+    if (err instanceof RevisaoConfigError) return Response.json({ ia: false, aviso: err.message, sugestoes: respeitarMargem(escolhidos.map(sugestaoPorRegra)) });
     console.error(JSON.stringify({ level: "error", event: "liquidar.sugestoes.failed", message: err instanceof Error ? err.message : String(err) }));
-    return Response.json({ ia: false, aviso: "A IA não respondeu agora; usei a regra por tempo parado.", sugestoes: escolhidos.map(sugestaoPorRegra) });
+    return Response.json({ ia: false, aviso: "A IA não respondeu agora; usei a regra por tempo parado.", sugestoes: respeitarMargem(escolhidos.map(sugestaoPorRegra)) });
   }
 }

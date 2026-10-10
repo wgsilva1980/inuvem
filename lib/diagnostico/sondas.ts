@@ -44,6 +44,7 @@ export const SONDAS: Sonda[] = [
       q("variants[].stock", "estoque"),
       q("variants[].stock_management", "controle de estoque"),
       q("variants[].sku", "SKU"),
+      q("variants[].cost", "custo que a loja já guarda (tela Custos, “Trazer custos que a loja já tem”)"),
       o("variants[].values", "valores da variação (cor, tamanho)"),
       q("attributes", "nomes das propriedades"),
     ],

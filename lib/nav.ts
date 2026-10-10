@@ -6,6 +6,7 @@ export const NAV_LINKS = [
   { href: "/promocoes", label: "Promoções" },
   { href: "/cupons", label: "Cupons" },
   { href: "/vendas", label: "Vendas" },
+  { href: "/custos", label: "Custos" },
   { href: "/estoque", label: "Estoque" },
   { href: "/carrinhos", label: "Carrinhos" },
   { href: "/expedicao", label: "Expedição" },

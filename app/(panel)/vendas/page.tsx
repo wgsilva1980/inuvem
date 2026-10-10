@@ -5,7 +5,7 @@ import { buttonClass } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { hojeEmBrasilia } from "@/lib/coupons/lote";
 import { query } from "@/lib/db";
-import { DIAS_PERIODO, coberturaDosPedidos, maisVendidos, periodos, porCategoria, porCorETamanho, resumoDoPeriodo, vendasPorDia } from "@/lib/orders/stats";
+import { DIAS_PERIODO, coberturaDosPedidos, maisVendidos, margemDoPeriodo, periodos, porCategoria, porCorETamanho, resumoDoPeriodo, vendasPorDia } from "@/lib/orders/stats";
 import { ultimaSincronizacaoPedidos } from "@/lib/orders/sync";
 import { getActiveStore } from "@/lib/stores";
 import { GraficoDias } from "./grafico-dias";
@@ -60,7 +60,7 @@ export default async function VendasPage({ searchParams }: { searchParams: Promi
   const { atual, anterior } = periodos(hojeEmBrasilia(), sp.dias);
 
   const temDados = cobertura.total > 0;
-  const [resumo, resumoAnterior, dias, produtos, categorias, variacoes] = temDados
+  const [resumo, resumoAnterior, dias, produtos, categorias, variacoes, margem] = temDados
     ? await Promise.all([
         resumoDoPeriodo(db, store.id, atual),
         resumoDoPeriodo(db, store.id, anterior),
@@ -68,8 +68,9 @@ export default async function VendasPage({ searchParams }: { searchParams: Promi
         maisVendidos(db, store.id, atual, sp.ordem, 15),
         porCategoria(db, store.id, atual),
         porCorETamanho(db, store.id, atual),
+        margemDoPeriodo(db, store.id, atual),
       ])
-    : [null, null, [], [], [], { cores: [], tamanhos: [], semDado: 0 }];
+    : [null, null, [], [], [], { cores: [], tamanhos: [], semDado: 0 }, null];
 
   const href = (dias: number, ordem = sp.ordem) => `/vendas?dias=${dias}&ordem=${ordem}`;
   const pill = (ativo: boolean) => `rounded-full border px-3 py-1 ${ativo ? "border-primary bg-primary text-primary-foreground" : "border-border-strong hover:bg-border/40"}`;
@@ -130,6 +131,41 @@ export default async function VendasPage({ searchParams }: { searchParams: Promi
             <Kpi titulo="Peças vendidas" valor={resumo.unidades.toLocaleString("pt-BR")} atual={resumo.unidades} anterior={resumoAnterior.unidades} />
           </section>
 
+          {margem && (
+            <Card className="flex flex-col gap-2">
+              <h2 className="font-medium">Margem estimada</h2>
+              {margem.margem === null ? (
+                <p className="text-sm text-muted">
+                  Nenhum produto vendido neste período tem custo informado. Preencha em <Link href="/custos" className="underline">Custos</Link> para ver o lucro bruto e a margem.
+                </p>
+              ) : (
+                <>
+                  <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                    <div>
+                      <dt className="text-muted">Lucro bruto estimado</dt>
+                      <dd className="text-2xl font-semibold">{brl(margem.lucroBruto)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Margem</dt>
+                      <dd className="text-2xl font-semibold">{margem.margem.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Custo das peças vendidas</dt>
+                      <dd className="text-lg font-medium">{brl(margem.custo)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Vendas com custo informado</dt>
+                      <dd className="text-lg font-medium">{margem.cobertura.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</dd>
+                    </div>
+                  </dl>
+                  <p className="text-xs text-muted">
+                    Conta só os produtos com custo informado ({margem.cobertura.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do valor vendido). Usa o custo de hoje, sem frete, taxas nem impostos. <Link href="/custos?filtro=sem_custo" className="underline">Completar custos</Link>.
+                  </p>
+                </>
+              )}
+            </Card>
+          )}
+
           <Card className="flex flex-col gap-2">
             <h2 className="font-medium">Faturamento por dia</h2>
             <GraficoDias dias={dias} />
@@ -157,7 +193,7 @@ export default async function VendasPage({ searchParams }: { searchParams: Promi
                   href: `/produtos/${p.product_id}`,
                   foto: p.foto,
                   valor: sp.ordem === "valor" ? p.valor : p.unidades,
-                  texto: `${p.unidades} ${p.unidades === 1 ? "peça" : "peças"} · ${brl(p.valor)}`,
+                  texto: `${p.unidades} ${p.unidades === 1 ? "peça" : "peças"} · ${brl(p.valor)}${p.custo !== null && p.unidades > 0 && p.valor > 0 ? ` · margem ${(((p.valor / p.unidades - p.custo) / (p.valor / p.unidades)) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%` : ""}`,
                   detalhe: p.estoque === null ? null : p.estoque === 0 ? "Sem estoque" : `${p.estoque} em estoque`,
                 }))}
               />

@@ -84,6 +84,8 @@ export const COLUNAS_VENDAS: Coluna<ProdutoVendido>[] = [
   { titulo: "Valor vendido (R$)", valor: (p) => p.valor, largura: 18, formato: "#,##0.00" },
   { titulo: "Pedidos", valor: (p) => p.pedidos, largura: 10 },
   { titulo: "Estoque atual", valor: (p) => p.estoque, largura: 14 },
+  { titulo: "Custo unitário (R$)", valor: (p) => p.custo, largura: 18, formato: "#,##0.00" },
+  { titulo: "Margem média (%)", valor: (p) => (p.custo !== null && p.unidades > 0 && p.valor > 0 ? Math.round(((p.valor / p.unidades - p.custo) / (p.valor / p.unidades)) * 1000) / 10 : null), largura: 16, formato: "0.0" },
 ];
 
 export const COLUNAS_REPOSICAO: Coluna<LinhaReposicao>[] = [
