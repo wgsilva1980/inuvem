@@ -70,6 +70,20 @@ async function audit(
   );
 }
 
+/** A variante como o espelho a tem hoje, no formato de edição (para somar ao estoque sem mexer no resto). */
+export async function edicaoDaVariante(db: Db, storeId: string, productId: number, variantId: number): Promise<VariantEdit | null> {
+  const rows = await db.query<MirrorRow>(
+    `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management,
+            nullif(raw_json->>'image_id', '') AS image_id, weight::text AS weight,
+            depth::text AS depth, width::text AS width, height::text AS height,
+            raw_json->>'mpn' AS mpn, raw_json->>'age_group' AS age_group, raw_json->>'gender' AS gender, values
+     FROM variants WHERE store_id = $1::uuid AND product_id = $2::bigint AND id = $3::bigint`,
+    [storeId, productId, variantId],
+  );
+  const r = rows[0];
+  return r ? variantToEdit({ ...r, image_id: r.image_id === null ? null : Number(r.image_id) }) : null;
+}
+
 /** Quantas propriedades o produto tem (nomes em `attributes`, ex.: Cor e Tam). */
 export async function attributeCount(db: Db, storeId: string, productId: number): Promise<number> {
   const rows = await db.query<{ n: number }>(
