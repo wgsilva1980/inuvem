@@ -40,7 +40,7 @@ export async function restaurarCategorias(db: Db, api: RestauraApi, args: { stor
     const mudancas: CategoryInput = {
       name: { pt: r.name },
       ...(r.handle ? { handle: { pt: r.handle } } : {}),
-      description: { pt: r.description ?? "" },
+      ...(r.description ? { description: { pt: r.description } } : {}),
       parent: r.parent_id && Number(r.parent_id) > 0 ? Number(r.parent_id) : null,
     };
     try {

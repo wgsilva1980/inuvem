@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { loadMigrations, runMigrations } from "@/lib/db/migrate";
 import { upsertCategories, type Db } from "@/lib/sync/repo";
 import type { NuvemshopClient } from "@/lib/nuvemshop/client";
-import { CategoriaAlteradaError, categoriaCompleta, updateCategory } from "@/lib/nuvemshop/categories";
+import { NuvemshopError } from "@/lib/nuvemshop/errors";
+import { CategoriaAlteradaError, categoriaCompleta, semTextosVazios, updateCategory } from "@/lib/nuvemshop/categories";
 import { PaginaAlteradaError, updateStorePage } from "@/lib/nuvemshop/pages";
 import { pendentesDeRestauracao, restaurarCategorias } from "@/lib/categories/restore";
 import { acaoLabel } from "@/lib/history/labels";
@@ -21,6 +22,10 @@ function lojaFalsa(inicial: Record<string, unknown>, opts: { ignorarCampos?: str
   const client = {
     get: async () => structuredClone(dados),
     put: async (_p: string, body: Record<string, unknown>) => {
+      // a loja real responde 422 a um campo de texto enviado vazio (o campo ausente é aceito)
+      for (const [k, v] of Object.entries(body)) {
+        if (v && typeof v === "object" && Object.values(v as Record<string, unknown>).every((x) => x === "" || x === null)) throw new NuvemshopError("422", 422, null, `${k} vazio`);
+      }
       puts.push(structuredClone(body));
       for (const k of Object.keys(VAZIO)) if (k in dados || k in body) dados[k] = k in body && !opts.ignorarCampos?.includes(k) ? body[k] : structuredClone(VAZIO[k]);
       if ("parent" in body && body.parent === null) dados.parent = 0;
@@ -69,7 +74,16 @@ describe("atualizar categoria sem apagar o resto", () => {
     const l = lojaFalsa(original(), { ignorarCampos: ["handle"] });
     await expect(updateCategory(l.client, 1, { seo_title: { pt: "X" } })).rejects.toThrow(CategoriaAlteradaError);
     expect(l.puts).toHaveLength(2); // o envio e a restauração
-    expect(l.puts[1]).toEqual(categoriaCompleta({ ...original() } as unknown as Category)); // restaura exatamente o que havia
+    expect(l.puts[1]).toEqual(semTextosVazios(categoriaCompleta({ ...original() } as unknown as Category))); // restaura exatamente o que havia
+  });
+
+  it("não envia texto vazio (a loja responde 422), nem na categoria apagada nem ao limpar a descrição", async () => {
+    const l = lojaFalsa({ ...original(), description: { pt: "" } });
+    await updateCategory(l.client, 1, { seo_title: { pt: "Novo" } });
+    expect(l.puts[0]).not.toHaveProperty("description");
+    expect(l.puts[0]).not.toHaveProperty("seo_description");
+    await updateCategory(l.client, 1, { description: { pt: "" } }); // limpar a descrição = omitir
+    expect(l.puts[1]).not.toHaveProperty("description");
   });
 
   it("categoriaCompleta não inventa campos que a loja não tinha", () => {

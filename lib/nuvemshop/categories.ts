@@ -33,6 +33,19 @@ export function categoriaCompleta(c: Category): CategoryInput {
   };
 }
 
+/**
+ * A loja recusa (422) um campo de texto enviado vazio (ex.: `description: {pt: ""}`), mas aceita o campo ausente, que fica vazio do mesmo jeito.
+ * Por isso os campos de texto sem nenhum conteúdo são tirados do envio.
+ */
+export function semTextosVazios<T extends object>(input: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input)) {
+    const textoVazio = v !== null && typeof v === "object" && !Array.isArray(v) && Object.values(v as Record<string, unknown>).every((x) => x === null || x === "");
+    if (!textoVazio) out[k] = v;
+  }
+  return out as T;
+}
+
 export class CategoriaAlteradaError extends Error {}
 
 /**
@@ -43,14 +56,14 @@ export class CategoriaAlteradaError extends Error {}
 export async function updateCategory(c: NuvemshopClient, id: number, changes: CategoryInput): Promise<Category> {
   const antes = await getCategory(c, id);
   const base = categoriaCompleta(antes);
-  const depois = categorySchema.parse(await c.put(`/categories/${id}`, { ...base, ...changes }));
+  const depois = categorySchema.parse(await c.put(`/categories/${id}`, semTextosVazios({ ...base, ...changes })));
   const perdeu: string[] = [];
   if (changes.name === undefined && pt(depois.name) !== pt(antes.name)) perdeu.push("nome");
   if (changes.handle === undefined && pt(depois.handle) !== pt(antes.handle)) perdeu.push("endereço (handle)");
   if (changes.description === undefined && pt(depois.description) !== pt(antes.description)) perdeu.push("descrição");
   if (changes.parent === undefined && (depois.parent ?? 0) !== (antes.parent ?? 0)) perdeu.push("categoria pai");
   if (perdeu.length > 0) {
-    await c.put(`/categories/${id}`, base);
+    await c.put(`/categories/${id}`, semTextosVazios(base));
     throw new CategoriaAlteradaError(`A loja alterou ${perdeu.join(", ")} da categoria ao salvar; o que havia antes foi restaurado. Nada foi gravado.`);
   }
   return depois;

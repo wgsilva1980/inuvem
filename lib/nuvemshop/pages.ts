@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { NuvemshopClient } from "./client";
+import { semTextosVazios } from "./categories";
 import { i18nSchema, pt, type I18n } from "./types";
 
 /** Página institucional da loja (Sobre nós, Trocas…). Só o que o painel usa; o resto passa direto. */
@@ -58,13 +59,13 @@ export function paginaCompleta(p: StorePage): PageInput {
 export async function updateStorePage(c: NuvemshopClient, id: number, changes: PageInput): Promise<StorePage> {
   const antes = await getStorePage(c, id);
   const base = paginaCompleta(antes);
-  const depois = storePageSchema.parse(await c.put(`/pages/${id}`, { ...base, ...changes }));
+  const depois = storePageSchema.parse(await c.put(`/pages/${id}`, semTextosVazios({ ...base, ...changes })));
   const perdeu: string[] = [];
   if (changes.title === undefined && pt(depois.title) !== pt(antes.title)) perdeu.push("título");
   if (changes.content === undefined && pt(depois.content) !== pt(antes.content)) perdeu.push("conteúdo");
   if (changes.handle === undefined && pt(depois.handle) !== pt(antes.handle)) perdeu.push("endereço (handle)");
   if (perdeu.length > 0) {
-    await c.put(`/pages/${id}`, base);
+    await c.put(`/pages/${id}`, semTextosVazios(base));
     throw new PaginaAlteradaError(`A loja alterou ${perdeu.join(", ")} da página ao salvar; o que havia antes foi restaurado. Nada foi gravado.`);
   }
   return depois;
