@@ -9,6 +9,7 @@ import { countVariantChanges, describeOperation, planOperation } from "@/lib/bul
 import { JobStateError, cancelJob, createJob, loadMirrorProducts, startJob } from "@/lib/bulk/repo";
 import { resolveSelection } from "@/lib/bulk/selection";
 import { listCategoryOptions } from "@/lib/catalog/query";
+import { obterBloco } from "@/lib/content/blocks";
 import { contextoSku } from "@/lib/catalog/sku";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
@@ -27,7 +28,13 @@ export async function createBulk(_prev: BulkFormState | null, formData: FormData
 
   const form = operationFromForm((name) => String(formData.get(name) ?? ""));
   if (!form.op) return { message: form.error };
-  const op = form.op;
+  let op = form.op;
+  if (op.type === "conteudo") {
+    const bloco = await obterBloco(db, store.id, op.blockId);
+    if (!bloco) return { message: "Bloco de conteúdo não encontrado. Atualize a página e escolha de novo." };
+    if (op.mode === "aplicar" && /\[preencher:/i.test(bloco.html)) return { message: "O bloco ainda tem trechos “[preencher: …]”. Complete o bloco em Conteúdo antes de aplicar." };
+    op = { ...op, nome: bloco.name, html: bloco.html };
+  }
 
   const selection = await resolveSelection(db, store.id, Object.fromEntries(new URLSearchParams(String(formData.get("selecao") ?? ""))));
   if (selection.ids.length === 0) return { message: "Nenhum produto selecionado." };

@@ -3,6 +3,7 @@ import { pt, type I18n, type Product, type ProductInput, type Variant, type Vari
 import { mapVariant, toNumber } from "@/lib/sync/mappers";
 import { upsertProducts, upsertVariantRows, type Db } from "@/lib/sync/repo";
 import { valuesToStrings } from "@/lib/catalog/variants";
+import { marcaAbre } from "@/lib/content/aplicar";
 import { fromCents, toCents, type ItemChanges, type Plan, type PlanItem, type VariantChange } from "./operations";
 import {
   claimItems,
@@ -41,11 +42,14 @@ const sameIds = (a: number[], b: number[]) => {
   return x.length === y.length && x.every((n, i) => n === y[i]);
 };
 
+const semEspacos = (s: string) => s.replace(/\r\n?/g, "\n").replace(/>\s+</g, "><").replace(/\s+/g, " ").trim();
+
 /** Compara o que a loja tem agora com o "antes" do lote. Devolve o que diverge (vazio = pode aplicar). */
 export function findMismatches(remote: Product, changes: ItemChanges): string[] {
   const out: string[] = [];
   const p = changes.product;
   if (p?.published && (remote.published ?? false) !== p.published.antes) out.push("situação (publicado)");
+  if (p?.descricao && semEspacos(pt(remote.description as I18n)) !== semEspacos(p.descricao.antes)) out.push("descrição");
   if (p?.categories && !sameIds((remote.categories ?? []).map((c) => c.id), p.categories.antes)) out.push("categorias");
   if (p?.attributes) {
     const now = (remote.attributes ?? []).map((a) => pt(a));
@@ -107,6 +111,7 @@ const productInput = (c: ItemChanges["product"], remote: Product): ProductInput 
   const input: ProductInput = {};
   if (c?.published) input.published = c.published.depois;
   if (c?.categories) input.categories = c.categories.depois;
+  if (c?.descricao) input.description = { ...(remote.description ?? {}), pt: c.descricao.depois };
   if (c?.attributes) {
     // os objetos multi-idioma andam junto com o nome, mesmo quando a ordem muda ou uma propriedade é acrescentada
     const base = remote.attributes ?? [];
@@ -122,6 +127,7 @@ function sides(changes: ItemChanges, side: "antes" | "depois") {
   if (changes.product?.excluir) out.excluido = side === "antes" ? changes.product.excluir : true;
   if (changes.product?.published) out.publicado = changes.product.published[side];
   if (changes.product?.categories) out.categorias = changes.product.categories[side];
+  if (changes.product?.descricao) out.descricao = changes.product.descricao[side];
   if (changes.product?.attributes) out.propriedades = changes.product.attributes[side];
   for (const v of changes.variants) {
     const fields: Record<string, unknown> = {};
@@ -208,7 +214,20 @@ export async function runItem(db: Db, api: BulkApi, ctx: { storeId: string; acto
   };
 
   const pInput = productInput(item.changes.product, remote);
-  if (Object.keys(pInput).length > 0) await attempt("produto", undefined, () => api.updateProduct(productId, pInput));
+  if (Object.keys(pInput).length > 0) {
+    await attempt("produto", undefined, async () => {
+      const gravado = await api.updateProduct(productId, pInput);
+      const d = item.changes.product?.descricao;
+      if (d?.marca && gravado.description) {
+        // a loja pode limpar o HTML ao gravar: sem a marca do bloco não dá para achá-lo depois, então desfaz em vez de deixar uma descrição "perdida"
+        const querMarca = d.depois.includes(marcaAbre(d.marca));
+        if (pt(gravado.description).includes(marcaAbre(d.marca)) !== querMarca) {
+          if (d.antes.trim() !== "") await api.updateProduct(productId, { description: { ...(remote.description ?? {}), pt: d.antes } }).catch(() => undefined);
+          throw new Error("A loja não manteve a marca do bloco na descrição; a descrição voltou ao que era. Aplique o bloco pelo editor do produto.");
+        }
+      }
+    });
+  }
   for (const vc of item.changes.variants) {
     await attempt("variante", vc.id, async () => {
       const updated = await api.updateVariant(productId, vc.id, variantInput(vc, (remote.variants ?? []).find((x) => x.id === vc.id)));
@@ -386,6 +405,10 @@ export function buildRevertChanges(changes: ItemChanges, resultado: ItemResult |
   if (okProduct && changes.product) {
     out.product = {};
     if (changes.product.published) out.product.published = { antes: changes.product.published.depois, depois: changes.product.published.antes };
+    if (changes.product.descricao) {
+      const d = changes.product.descricao;
+      out.product.descricao = { antes: d.depois, depois: d.antes, resumo: "Volta a descrição ao que era antes do bloco", ...(d.marca ? { marca: d.marca } : {}) };
+    }
     if (changes.product.categories) out.product.categories = { antes: changes.product.categories.depois, depois: changes.product.categories.antes };
     if (changes.product.attributes) {
       const a = changes.product.attributes;

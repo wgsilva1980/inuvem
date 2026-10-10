@@ -70,3 +70,8 @@ export async function updateStorePage(c: NuvemshopClient, id: number, changes: P
   }
   return depois;
 }
+
+/** Cria uma página nova na loja. Por padrão ela é criada NÃO publicada (rascunho) até alguém revisar. */
+export async function createStorePage(c: NuvemshopClient, input: { title: string; content: string; publish?: boolean }): Promise<StorePage> {
+  return storePageSchema.parse(await c.post("/pages", { title: { pt: input.title }, content: { pt: input.content }, publish: input.publish ?? false }));
+}

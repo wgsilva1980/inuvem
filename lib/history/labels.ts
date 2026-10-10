@@ -49,6 +49,11 @@ const FIXED: Record<string, string> = {
   "lote.propriedades": "Lote: propriedades padronizadas no produto",
   "lote.valores": "Lote: grafia dos valores padronizada no produto",
   "lote.ordem": "Lote: ordem das propriedades corrigida no produto",
+  "lote.conteudo": "Lote: bloco de conteúdo na descrição do produto",
+  "bloco.criar": "Bloco de conteúdo criado",
+  "bloco.atualizar": "Bloco de conteúdo atualizado",
+  "bloco.excluir": "Bloco de conteúdo excluído",
+  "pagina.criar": "Página da loja criada (texto escrito com a IA)",
   "lote.completar": "Lote: COR e TAMANHO completados no produto",
 };
 

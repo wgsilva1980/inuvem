@@ -15,6 +15,7 @@ export const NAV_LINKS = [
 export const ADMIN_LINKS = [
   { href: "/imagens", label: "Imagens" },
   { href: "/seo", label: "SEO" },
+  { href: "/conteudo", label: "Conteúdo" },
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
   { href: "/automacoes", label: "Automações" },

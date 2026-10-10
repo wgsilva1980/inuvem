@@ -12,6 +12,7 @@ export function describeChanges(changes: ItemChanges, categoryName: (id: number)
     const names = (ids: number[]) => ids.map(categoryName).join(", ") || "nenhuma";
     lines.push(`Categorias: ${names(p.categories.antes)} → ${names(p.categories.depois)}`);
   }
+  if (p?.descricao) lines.push(`Descrição: ${p.descricao.resumo}`);
   if (p?.attributes) lines.push(`Propriedades: ${p.attributes.antes.join(" | ") || "nenhuma"} → ${p.attributes.depois.join(" | ")}${p.attributes.trocar ? " (ordem trocada)" : ""}`);
   for (const v of changes.variants) {
     const parts: string[] = [];

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BLOCO_HTML_MAX, aplicarBloco, marcaAbre, removerBloco } from "@/lib/content/aplicar";
 
 /* ---------- dinheiro (em centavos, para não acumular erro de ponto flutuante) ---------- */
 
@@ -49,6 +50,18 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sku") }),
   /** Preenche faixa etária (Adulto) e sexo (Feminino) onde estão vazios, para Instagram e Google Shopping. Não mexe no que já está preenchido. */
   z.object({ type: z.literal("google") }),
+  /**
+   * Põe (ou tira) um bloco de conteúdo reutilizável na descrição dos produtos. `nome` e `html` são uma cópia do bloco no momento da
+   * pré-visualização (preenchidos no servidor), para o lote aplicar exatamente o que foi mostrado.
+   */
+  z.object({
+    type: z.literal("conteudo"),
+    mode: z.enum(["aplicar", "remover"]),
+    blockId: z.string().uuid(),
+    nome: z.string().max(200).default(""),
+    html: z.string().max(BLOCO_HTML_MAX).default(""),
+    posicao: z.enum(["fim", "inicio"]).default("fim"),
+  }),
   /** Exclui os produtos da loja (irreversível: o lote de exclusão não pode ser revertido). */
   z.object({ type: z.literal("excluir") }),
   /** Corrige a ordem das propriedades para COR e TAMANHO, trocando também os dois valores de cada variante. */
@@ -166,6 +179,10 @@ export function describeOperation(op: BulkOperation, categoryName?: (id: number)
       return "Ajustar os SKUs: numerar as variantes sem código e renumerar os códigos repetidos (os demais ficam como estão)";
     case "google":
       return "Preencher faixa etária (Adulto) e sexo (Feminino) onde estão vazios, para Instagram e Google Shopping";
+    case "conteudo":
+      return op.mode === "aplicar"
+        ? `Aplicar o bloco “${op.nome}” na descrição (${op.posicao === "inicio" ? "no começo" : "no fim"}; se já estiver, atualiza no mesmo lugar)`
+        : `Remover o bloco “${op.nome}” da descrição`;
     case "excluir":
       return "EXCLUIR os produtos da loja (não dá para desfazer)";
     case "ordem":
@@ -198,6 +215,8 @@ export interface MirrorVariant {
 export interface MirrorProduct {
   id: number;
   name: string;
+  /** Descrição (HTML) do produto no espelho. */
+  description?: string | null;
   published: boolean;
   categoryIds: number[];
   /** Nomes das propriedades das variações (ex.: ["Cor", "Tam"]). */
@@ -226,6 +245,8 @@ export interface ItemChanges {
     /** Exclusão do produto inteiro (com variantes e imagens). `nome` serve para conferir e mostrar. */
     excluir?: { nome: string; variantes: number };
     categories?: { antes: number[]; depois: number[] };
+    /** Descrição (HTML). `marca` = id do bloco de conteúdo: depois de gravar, o painel confere se a loja manteve (ou tirou) a marca dele. */
+    descricao?: { antes: string; depois: string; resumo: string; marca?: string };
     /** `trocar`: as duas propriedades trocam de lugar (os objetos multi-idioma andam junto com o nome). */
     attributes?: { antes: string[]; depois: string[]; trocar?: boolean; de?: Array<number | null> };
   };
@@ -454,6 +475,17 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[], sku?
       }
       if (variants.length === 0) skip("os SKUs já estão corretos");
       else items.push({ productId: p.id, productName: p.name, changes: { variants } });
+      continue;
+    }
+
+    if (op.type === "conteudo") {
+      const bloco = { id: op.blockId, html: op.html };
+      const r = op.mode === "aplicar" ? aplicarBloco(p.description, bloco, op.posicao) : removerBloco(p.description, bloco);
+      if ("motivo" in r) skip(r.motivo);
+      else {
+        const resumo = op.mode === "remover" ? `Tira o bloco “${op.nome}” da descrição` : (p.description ?? "").includes(marcaAbre(op.blockId)) ? `Atualiza o bloco “${op.nome}” na descrição` : `Acrescenta o bloco “${op.nome}” ${op.posicao === "inicio" ? "no começo" : "no fim"} da descrição`;
+        items.push({ productId: p.id, productName: p.name, changes: { product: { descricao: { antes: p.description ?? "", depois: r.depois, resumo, marca: op.blockId } }, variants: [] } });
+      }
       continue;
     }
 

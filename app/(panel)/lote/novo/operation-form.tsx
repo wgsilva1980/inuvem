@@ -9,7 +9,7 @@ import { createBulk, type BulkFormState } from "../actions";
 import { fieldBase } from "@/components/ui/field";
 const label = "flex flex-col gap-1 text-sm";
 
-export function OperationForm({ selecao, total, categories, faltando, semNome = 0 }: { selecao: string; total: number; categories: CategoryOption[]; faltando: ProdutoFaltando[]; semNome?: number }) {
+export function OperationForm({ selecao, total, categories, faltando, semNome = 0, blocos = [] }: { selecao: string; total: number; categories: CategoryOption[]; faltando: ProdutoFaltando[]; semNome?: number; blocos?: Array<{ id: string; name: string }> }) {
   const [state, action, pending] = useActionState<BulkFormState | null, FormData>(createBulk, null);
   const [tipo, setTipo] = useState("preco");
   const [precoModo, setPrecoModo] = useState("aumentar");
@@ -30,6 +30,7 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
             <option value="estoque">Alterar estoque</option>
             <option value="publicar">Publicar ou despublicar</option>
             <option value="categoria">Adicionar ou remover de uma categoria</option>
+            <option value="conteudo">Aplicar bloco de conteúdo na descrição (tabela de medidas, trocas…)</option>
             <option value="propriedades">Padronizar propriedades (COR e TAMANHO)</option>
             <option value="valores">Padronizar grafia dos valores (cores e tamanhos)</option>
             <option value="ordem">Corrigir a ordem das propriedades (COR antes de TAMANHO)</option>
@@ -236,6 +237,51 @@ export function OperationForm({ selecao, total, categories, faltando, semNome = 
             <p className="text-muted">
               Cada produto é alterado em várias etapas na loja. Se uma etapa falhar, ou se a loja não ficar como esperado, o painel desfaz sozinho o que já tinha aplicado e mostra o resultado. Produtos que já estão na ordem certa, ou que não têm exatamente duas propriedades reconhecidas, ficam de fora com o motivo na pré-visualização.
             </p>
+          </div>
+        )}
+
+        {tipo === "conteudo" && (
+          <div className="flex flex-col gap-3 text-sm">
+            {blocos.length === 0 ? (
+              <p className="rounded-md border border-border p-3 text-muted">
+                Ainda não há blocos de conteúdo. Crie o primeiro em <a href="/conteudo" className="underline">Conteúdo</a> (por exemplo a tabela de medidas ou a política de troca) e volte aqui.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label className={label}>
+                    <span className="text-muted">Ação</span>
+                    <select name="conteudo_modo" defaultValue="aplicar" className={fieldBase}>
+                      <option value="aplicar">Aplicar o bloco</option>
+                      <option value="remover">Remover o bloco</option>
+                    </select>
+                  </label>
+                  <label className={label}>
+                    <span className="text-muted">Bloco</span>
+                    <select name="conteudo_bloco" required defaultValue="" className={fieldBase}>
+                      <option value="" disabled>
+                        Escolha…
+                      </option>
+                      {blocos.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className={label}>
+                    <span className="text-muted">Onde (ao aplicar)</span>
+                    <select name="conteudo_posicao" defaultValue="fim" className={fieldBase}>
+                      <option value="fim">No fim da descrição</option>
+                      <option value="inicio">No começo da descrição</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="text-muted">
+                  O bloco entra na descrição de cada produto com uma marca invisível do painel. Se o produto já tem o bloco, ele é <strong>atualizado no mesmo lugar</strong> (sem duplicar), e “Remover” tira só o bloco. O resto da descrição não muda. Você confere tudo na pré-visualização e pode reverter o lote. Para aplicar a uma categoria, filtre os produtos por ela na lista e use “Operação em massa”.
+                </p>
+              </>
+            )}
           </div>
         )}
 

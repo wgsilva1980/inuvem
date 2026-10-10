@@ -59,12 +59,13 @@ export async function loadMirrorProducts(db: Db, storeId: string, ids: number[])
   const rows = await db.query<{
     id: string;
     name: string;
+    description: string | null;
     published: boolean;
     categories: Array<{ id: number }>;
     attributes: unknown;
     variants: Array<{ id: string; sku: string | null; values: Array<Record<string, string | null>>; price: string | null; promotional_price: string | null; stock_management: boolean; stock: number | null; age_group: string | null; gender: string | null }>;
   }>(
-    `SELECT p.id::text AS id, p.name, p.published, p.categories, coalesce(p.raw_json->'attributes', '[]'::jsonb) AS attributes,
+    `SELECT p.id::text AS id, p.name, p.description, p.published, p.categories, coalesce(p.raw_json->'attributes', '[]'::jsonb) AS attributes,
             coalesce(jsonb_agg(jsonb_build_object('id', v.id::text, 'sku', v.sku, 'values', v.values, 'price', v.price::text,
                      'promotional_price', v.promotional_price::text, 'stock_management', v.stock_management, 'stock', v.stock, 'age_group', v.raw_json->>'age_group', 'gender', v.raw_json->>'gender')
                      ORDER BY v.position NULLS LAST, v.id) FILTER (WHERE v.id IS NOT NULL), '[]'::jsonb) AS variants
@@ -78,6 +79,7 @@ export async function loadMirrorProducts(db: Db, storeId: string, ids: number[])
   return rows.map((r) => ({
     id: Number(r.id),
     name: r.name,
+    description: r.description,
     published: r.published,
     categoryIds: (r.categories ?? []).map((c) => Number(c.id)),
     attributes: Array.isArray(r.attributes) ? r.attributes.map((a) => pt(a as I18n)) : [],
