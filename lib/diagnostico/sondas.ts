@@ -124,14 +124,6 @@ export const SONDAS: Sonda[] = [
     ],
   },
   {
-    id: "paginas",
-    titulo: "Páginas da loja",
-    caminho: "/pages",
-    forma: "lista",
-    usadoPor: "SEO de páginas, páginas escritas pela IA",
-    esperados: [o("id", "identificar a página"), o("title", "título"), q("content", "conteúdo"), q("handle", "endereço"), q("publish", "publicada ou não")],
-  },
-  {
     id: "carrinhos",
     titulo: "Carrinhos abandonados",
     caminho: "/checkouts",
@@ -175,8 +167,6 @@ export const EXIGENCIAS: ExigenciaEscopo[] = [
   { funcionalidade: "Ler clientes (contatos e segmentos)", exige: ["read_customers"] },
   { funcionalidade: "Ler cupons", exige: ["read_coupons"] },
   { funcionalidade: "Criar e desativar cupons (lote, carrinhos, cashback)", exige: ["write_coupons"] },
-  { funcionalidade: "Ler páginas da loja (SEO de páginas)", exige: ["read_content"] },
-  { funcionalidade: "Criar e editar páginas da loja", exige: ["write_content"] },
 ];
 
 /** O escopo exigido está entre os concedidos? "write_x" cobre "read_x". */
