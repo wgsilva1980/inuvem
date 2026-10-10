@@ -20,6 +20,18 @@ describe("navegação principal", () => {
   });
 
   it("agrupa as páginas administrativas no submenu", () => {
-    expect(ADMIN_LINKS.map((l) => l.label)).toEqual(["Imagens", "SEO", "Conteúdo", "E-mails", "Selos", "Lotes", "Histórico", "Automações", "Resumo diário", "Diagnóstico", "Usuários"]);
+    expect(ADMIN_LINKS.map((l) => l.label)).toEqual(["Promoções", "Cupons", "Vendas", "Custos", "Estoque", "Carrinhos", "Expedição", "Imagens", "SEO", "Conteúdo", "E-mails", "Selos", "Lotes", "Histórico", "Automações", "Resumo diário", "Diagnóstico", "Usuários"]);
+  });
+});
+
+describe("menu principal enxuto", () => {
+  it("mantém só o essencial na barra e o resto em Administração", () => {
+    expect(NAV_LINKS.map((l) => l.label)).toEqual(["Produtos", "Categorias", "Contatos", "Cashback"]);
+  });
+
+  it("as telas movidas continuam acessíveis e destacam o menu Administração", () => {
+    const admin = ADMIN_LINKS.map((l) => l.href);
+    for (const href of ["/promocoes", "/cupons", "/vendas", "/custos", "/estoque", "/carrinhos", "/expedicao"]) expect(admin).toContain(href);
+    expect(ADMIN_LINKS.some((l) => isActive("/promocoes/liquidar", l.href))).toBe(true);
   });
 });
