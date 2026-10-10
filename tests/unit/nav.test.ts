@@ -20,6 +20,6 @@ describe("navegação principal", () => {
   });
 
   it("agrupa as páginas administrativas no submenu", () => {
-    expect(ADMIN_LINKS.map((l) => l.label)).toEqual(["Imagens", "SEO", "Conteúdo", "E-mails", "Selos", "Lotes", "Histórico", "Automações", "Diagnóstico", "Usuários"]);
+    expect(ADMIN_LINKS.map((l) => l.label)).toEqual(["Imagens", "SEO", "Conteúdo", "E-mails", "Selos", "Lotes", "Histórico", "Automações", "Resumo diário", "Diagnóstico", "Usuários"]);
   });
 });

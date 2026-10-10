@@ -23,6 +23,7 @@ export const ADMIN_LINKS = [
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
   { href: "/automacoes", label: "Automações" },
+  { href: "/resumo", label: "Resumo diário" },
   { href: "/diagnostico", label: "Diagnóstico" },
   { href: "/usuarios", label: "Usuários" },
 ] as const;
