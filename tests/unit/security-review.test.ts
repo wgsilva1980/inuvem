@@ -74,10 +74,10 @@ describe("filtro de sessão (proxy.ts)", () => {
     }
   });
   it("só exclui o que tem autenticação própria, e só o caminho exato (sem prefixo solto)", () => {
-    for (const p of ["/login", "/login/", "/api/auth/sign-in/magic-link", "/api/cron/sync", "/api/health", "/api/sync", "/api/webhooks/nuvemshop", "/api/nuvemshop/webhooks/store-redact", "/api/nuvemshop/callback", "/_next/static/a.js", "/favicon.ico"]) {
+    for (const p of ["/login", "/login/", "/api/auth/sign-in/magic-link", "/api/cron/sync", "/api/health", "/api/sync", "/api/webhooks/nuvemshop", "/api/nuvemshop/webhooks/store-redact", "/api/nuvemshop/callback", "/api/loja/selos", "/api/loja/selos.js", "/_next/static/a.js", "/favicon.ico"]) {
       expect(protegido(p), p).toBe(false);
     }
-    for (const p of ["/login-qualquer-coisa", "/loginx", "/api/syncx", "/api/healthz", "/api/authx", "/api/webhooksx", "/api/nuvemshop/callbackx", "/favicon.icon"]) {
+    for (const p of ["/login-qualquer-coisa", "/loginx", "/api/syncx", "/api/healthz", "/api/authx", "/api/webhooksx", "/api/nuvemshop/callbackx", "/api/lojax", "/api/lojas", "/favicon.icon"]) {
       expect(protegido(p), p).toBe(true);
     }
   });
