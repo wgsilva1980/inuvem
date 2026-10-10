@@ -48,7 +48,7 @@ export default async function ResumoPage() {
         <p className="text-sm">
           <span className="text-muted">Assunto:</span> {previa.assunto}
         </p>
-        <iframe title="Prévia do resumo diário" sandbox="" srcDoc={previa.html} className="h-[28rem] w-full rounded-md border border-border bg-white" />
+        <iframe title="Prévia do resumo diário" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={previa.html.replace("<body", '<head><base target="_blank"></head><body')} className="h-[28rem] w-full rounded-md border border-border bg-white" />
       </Card>
 
       <Card className="flex flex-col gap-2 text-sm">
