@@ -61,6 +61,10 @@ const FIXED: Record<string, string> = {
   "cashback.emitir": "Cupom de cashback criado para um pedido",
   "cashback.cancelar": "Cupom de cashback cancelado",
   "diagnostico.api": "Diagnóstico da API da loja executado (só leitura)",
+  "custo.definir": "Custo do produto alterado",
+  "custo.importar": "Custos importados de planilha",
+  "custo.ler_loja": "Custos trazidos da loja",
+  "custo.margem_minima": "Margem mínima alterada",
   "lote.completar": "Lote: COR e TAMANHO completados no produto",
 };
 

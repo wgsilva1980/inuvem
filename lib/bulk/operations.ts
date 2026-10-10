@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { precoMinimo, precoPermitido } from "@/lib/costs/math";
 import { BLOCO_HTML_MAX, aplicarBloco, marcaAbre, removerBloco } from "@/lib/content/aplicar";
 
 /* ---------- dinheiro (em centavos, para não acumular erro de ponto flutuante) ---------- */
@@ -217,6 +218,10 @@ export interface MirrorProduct {
   name: string;
   /** Descrição (HTML) do produto no espelho. */
   description?: string | null;
+  /** Custo do produto guardado no painel (null/ausente = não informado). Com custo, o lote não baixa o preço abaixo do custo (ou da margem mínima). */
+  cost?: number | null;
+  /** Margem mínima desejada sobre o preço de venda, em % (0 = só não vender abaixo do custo). */
+  minMargin?: number;
   published: boolean;
   categoryIds: number[];
   /** Nomes das propriedades das variações (ex.: ["Cor", "Tam"]). */
@@ -274,7 +279,14 @@ export interface Plan {
 /** Máximo de produtos por lote: mantém a execução e a pré-visualização em tamanho razoável. */
 export const MAX_PRODUCTS_PER_JOB = 500;
 
-function planVariant(op: BulkOperation, v: MirrorVariant): { change?: VariantChange; motivo?: string } {
+/** Motivo para recusar um preço que fica abaixo do custo (ou da margem mínima); null se está liberado. Só vale para quem tem custo informado. */
+function motivoAbaixoDoCusto(novoPreco: number, custo: number | null | undefined, margemMin: number): string | null {
+  if (precoPermitido(novoPreco, custo, margemMin)) return null;
+  const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return margemMin > 0 ? `o preço ficaria abaixo do mínimo de ${brl(precoMinimo(custo as number, margemMin))} (custo ${brl(custo as number)} com margem mínima de ${margemMin.toLocaleString("pt-BR")}%)` : `o preço ficaria abaixo do custo (${brl(custo as number)})`;
+}
+
+function planVariant(op: BulkOperation, v: MirrorVariant, custo?: number | null, margemMin = 0): { change?: VariantChange; motivo?: string } {
   const base = { id: v.id, label: v.label, sku: v.sku };
   const price = v.price === null ? null : toCents(v.price);
   const promo = v.promotional_price === null ? null : toCents(v.promotional_price);
@@ -290,6 +302,10 @@ function planVariant(op: BulkOperation, v: MirrorVariant): { change?: VariantCha
     next = applyRounding(next, op.rounding);
     if (next <= 0) return { motivo: "o valor resultante seria zero ou negativo" };
     if (next === current) return { motivo: "sem alteração" };
+    if (current !== null && next < current) {
+      const m = motivoAbaixoDoCusto(next / 100, custo, margemMin); // next está em centavos
+      if (m) return { motivo: m };
+    }
     if (op.target === "promocional") {
       if (price !== null && next >= price) return { motivo: "o preço promocional ficaria maior ou igual ao preço" };
       return { change: { ...base, promotional_price: { antes: fromCents(promo as number), depois: fromCents(next) } } };
@@ -307,6 +323,8 @@ function planVariant(op: BulkOperation, v: MirrorVariant): { change?: VariantCha
     const next = applyRounding(Math.round(price * (1 - (op.percent as number) / 100)), op.rounding);
     if (next <= 0 || next >= price) return { motivo: "o preço promocional resultante não fica menor que o preço" };
     if (next === promo) return { motivo: "sem alteração" };
+    const abaixo = motivoAbaixoDoCusto(next / 100, custo, margemMin); // next está em centavos
+    if (abaixo) return { motivo: abaixo };
     return { change: { ...base, promotional_price: { antes: promo === null ? null : fromCents(promo), depois: fromCents(next) } } };
   }
 
@@ -535,7 +553,7 @@ export function planOperation(op: BulkOperation, products: MirrorProduct[], sku?
 
     const variants: VariantChange[] = [];
     for (const v of p.variants) {
-      const r = planVariant(op, v);
+      const r = planVariant(op, v, p.cost, p.minMargin ?? 0);
       if (r.change) variants.push(r.change);
       else if (r.motivo) skip(r.motivo, v.label);
     }

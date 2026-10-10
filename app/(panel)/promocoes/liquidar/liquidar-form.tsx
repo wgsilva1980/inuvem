@@ -18,11 +18,13 @@ export interface LinhaParada {
   nuncaVendeu: boolean;
   valorParado: number;
   base: number;
+  /** Custo do produto guardado no painel (null = não informado). */
+  custo: number | null;
 }
 
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-export function LiquidarForm({ linhas, filtros }: { linhas: LinhaParada[]; filtros: { dias: number; minEstoque: number; apenasPublicados: boolean } }) {
+export function LiquidarForm({ linhas, filtros, margemMinima = 0 }: { linhas: LinhaParada[]; filtros: { dias: number; minEstoque: number; apenasPublicados: boolean }; margemMinima?: number }) {
   const [state, action, pending] = useActionState<PromoFormState | null, FormData>(criarLiquidacao, null);
   const [marcados, setMarcados] = useState<Set<string>>(() => new Set(linhas.map((l) => l.id)));
   const [percent, setPercent] = useState<Record<string, string>>(() => Object.fromEntries(linhas.map((l) => [l.id, String(l.base)])));
@@ -109,6 +111,7 @@ export function LiquidarForm({ linhas, filtros }: { linhas: LinhaParada[]; filtr
                   {!l.published ? " · não publicado" : ""}
                 </span>
                 {motivo[l.id] && <span className="block text-xs">{motivo[l.id]}</span>}
+                <MargemAposDesconto linha={l} percent={percent[l.id] ?? ""} margemMinima={margemMinima} />
               </span>
             </label>
             <label className="flex shrink-0 items-center gap-2 text-sm">
@@ -163,5 +166,21 @@ export function LiquidarForm({ linhas, filtros }: { linhas: LinhaParada[]; filtr
         </Button>
       </div>
     </form>
+  );
+}
+
+/** Margem do produto depois do desconto digitado: vermelho se fica abaixo do custo, amarelo se fica abaixo da margem mínima, cinza se não há custo. */
+function MargemAposDesconto({ linha, percent, margemMinima }: { linha: LinhaParada; percent: string; margemMinima: number }) {
+  if (linha.custo === null) return <span className="block text-xs text-muted">Sem custo informado: o painel não consegue checar a margem (veja Custos).</span>;
+  const d = Number(percent.replace(",", "."));
+  const preco = Number.isFinite(d) && d > 0 && d < 100 ? linha.precoMin * (1 - d / 100) : linha.precoMin;
+  const margem = preco > 0 ? ((preco - linha.custo) / preco) * 100 : null;
+  if (margem === null) return null;
+  const cor = margem < 0 ? "text-danger" : margem < margemMinima ? "text-warning" : "text-muted";
+  return (
+    <span className={`block text-xs ${cor}`}>
+      Custo {brl(linha.custo)} · com o desconto fica {brl(Math.round(preco * 100) / 100)}, margem de {margem.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+      {margem < 0 ? " (abaixo do custo: o painel não aplica esse preço)" : margem < margemMinima ? ` (abaixo da margem mínima de ${margemMinima.toLocaleString("pt-BR")}%)` : ""}
+    </span>
   );
 }

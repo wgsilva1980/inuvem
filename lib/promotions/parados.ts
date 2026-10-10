@@ -18,6 +18,8 @@ export interface Parado {
   diasParado: number;
   /** Dinheiro parado em estoque, a preço cheio. */
   valorParado: number;
+  /** Custo do produto guardado no painel (null = não informado). */
+  custo?: number | null;
 }
 
 export interface FiltroParados {
@@ -41,6 +43,7 @@ interface Linha {
   ultima_venda: string | null;
   criado_em: string | null;
   dias_parado: string;
+  custo: string | null;
 }
 
 /**
@@ -55,13 +58,14 @@ export async function listarParados(db: Db, storeId: string, f: FiltroParados): 
               min(v.price) FILTER (WHERE v.price > 0) AS preco_min, max(v.price) AS preco_max,
               coalesce(bool_or(v.promotional_price IS NOT NULL AND v.promotional_price > 0), false) AS em_promocao,
               sum(v.price * v.stock) FILTER (WHERE v.stock_management AND v.stock > 0) AS valor,
-              s.units AS vendidas, s.last_sold_at AS ultima_venda
+              s.units AS vendidas, s.last_sold_at AS ultima_venda, pc.cost AS custo
        FROM products p
        JOIN variants v ON v.store_id = p.store_id AND v.product_id = p.id
        LEFT JOIN product_sales s ON s.store_id = p.store_id AND s.product_id = p.id
+       LEFT JOIN product_costs pc ON pc.store_id = p.store_id AND pc.product_id = p.id
        WHERE p.store_id = $1::uuid ${f.apenasPublicados ? "AND p.published" : ""}
          AND NOT EXISTS (SELECT 1 FROM promotions pr WHERE pr.store_id = p.store_id AND pr.status NOT IN ('encerrada', 'cancelada') AND p.id = ANY(pr.product_ids))
-       GROUP BY p.store_id, p.id, s.units, s.last_sold_at
+       GROUP BY p.store_id, p.id, s.units, s.last_sold_at, pc.cost
      ), calc AS (
        SELECT *, least($4::int, greatest(0, extract(day FROM now() - coalesce(ultima_venda, criado_em, now() - make_interval(days => $4::int))))::int) AS dias_parado
        FROM base WHERE estoque >= $3::int
@@ -71,7 +75,7 @@ export async function listarParados(db: Db, storeId: string, f: FiltroParados): 
          AND (criado_em IS NULL OR criado_em < now() - make_interval(days => $2::int))
      )
      SELECT id::text, name, published, estoque::text, preco_min::text, preco_max::text, em_promocao, vendidas::text,
-            ultima_venda::text, criado_em::text, dias_parado::text, (SELECT count(*) FROM filtrado)::text AS total
+            ultima_venda::text, criado_em::text, dias_parado::text, custo::text, (SELECT count(*) FROM filtrado)::text AS total
      FROM filtrado ORDER BY valor DESC NULLS LAST, lower(name), id LIMIT ${Math.max(1, Math.min(f.limit, 500))}`,
     [storeId, f.dias, f.minEstoque, f.janelaDias],
   );
@@ -91,6 +95,7 @@ export async function listarParados(db: Db, storeId: string, f: FiltroParados): 
       criadoEm: r.criado_em,
       diasParado: Number(r.dias_parado),
       valorParado: Math.round(estoque * precoMin * 100) / 100,
+      custo: r.custo === null ? null : Number(r.custo),
     };
   });
   return { itens, total: Number(rows[0]?.total ?? 0) };

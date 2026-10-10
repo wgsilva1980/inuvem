@@ -5,6 +5,8 @@ import { buttonClass } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fieldClass } from "@/components/ui/field";
 import { query } from "@/lib/db";
+import { limitarDesconto } from "@/lib/costs/math";
+import { margemMinima } from "@/lib/costs/repo";
 import { descontoBase, listarParados } from "@/lib/promotions/parados";
 import { resumoVendas } from "@/lib/sales/sync";
 import { getActiveStore } from "@/lib/stores";
@@ -34,6 +36,7 @@ export default async function LiquidarPage({ searchParams }: { searchParams: Pro
   const sp = paramsSchema.parse(await searchParams);
   const db = { query };
   const resumo = await resumoVendas(db, store.id);
+  const minimoMargem = await margemMinima(db, store.id);
   const parados = resumo.janelaDias
     ? await listarParados(db, store.id, { dias: Math.min(sp.dias, resumo.janelaDias), minEstoque: sp.estoque, apenasPublicados: sp.publicados === "1", janelaDias: resumo.janelaDias, limit: LIMITE })
     : null;
@@ -92,6 +95,7 @@ export default async function LiquidarPage({ searchParams }: { searchParams: Pro
                 </p>
                 <LiquidarForm
                   key={`${sp.dias}-${sp.estoque}-${sp.publicados}-${resumo.sincronizadoEm}`}
+                  margemMinima={minimoMargem}
                   filtros={{ dias: Math.min(sp.dias, resumo.janelaDias ?? sp.dias), minEstoque: sp.estoque, apenasPublicados: sp.publicados === "1" }}
                   linhas={parados.itens.map((p) => ({
                     id: p.id,
@@ -105,7 +109,8 @@ export default async function LiquidarPage({ searchParams }: { searchParams: Pro
                     diasParado: p.diasParado,
                     nuncaVendeu: p.ultimaVenda === null,
                     valorParado: p.valorParado,
-                    base: descontoBase(p),
+                    base: limitarDesconto(descontoBase(p), p.precoMin, p.custo, minimoMargem).percent,
+                    custo: p.custo ?? null,
                   }))}
                 />
               </>

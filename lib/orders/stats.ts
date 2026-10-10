@@ -67,17 +67,20 @@ export interface ProdutoVendido {
   pedidos: number;
   /** Estoque atual (soma das variações com controle de estoque); null = sem controle. */
   estoque: number | null;
+  /** Custo do produto guardado no painel (null = não informado). */
+  custo: number | null;
 }
 
 export type OrdemProdutos = "unidades" | "valor";
 
 /** Produtos mais vendidos do período. `valor` = preço × quantidade das linhas (antes de descontos do pedido). */
 export async function maisVendidos(db: Db, storeId: string, p: Periodo, ordem: OrdemProdutos, limit: number): Promise<ProdutoVendido[]> {
-  const rows = await db.query<{ product_id: string; nome: string; foto: string | null; unidades: string; valor: string; pedidos: string; estoque: string | null }>(
+  const rows = await db.query<{ product_id: string; nome: string; foto: string | null; unidades: string; valor: string; pedidos: string; estoque: string | null; custo: string | null }>(
     `SELECT i.product_id::text AS product_id, coalesce(max(pr.name), max(i.name), 'Produto ' || i.product_id) AS nome,
             max(pr.raw_json->'images'->0->>'src') AS foto,
             sum(i.quantity)::text AS unidades, sum(i.quantity * i.unit_price)::text AS valor, count(DISTINCT i.order_id)::text AS pedidos,
-            (SELECT sum(v.stock) FILTER (WHERE v.stock_management)::text FROM variants v WHERE v.store_id = i.store_id AND v.product_id = i.product_id) AS estoque
+            (SELECT sum(v.stock) FILTER (WHERE v.stock_management)::text FROM variants v WHERE v.store_id = i.store_id AND v.product_id = i.product_id) AS estoque,
+            (SELECT c.cost::text FROM product_costs c WHERE c.store_id = i.store_id AND c.product_id = i.product_id) AS custo
      FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
      LEFT JOIN products pr ON pr.store_id = i.store_id AND pr.id = i.product_id
      WHERE i.store_id = $1::uuid AND i.product_id IS NOT NULL AND ${SQL_VENDA} AND ${NO_PERIODO}
@@ -86,7 +89,7 @@ export async function maisVendidos(db: Db, storeId: string, p: Periodo, ordem: O
      LIMIT ${Math.max(1, Math.min(limit, 1000))}`,
     [storeId, p.de, p.ate],
   );
-  return rows.map((r) => ({ product_id: r.product_id, nome: r.nome, foto: r.foto, unidades: Number(r.unidades), valor: Number(r.valor), pedidos: Number(r.pedidos), estoque: r.estoque === null ? null : Number(r.estoque) }));
+  return rows.map((r) => ({ product_id: r.product_id, nome: r.nome, foto: r.foto, unidades: Number(r.unidades), valor: Number(r.valor), pedidos: Number(r.pedidos), estoque: r.estoque === null ? null : Number(r.estoque), custo: r.custo === null ? null : Number(r.custo) }));
 }
 
 export interface Fatia {
@@ -159,4 +162,45 @@ export async function coberturaDosPedidos(db: Db, storeId: string): Promise<{ to
     [storeId],
   );
   return { total: Number(r?.total ?? 0), primeiro: r?.primeiro ?? null, ultimo: r?.ultimo ?? null };
+}
+
+export interface MargemDoPeriodo {
+  /** Valor vendido (preço × quantidade das linhas) de todos os produtos. */
+  receita: number;
+  /** Parte da receita de produtos com custo informado. */
+  receitaComCusto: number;
+  custo: number;
+  lucroBruto: number;
+  /** Lucro bruto ÷ receita dos produtos com custo, em %. null se nenhum produto vendido tem custo. */
+  margem: number | null;
+  /** Quanto da receita tem custo informado, em %. */
+  cobertura: number;
+}
+
+/**
+ * Margem bruta estimada do período: (preço − custo) × quantidade das linhas dos pedidos, só dos produtos com custo informado. Usa o custo ATUAL do
+ * painel para vendas passadas (se o custo mudou, a margem antiga é aproximada) e não inclui frete, taxas nem impostos.
+ */
+export async function margemDoPeriodo(db: Db, storeId: string, p: Periodo): Promise<MargemDoPeriodo> {
+  const [r] = await db.query<{ receita: string; receita_com_custo: string; custo: string }>(
+    `SELECT coalesce(sum(i.quantity * i.unit_price), 0)::text AS receita,
+            coalesce(sum(i.quantity * i.unit_price) FILTER (WHERE c.cost IS NOT NULL), 0)::text AS receita_com_custo,
+            coalesce(sum(i.quantity * c.cost) FILTER (WHERE c.cost IS NOT NULL), 0)::text AS custo
+     FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+     LEFT JOIN product_costs c ON c.store_id = i.store_id AND c.product_id = i.product_id
+     WHERE i.store_id = $1::uuid AND ${SQL_VENDA} AND ${NO_PERIODO}`,
+    [storeId, p.de, p.ate],
+  );
+  const receita = Number(r?.receita ?? 0);
+  const receitaComCusto = Number(r?.receita_com_custo ?? 0);
+  const custo = Number(r?.custo ?? 0);
+  const lucroBruto = Math.round((receitaComCusto - custo) * 100) / 100;
+  return {
+    receita: Math.round(receita * 100) / 100,
+    receitaComCusto: Math.round(receitaComCusto * 100) / 100,
+    custo: Math.round(custo * 100) / 100,
+    lucroBruto,
+    margem: receitaComCusto > 0 ? Math.round((lucroBruto / receitaComCusto) * 10_000) / 100 : null,
+    cobertura: receita > 0 ? Math.round((receitaComCusto / receita) * 1000) / 10 : 0,
+  };
 }
