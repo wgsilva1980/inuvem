@@ -15,6 +15,7 @@ export const ADMIN_LINKS = [
   { href: "/simulador", label: "Simulador" },
   { href: "/estoque", label: "Estoque" },
   { href: "/compras", label: "Compras" },
+  { href: "/campanhas", label: "Campanhas" },
   { href: "/qualidade", label: "Qualidade" },
   { href: "/carrinhos", label: "Carrinhos" },
   { href: "/expedicao", label: "Expedição" },
