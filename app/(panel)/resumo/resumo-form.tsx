@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { fieldBase } from "@/components/ui/field";
 import { salvarResumoAction, type ResumoState } from "./actions";
 
-export function ResumoForm({ enabled, recipients, onlyIfAction, admins, emailPronto }: { enabled: boolean; recipients: string[]; onlyIfAction: boolean; admins: string[]; emailPronto: boolean }) {
+export function ResumoForm({ enabled, recipients, onlyIfAction, monthly, admins, emailPronto }: { enabled: boolean; recipients: string[]; onlyIfAction: boolean; monthly: boolean; admins: string[]; emailPronto: boolean }) {
   const [state, action, pending] = useActionState<ResumoState | null, FormData>(salvarResumoAction, null);
   const [enviando, setEnviando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
@@ -18,6 +18,15 @@ export function ResumoForm({ enabled, recipients, onlyIfAction, admins, emailPro
     const d = (await res.json().catch(() => ({}))) as { error?: string; destinatarios?: number; aviso?: string };
     setEnviando(false);
     setMsg(res.ok ? { ok: !d.aviso, texto: `Teste enviado para ${d.destinatarios} destinatário(s). Confira a caixa de entrada e o spam.${d.aviso ? ` ${d.aviso}` : ""}` } : { ok: false, texto: d.error ?? "Não foi possível enviar." });
+  }
+
+  async function enviarMensal() {
+    setEnviando(true);
+    setMsg(null);
+    const res = await fetch("/api/resumo/mensal", { method: "POST" });
+    const d = (await res.json().catch(() => ({}))) as { error?: string; destinatarios?: number; aviso?: string };
+    setEnviando(false);
+    setMsg(res.ok ? { ok: !d.aviso, texto: `Relatório do mês passado enviado para ${d.destinatarios} destinatário(s). Confira a caixa de entrada e o spam.${d.aviso ? ` ${d.aviso}` : ""}` } : { ok: false, texto: d.error ?? "Não foi possível enviar." });
   }
 
   return (
@@ -37,6 +46,10 @@ export function ResumoForm({ enabled, recipients, onlyIfAction, admins, emailPro
             <input type="checkbox" name="somenteComAcao" defaultChecked={onlyIfAction} />
             Só enviar quando houver algo urgente ou de atenção
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="mensal" defaultChecked={monthly} />
+            Enviar também, no dia 1º de cada mês, o relatório do mês anterior (vendas, margem, descontos, cashback e mais vendidos)
+          </label>
           {state?.message && (
             <p role={state.ok ? "status" : "alert"} className={`text-sm ${state.ok ? "text-success" : "text-danger"}`}>
               {state.message}
@@ -48,6 +61,9 @@ export function ResumoForm({ enabled, recipients, onlyIfAction, admins, emailPro
             </Button>
             <Button type="button" variant="outline" disabled={enviando || !emailPronto} onClick={enviarTeste}>
               {enviando ? "Enviando…" : "Enviar um teste agora"}
+            </Button>
+            <Button type="button" variant="outline" disabled={enviando || !emailPronto} onClick={enviarMensal}>
+              Enviar o relatório do mês passado agora
             </Button>
           </div>
           {!emailPronto && <p className="text-xs text-danger">O envio de e-mail ainda não está configurado (falta RESEND_API_KEY na Vercel). Veja as instruções abaixo.</p>}

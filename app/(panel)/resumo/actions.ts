@@ -22,12 +22,12 @@ export async function salvarResumoAction(_prev: ResumoState | null, formData: Fo
     .filter(Boolean);
   try {
     const antes = await obterConfigResumo(db, store.id);
-    const depois = await salvarConfigResumo(db, { storeId: store.id, actor: admin.email, enabled: formData.get("enabled") === "on", recipients, onlyIfAction: formData.get("somenteComAcao") === "on" });
+    const depois = await salvarConfigResumo(db, { storeId: store.id, actor: admin.email, enabled: formData.get("enabled") === "on", recipients, onlyIfAction: formData.get("somenteComAcao") === "on", monthly: formData.get("mensal") === "on" });
     await db.query(`INSERT INTO audit_log (store_id, actor_email, acao, entidade, antes, depois, sucesso) VALUES ($1::uuid, $2, 'resumo.configurar', 'loja', $3::jsonb, $4::jsonb, true)`, [
       store.id,
       admin.email,
-      JSON.stringify({ ligado: antes.enabled, destinatarios: antes.recipients.length, somenteComAcao: antes.onlyIfAction }),
-      JSON.stringify({ ligado: depois.enabled, destinatarios: depois.recipients.length, somenteComAcao: depois.onlyIfAction }),
+      JSON.stringify({ ligado: antes.enabled, destinatarios: antes.recipients.length, somenteComAcao: antes.onlyIfAction, mensal: antes.monthly }),
+      JSON.stringify({ ligado: depois.enabled, destinatarios: depois.recipients.length, somenteComAcao: depois.onlyIfAction, mensal: depois.monthly }),
     ]);
   } catch (err) {
     if (err instanceof ResumoConfigError) return { message: err.message };

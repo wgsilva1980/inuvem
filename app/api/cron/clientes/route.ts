@@ -67,13 +67,28 @@ export async function GET(request: Request) {
     resumo = { enviado: false, motivo: "falhou" };
     console.error(JSON.stringify({ level: "error", event: "cron.resumo_failed", message: err instanceof Error ? err.message : String(err) }));
   }
+  let mensal: { enviado: boolean; motivo?: string } | undefined;
+  try {
+    // Relatório do mês anterior: nos dias 1 a 3, uma vez por mês, junto do resumo diário. Uma falha aqui não derruba o resto.
+    const { query } = await import("@/lib/db");
+    const { getActiveStore } = await import("@/lib/stores");
+    const { enviarRelatorioMensal } = await import("@/lib/digest/mensal");
+    const loja = await getActiveStore();
+    if (loja) {
+      const r = await enviarRelatorioMensal({ query }, { storeId: loja.id, actor: "cron", appUrl: getEnv().APP_URL });
+      mensal = r.enviado ? { enviado: true } : { enviado: false, motivo: r.motivo };
+    }
+  } catch (err) {
+    mensal = { enviado: false, motivo: "falhou" };
+    console.error(JSON.stringify({ level: "error", event: "cron.relatorio_mensal_failed", message: err instanceof Error ? err.message : String(err) }));
+  }
   try {
     const { ultimaSincronizacao } = await import("@/lib/customers/sync");
     const { query } = await import("@/lib/db");
     const { getActiveStore } = await import("@/lib/stores");
     const store = await getActiveStore();
     if (!store) return Response.json({ skipped: "Nenhuma loja conectada." });
-    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos, resumo });
+    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos, resumo, mensal });
 
     let page: number | undefined;
     let inicio: string | undefined;
@@ -82,8 +97,8 @@ export async function GET(request: Request) {
     for (;;) {
       const passo = await passoClientesDaLoja({ page, inicio, budgetMs: Math.max(1_000, limite - Date.now()), actor: "cron" });
       lidos += passo.lidos;
-      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos, resumo });
-      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos, resumo });
+      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos, resumo, mensal });
+      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos, resumo, mensal });
       page = passo.proxima ?? undefined;
       inicio = passo.inicio;
     }
