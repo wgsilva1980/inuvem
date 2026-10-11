@@ -37,12 +37,26 @@ describe("painel do dia", () => {
     expect(r).toMatchObject({ vendas: null, pedidosLidosEm: null, pedidosDesatualizados: false });
   });
 
+  const backupHa = (dias: number) => pg.query("INSERT INTO audit_log (store_id, actor_email, acao, entidade, depois, created_at) VALUES ($1, 'a@b.c', 'backup.gerar', 'loja', '{}', now() - make_interval(days => $2::int))", [storeId, dias]);
+
   it("tudo em dia: nenhuma tarefa", async () => {
     await marcarPedidosLidos();
     await upsertProducts(db, storeId, [produto(50)]);
+    await backupHa(1);
     const r = await painelDoDia(db, storeId);
     expect(r.tarefas).toEqual([]);
     expect(r.vendas).toMatchObject({ hoje: { pedidos: 0 }, mediaDiaria: 0 });
+  });
+
+  it("backup: lembra quando nunca foi baixado ou passou de 30 dias; só com produtos no catálogo", async () => {
+    expect((await painelDoDia(db, storeId)).tarefas.map((t) => t.id)).not.toContain("backup-nunca"); // catálogo vazio
+    await upsertProducts(db, storeId, [produto(50)]);
+    const doBackup = async () => (await painelDoDia(db, storeId)).tarefas.filter((t) => t.id.startsWith("backup"));
+    expect(await doBackup()).toMatchObject([{ id: "backup-nunca", tom: "info", href: "/backup" }]);
+    await backupHa(31);
+    expect(await doBackup()).toMatchObject([{ id: "backup-velho", titulo: "O último backup foi há 31 dias" }]);
+    await backupHa(2);
+    expect(await doBackup()).toEqual([]);
   });
 
   it("expedição: atrasados (urgente), a enviar e a conferir, com contagens certas", async () => {
