@@ -34,7 +34,7 @@ export default async function ResumoPage() {
         <p className="text-sm text-muted">Todo dia de manhã, as vendas de ontem e o que precisa de ação hoje (expedição, estoque, promoções, lotes, cashback), com links para o painel. Só números do negócio: nenhum dado de cliente.</p>
       </div>
 
-      <ResumoForm enabled={cfg.enabled} recipients={cfg.recipients} onlyIfAction={cfg.onlyIfAction} admins={admins.map((a) => a.email)} emailPronto={pronto} />
+      <ResumoForm enabled={cfg.enabled} recipients={cfg.recipients} onlyIfAction={cfg.onlyIfAction} admins={admins.filter((a) => a.perfil === "admin").map((a) => a.email)} emailPronto={pronto} />
 
       {(cfg.lastSentOn || cfg.lastError) && (
         <Card className="flex flex-col gap-1 text-sm">

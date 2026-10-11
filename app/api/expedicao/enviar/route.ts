@@ -20,7 +20,7 @@ const bodySchema = z.object({
 /** Marca até 10 pedidos como enviados na loja, com o código de rastreio (a tela repete em pedaços). Cada pedido é conferido na loja antes. */
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return Response.json({ error: "Origem não permitida." }, { status: 403 });
-  const admin = await requireAdminApi();
+  const admin = await requireAdminApi("expedicao");
   if (admin instanceof Response) return admin;
   const store = await getActiveStore();
   if (!store) return Response.json({ error: "Nenhuma loja conectada." }, { status: 409 });
