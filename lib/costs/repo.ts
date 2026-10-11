@@ -136,3 +136,46 @@ export async function resumoDeCustos(db: Db, storeId: string): Promise<ResumoCus
   );
   return { produtos: Number(r?.produtos ?? 0), comCusto: Number(r?.com_custo ?? 0), publicadosSemCusto: Number(r?.pub_sem ?? 0), abaixoDoCusto: Number(r?.abaixo ?? 0) };
 }
+
+export interface ProdutoParaSimular {
+  id: string;
+  nome: string;
+  publicado: boolean;
+  /** Preço cheio (o menor preço entre as variações, sem a promoção). */
+  preco: number | null;
+  /** Preço promocional em vigor (o menor), se houver. */
+  precoPromocional: number | null;
+  custo: number | null;
+}
+
+const paraSimular = (r: { id: string; nome: string; publicado: boolean; preco: string | null; promo: string | null; custo: string | null }): ProdutoParaSimular => ({
+  id: r.id,
+  nome: r.nome,
+  publicado: r.publicado,
+  preco: r.preco === null ? null : Number(r.preco),
+  precoPromocional: r.promo === null ? null : Number(r.promo),
+  custo: r.custo === null ? null : Number(r.custo),
+});
+
+const SELECT_SIMULAR = `SELECT p.id::text AS id, p.name AS nome, p.published AS publicado,
+        (SELECT min(v.price) FROM variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.price > 0)::text AS preco,
+        (SELECT min(v.promotional_price) FROM variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.promotional_price > 0)::text AS promo,
+        c.cost::text AS custo
+ FROM products p LEFT JOIN product_costs c ON c.store_id = p.store_id AND c.product_id = p.id`;
+
+export async function produtoParaSimular(db: Db, storeId: string, id: string): Promise<ProdutoParaSimular | null> {
+  if (!/^\d+$/.test(id)) return null;
+  const [r] = await db.query<Parameters<typeof paraSimular>[0]>(`${SELECT_SIMULAR} WHERE p.store_id = $1::uuid AND p.id = $2::bigint`, [storeId, id]);
+  return r ? paraSimular(r) : null;
+}
+
+/** Busca produtos por nome ou SKU para escolher no simulador (até 8). */
+export async function buscarParaSimular(db: Db, storeId: string, q: string): Promise<ProdutoParaSimular[]> {
+  const termo = `%${q.replace(/[%_\\]/g, "\\$&")}%`;
+  const rows = await db.query<Parameters<typeof paraSimular>[0]>(
+    `${SELECT_SIMULAR} WHERE p.store_id = $1::uuid AND (p.name ILIKE $2 OR EXISTS (SELECT 1 FROM variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.sku ILIKE $2))
+     ORDER BY p.published DESC, lower(p.name), p.id LIMIT 8`,
+    [storeId, termo],
+  );
+  return rows.map(paraSimular);
+}
