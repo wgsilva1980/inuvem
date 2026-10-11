@@ -82,13 +82,29 @@ export async function GET(request: Request) {
     mensal = { enviado: false, motivo: "falhou" };
     console.error(JSON.stringify({ level: "error", event: "cron.relatorio_mensal_failed", message: err instanceof Error ? err.message : String(err) }));
   }
+  let vigia: { problemas: number } | undefined;
+  try {
+    // Vigia das integrações: confere conexão, avisos da Nuvemshop e rotinas diárias; avisa por e-mail quando algo passa a ter problema.
+    const { query } = await import("@/lib/db");
+    const { clientForStore, getActiveStore } = await import("@/lib/stores");
+    const { listWebhooks } = await import("@/lib/nuvemshop");
+    const { rodarVigia } = await import("@/lib/vigia/service");
+    const loja = await getActiveStore();
+    if (loja) {
+      const client = await clientForStore(loja);
+      const itens = await rodarVigia({ query }, { storeId: loja.id, scope: loja.scope, appUrl: getEnv().APP_URL, listarWebhooks: () => listWebhooks(client) });
+      vigia = { problemas: itens.filter((i) => i.status === "erro").length };
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ level: "error", event: "cron.vigia_failed", message: err instanceof Error ? err.message : String(err) }));
+  }
   try {
     const { ultimaSincronizacao } = await import("@/lib/customers/sync");
     const { query } = await import("@/lib/db");
     const { getActiveStore } = await import("@/lib/stores");
     const store = await getActiveStore();
     if (!store) return Response.json({ skipped: "Nenhuma loja conectada." });
-    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos, resumo, mensal });
+    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos, resumo, mensal, vigia });
 
     let page: number | undefined;
     let inicio: string | undefined;
@@ -97,8 +113,8 @@ export async function GET(request: Request) {
     for (;;) {
       const passo = await passoClientesDaLoja({ page, inicio, budgetMs: Math.max(1_000, limite - Date.now()), actor: "cron" });
       lidos += passo.lidos;
-      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos, resumo, mensal });
-      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos, resumo, mensal });
+      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos, resumo, mensal, vigia });
+      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos, resumo, mensal, vigia });
       page = passo.proxima ?? undefined;
       inicio = passo.inicio;
     }

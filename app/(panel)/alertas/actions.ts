@@ -20,7 +20,7 @@ export async function salvarAlertasAction(_prev: AlertasState | null, formData: 
     .split(/[\s,;]+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const resumo = (c: { enabled: boolean; recipients: string[]; onPaidOrder: boolean; onOutOfStock: boolean; onSyncFailure: boolean }) => ({ ligado: c.enabled, destinatarios: c.recipients.length, pedidoPago: c.onPaidOrder, esgotado: c.onOutOfStock, syncFalhou: c.onSyncFailure });
+  const resumo = (c: { enabled: boolean; recipients: string[]; onPaidOrder: boolean; onOutOfStock: boolean; onSyncFailure: boolean; onIntegrations: boolean }) => ({ ligado: c.enabled, destinatarios: c.recipients.length, pedidoPago: c.onPaidOrder, esgotado: c.onOutOfStock, syncFalhou: c.onSyncFailure, integracoes: c.onIntegrations });
   try {
     const antes = await obterConfigAlertas(db, store.id);
     const depois = await salvarConfigAlertas(db, {
@@ -31,6 +31,7 @@ export async function salvarAlertasAction(_prev: AlertasState | null, formData: 
       onPaidOrder: formData.get("pedidoPago") === "on",
       onOutOfStock: formData.get("esgotado") === "on",
       onSyncFailure: formData.get("syncFalhou") === "on",
+      onIntegrations: formData.get("integracoes") === "on",
     });
     await db.query(`INSERT INTO audit_log (store_id, actor_email, acao, entidade, antes, depois, sucesso) VALUES ($1::uuid, $2, 'alertas.configurar', 'loja', $3::jsonb, $4::jsonb, true)`, [store.id, admin.email, JSON.stringify(resumo(antes)), JSON.stringify(resumo(depois))]);
   } catch (err) {

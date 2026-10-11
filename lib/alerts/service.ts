@@ -7,9 +7,9 @@ import type { Order } from "@/lib/nuvemshop/orders";
 import { hojeEmBrasilia } from "@/lib/coupons/lote";
 import type { Db } from "@/lib/sync/repo";
 import { todasSemEstoque } from "@/lib/automations/out-of-stock";
-import { alertaEsgotado, alertaPedidoPago, alertaSyncFalhou, alertaTeste, montarEmailAlerta, type AlertaMontado } from "./montar";
+import { alertaEsgotado, alertaIntegracao, alertaPedidoPago, alertaSyncFalhou, alertaTeste, montarEmailAlerta, type AlertaMontado } from "./montar";
 
-export type TipoAlerta = "pedido_pago" | "esgotado" | "sync_falhou";
+export type TipoAlerta = "pedido_pago" | "esgotado" | "sync_falhou" | "integracao";
 
 export interface ConfigAlertas {
   enabled: boolean;
@@ -17,6 +17,7 @@ export interface ConfigAlertas {
   onPaidOrder: boolean;
   onOutOfStock: boolean;
   onSyncFailure: boolean;
+  onIntegrations: boolean;
 }
 
 /** Quantos alertas por hora, no máximo: uma importação que zere dezenas de produtos não pode lotar a caixa de entrada. */
@@ -25,16 +26,17 @@ export const MAX_POR_HORA = 10;
 export class AlertaConfigError extends Error {}
 
 export async function obterConfigAlertas(db: Db, storeId: string): Promise<ConfigAlertas> {
-  const [r] = await db.query<{ enabled: boolean; recipients: string[]; on_paid_order: boolean; on_out_of_stock: boolean; on_sync_failure: boolean }>(
-    "SELECT enabled, recipients, on_paid_order, on_out_of_stock, on_sync_failure FROM alert_settings WHERE store_id = $1::uuid",
+  const [r] = await db.query<{ enabled: boolean; recipients: string[]; on_paid_order: boolean; on_out_of_stock: boolean; on_sync_failure: boolean; on_integrations: boolean }>(
+    "SELECT enabled, recipients, on_paid_order, on_out_of_stock, on_sync_failure, on_integrations FROM alert_settings WHERE store_id = $1::uuid",
     [storeId],
   );
   return r
-    ? { enabled: r.enabled, recipients: r.recipients, onPaidOrder: r.on_paid_order, onOutOfStock: r.on_out_of_stock, onSyncFailure: r.on_sync_failure }
-    : { enabled: false, recipients: [], onPaidOrder: true, onOutOfStock: true, onSyncFailure: true };
+    ? { enabled: r.enabled, recipients: r.recipients, onPaidOrder: r.on_paid_order, onOutOfStock: r.on_out_of_stock, onSyncFailure: r.on_sync_failure, onIntegrations: r.on_integrations }
+    : { enabled: false, recipients: [], onPaidOrder: true, onOutOfStock: true, onSyncFailure: true, onIntegrations: true };
 }
 
-export async function salvarConfigAlertas(db: Db, args: { storeId: string; actor: string } & ConfigAlertas): Promise<ConfigAlertas> {
+export async function salvarConfigAlertas(db: Db, args: { storeId: string; actor: string } & Omit<ConfigAlertas, "onIntegrations"> & { onIntegrations?: boolean }): Promise<ConfigAlertas> {
+  const onIntegrations = args.onIntegrations ?? true;
   const brutos = [...new Set(args.recipients.map((r) => r.trim().toLowerCase()).filter(Boolean))];
   const normalizados = [...new Set(args.recipients.map((r) => normalizeEmail(r)).filter((e): e is string => e !== null))];
   if (normalizados.length !== brutos.length) throw new AlertaConfigError("Um dos e-mails não parece válido.");
@@ -43,19 +45,19 @@ export async function salvarConfigAlertas(db: Db, args: { storeId: string; actor
   const fora = normalizados.filter((e) => !admins.includes(e));
   if (fora.length > 0) throw new AlertaConfigError(`Só administradores do painel podem receber alertas. Não são administradores: ${fora.join(", ")}. Libere o acesso em Usuários primeiro.`);
   if (args.enabled && admins.length === 0) throw new AlertaConfigError("Escolha ao menos um destinatário para ligar os alertas.");
-  if (args.enabled && !args.onPaidOrder && !args.onOutOfStock && !args.onSyncFailure) throw new AlertaConfigError("Marque ao menos um tipo de alerta.");
+  if (args.enabled && !args.onPaidOrder && !args.onOutOfStock && !args.onSyncFailure && !onIntegrations) throw new AlertaConfigError("Marque ao menos um tipo de alerta.");
   await db.query(
-    `INSERT INTO alert_settings (store_id, enabled, recipients, on_paid_order, on_out_of_stock, on_sync_failure, updated_at, updated_by)
-     VALUES ($1::uuid, $2, $3::text[], $4, $5, $6, now(), $7)
-     ON CONFLICT (store_id) DO UPDATE SET enabled = $2, recipients = $3::text[], on_paid_order = $4, on_out_of_stock = $5, on_sync_failure = $6, updated_at = now(), updated_by = $7`,
-    [args.storeId, args.enabled, admins, args.onPaidOrder, args.onOutOfStock, args.onSyncFailure, args.actor],
+    `INSERT INTO alert_settings (store_id, enabled, recipients, on_paid_order, on_out_of_stock, on_sync_failure, on_integrations, updated_at, updated_by)
+     VALUES ($1::uuid, $2, $3::text[], $4, $5, $6, $8, now(), $7)
+     ON CONFLICT (store_id) DO UPDATE SET enabled = $2, recipients = $3::text[], on_paid_order = $4, on_out_of_stock = $5, on_sync_failure = $6, on_integrations = $8, updated_at = now(), updated_by = $7`,
+    [args.storeId, args.enabled, admins, args.onPaidOrder, args.onOutOfStock, args.onSyncFailure, args.actor, onIntegrations],
   );
   return obterConfigAlertas(db, args.storeId);
 }
 
 export type ResultadoAlerta = "enviado" | "falhou" | "desligado" | "sem_destinatario" | "repetido" | "limite";
 
-const ligadoPara = (c: ConfigAlertas, kind: TipoAlerta) => c.enabled && (kind === "pedido_pago" ? c.onPaidOrder : kind === "esgotado" ? c.onOutOfStock : c.onSyncFailure);
+const ligadoPara = (c: ConfigAlertas, kind: TipoAlerta) => c.enabled && (kind === "pedido_pago" ? c.onPaidOrder : kind === "esgotado" ? c.onOutOfStock : kind === "integracao" ? c.onIntegrations : c.onSyncFailure);
 
 export interface OpcoesEnvio {
   config?: ConfigEmail;
@@ -162,6 +164,13 @@ export async function avaliarEsgotado(db: Db, storeId: string, produto: Product,
 /** Uma falha de sincronização por dia no máximo (o cron roda uma vez por dia, mas o botão “sincronizar” pode falhar várias vezes). */
 export const avisarSyncFalhou = (db: Db, storeId: string, mensagem: string, ctx: ContextoAlerta, agora: Date = new Date()) =>
   dispararAlerta(db, { storeId, kind: "sync_falhou", chave: hojeEmBrasilia(agora), config: ctx.config, fetchImpl: ctx.fetchImpl, montar: () => alertaSyncFalhou({ mensagem, appUrl: ctx.appUrl }) });
+
+/** Uma integração que passou a ter problema: avisa uma vez, até ela se recuperar (`resolverAlertaIntegracao`). */
+export const avisarIntegracao = (db: Db, storeId: string, v: { id: string; rotulo: string; detalhe: string; acao?: string }, ctx: ContextoAlerta) =>
+  dispararAlerta(db, { storeId, kind: "integracao", chave: v.id, config: ctx.config, fetchImpl: ctx.fetchImpl, montar: () => alertaIntegracao({ rotulo: v.rotulo, detalhe: v.detalhe, acao: v.acao, appUrl: ctx.appUrl }) });
+
+export const resolverAlertaIntegracao = (db: Db, storeId: string, id: string) =>
+  db.query("UPDATE alert_log SET resolvido_em = now() WHERE store_id = $1::uuid AND kind = 'integracao' AND chave = $2 AND resolvido_em IS NULL", [storeId, id]);
 
 export interface LinhaAlerta {
   id: string;

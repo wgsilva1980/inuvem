@@ -55,6 +55,14 @@ export function alertaSyncFalhou(args: { mensagem: string; appUrl: string }): Al
   };
 }
 
+export function alertaIntegracao(args: { rotulo: string; detalhe: string; acao?: string; appUrl: string }): AlertaMontado {
+  return {
+    assunto: `Integração com problema: ${args.rotulo}`,
+    linhas: [args.detalhe.slice(0, 400), ...(args.acao ? [`O que fazer: ${args.acao}`] : []), "Você só recebe este aviso quando o problema começa; ele volta a avisar se o item se recuperar e falhar de novo."],
+    link: { url: `${args.appUrl.replace(/\/+$/, "")}/diagnostico`, rotulo: "Ver o vigia das integrações" },
+  };
+}
+
 export function alertaTeste(appUrl: string): AlertaMontado {
   return { assunto: "[teste] Alertas do INuvem funcionando", linhas: ["Se você recebeu este e-mail, os alertas chegam aos destinatários salvos."], link: { url: `${appUrl.replace(/\/+$/, "")}/alertas`, rotulo: "Abrir os alertas" } };
 }
