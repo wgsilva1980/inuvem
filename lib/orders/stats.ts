@@ -20,7 +20,7 @@ export function periodos(hoje: string, dias: number): { atual: Periodo; anterior
   return { atual, anterior: { de: somarDias(atual.de, -dias), ate: somarDias(atual.de, -1) } };
 }
 
-const NO_PERIODO = "(o.created_at_remote AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $2::date AND $3::date";
+export const NO_PERIODO = "(o.created_at_remote AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $2::date AND $3::date";
 
 export interface ResumoPeriodo {
   pedidos: number;
@@ -203,4 +203,14 @@ export async function margemDoPeriodo(db: Db, storeId: string, p: Periodo): Prom
     margem: receitaComCusto > 0 ? Math.round((lucroBruto / receitaComCusto) * 10_000) / 100 : null,
     cobertura: receita > 0 ? Math.round((receitaComCusto / receita) * 1000) / 10 : 0,
   };
+}
+
+/** Descontos dados nos pedidos do período (cupons e promoções, como a loja os soma no pedido) e quantos pedidos tiveram desconto. */
+export async function descontosDoPeriodo(db: Db, storeId: string, p: Periodo): Promise<{ valor: number; pedidos: number }> {
+  const [r] = await db.query<{ valor: string; pedidos: string }>(
+    `SELECT coalesce(sum(o.discount), 0)::text AS valor, count(*) FILTER (WHERE o.discount > 0)::text AS pedidos
+     FROM orders o WHERE o.store_id = $1::uuid AND ${SQL_VENDA} AND ${NO_PERIODO}`,
+    [storeId, p.de, p.ate],
+  );
+  return { valor: Math.round(Number(r?.valor ?? 0) * 100) / 100, pedidos: Number(r?.pedidos ?? 0) };
 }

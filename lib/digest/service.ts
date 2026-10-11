@@ -12,16 +12,22 @@ export interface ConfigResumo {
   lastSentOn: string | null;
   lastError: string | null;
   lastErrorAt: string | null;
+  /** Relatório mensal (dia 1º) ligado, o último mês enviado (AAAA-MM) e o último erro dele. */
+  monthly: boolean;
+  monthlyLastMonth: string | null;
+  monthlyLastError: string | null;
 }
 
 export const MAX_DESTINATARIOS = 5;
 
 export async function obterConfigResumo(db: Db, storeId: string): Promise<ConfigResumo> {
-  const [r] = await db.query<{ enabled: boolean; recipients: string[]; only_if_action: boolean; last_sent_on: string | null; last_error: string | null; last_error_at: string | null }>(
-    "SELECT enabled, recipients, only_if_action, last_sent_on::text, last_error, last_error_at::text FROM digest_settings WHERE store_id = $1::uuid",
+  const [r] = await db.query<{ enabled: boolean; recipients: string[]; only_if_action: boolean; last_sent_on: string | null; last_error: string | null; last_error_at: string | null; monthly_enabled: boolean; monthly_last_month: string | null; monthly_last_error: string | null }>(
+    "SELECT enabled, recipients, only_if_action, last_sent_on::text, last_error, last_error_at::text, monthly_enabled, monthly_last_month, monthly_last_error FROM digest_settings WHERE store_id = $1::uuid",
     [storeId],
   );
-  return r ? { enabled: r.enabled, recipients: r.recipients, onlyIfAction: r.only_if_action, lastSentOn: r.last_sent_on, lastError: r.last_error, lastErrorAt: r.last_error_at } : { enabled: false, recipients: [], onlyIfAction: false, lastSentOn: null, lastError: null, lastErrorAt: null };
+  return r
+    ? { enabled: r.enabled, recipients: r.recipients, onlyIfAction: r.only_if_action, lastSentOn: r.last_sent_on, lastError: r.last_error, lastErrorAt: r.last_error_at, monthly: r.monthly_enabled, monthlyLastMonth: r.monthly_last_month, monthlyLastError: r.monthly_last_error }
+    : { enabled: false, recipients: [], onlyIfAction: false, lastSentOn: null, lastError: null, lastErrorAt: null, monthly: false, monthlyLastMonth: null, monthlyLastError: null };
 }
 
 export class ResumoConfigError extends Error {}
@@ -34,7 +40,7 @@ export async function administradoresEntre(db: Db, emails: string[]): Promise<st
   return emails.filter((e) => ok.has(e));
 }
 
-export async function salvarConfigResumo(db: Db, args: { storeId: string; actor: string; enabled: boolean; recipients: string[]; onlyIfAction: boolean }): Promise<ConfigResumo> {
+export async function salvarConfigResumo(db: Db, args: { storeId: string; actor: string; enabled: boolean; recipients: string[]; onlyIfAction: boolean; monthly?: boolean }): Promise<ConfigResumo> {
   const normalizados = [...new Set(args.recipients.map((r) => normalizeEmail(r)).filter((e): e is string => e !== null))];
   if (normalizados.length !== new Set(args.recipients.map((r) => r.trim().toLowerCase()).filter(Boolean)).size) throw new ResumoConfigError("Um dos e-mails não parece válido.");
   if (normalizados.length > MAX_DESTINATARIOS) throw new ResumoConfigError(`No máximo ${MAX_DESTINATARIOS} destinatários.`);
@@ -42,10 +48,11 @@ export async function salvarConfigResumo(db: Db, args: { storeId: string; actor:
   const fora = normalizados.filter((e) => !admins.includes(e));
   if (fora.length > 0) throw new ResumoConfigError(`Só administradores do painel podem receber o resumo. Não são administradores: ${fora.join(", ")}. Libere o acesso em Usuários primeiro.`);
   if (args.enabled && admins.length === 0) throw new ResumoConfigError("Escolha ao menos um destinatário para ligar o resumo.");
+  if (args.monthly === true && admins.length === 0) throw new ResumoConfigError("Escolha ao menos um destinatário para ligar o relatório mensal.");
   await db.query(
-    `INSERT INTO digest_settings (store_id, enabled, recipients, only_if_action, updated_at, updated_by) VALUES ($1::uuid, $2, $3::text[], $4, now(), $5)
-     ON CONFLICT (store_id) DO UPDATE SET enabled = $2, recipients = $3::text[], only_if_action = $4, updated_at = now(), updated_by = $5`,
-    [args.storeId, args.enabled, admins, args.onlyIfAction, args.actor],
+    `INSERT INTO digest_settings (store_id, enabled, recipients, only_if_action, monthly_enabled, updated_at, updated_by) VALUES ($1::uuid, $2, $3::text[], $4, coalesce($6::boolean, false), now(), $5)
+     ON CONFLICT (store_id) DO UPDATE SET enabled = $2, recipients = $3::text[], only_if_action = $4, monthly_enabled = coalesce($6::boolean, digest_settings.monthly_enabled), updated_at = now(), updated_by = $5`,
+    [args.storeId, args.enabled, admins, args.onlyIfAction, args.actor, args.monthly ?? null],
   );
   return obterConfigResumo(db, args.storeId);
 }

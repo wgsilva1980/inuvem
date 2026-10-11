@@ -103,3 +103,13 @@ export async function listarGrants(db: Db, storeId: string, limite = 100): Promi
     [storeId],
   );
 }
+
+/** Cupons de cashback emitidos (e não cancelados) no período, em dias de Brasília: quantos e quanto valem. */
+export async function cashbackEmitido(db: Db, storeId: string, p: { de: string; ate: string }): Promise<{ cupons: number; valor: number }> {
+  const [r] = await db.query<{ cupons: string; valor: string }>(
+    `SELECT count(*)::text AS cupons, coalesce(sum(value), 0)::text AS valor FROM cashback_grants
+     WHERE store_id = $1::uuid AND cancelled_at IS NULL AND (issued_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $2::date AND $3::date`,
+    [storeId, p.de, p.ate],
+  );
+  return { cupons: Number(r?.cupons ?? 0), valor: Math.round(Number(r?.valor ?? 0) * 100) / 100 };
+}

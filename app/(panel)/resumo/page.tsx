@@ -4,7 +4,10 @@ import { Card } from "@/components/ui/card";
 import { getEnv } from "@/lib/env";
 import { query } from "@/lib/db";
 import { REMETENTE_PADRAO, emailConfigurado } from "@/lib/digest/enviar";
+import { mesAnterior, relatorioDoMes } from "@/lib/digest/mensal";
+import { hojeEmBrasilia } from "@/lib/coupons/lote";
 import { obterConfigResumo, resumoDeHoje } from "@/lib/digest/service";
+import Link from "next/link";
 import { getActiveStore } from "@/lib/stores";
 import { ResumoForm } from "./resumo-form";
 
@@ -12,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 const dia = (iso: string) => iso.split("-").reverse().join("/");
 
-export default async function ResumoPage() {
+export default async function ResumoPage({ searchParams }: { searchParams: Promise<{ previa?: string }> }) {
   await requireAdmin();
   const store = await getActiveStore();
   if (!store) {
@@ -24,6 +27,8 @@ export default async function ResumoPage() {
   }
   const db = { query };
   const [cfg, admins, previa] = await Promise.all([obterConfigResumo(db, store.id), listAdmins(db), resumoDeHoje(db, store.id, getEnv().APP_URL)]);
+  const mostrarMensal = (await searchParams).previa === "mensal";
+  const mensal = mostrarMensal ? await relatorioDoMes(db, store.id, getEnv().APP_URL, mesAnterior(hojeEmBrasilia())) : null;
   const pronto = emailConfigurado();
   const remetente = process.env.RESEND_FROM?.trim() || REMETENTE_PADRAO;
 
@@ -34,12 +39,14 @@ export default async function ResumoPage() {
         <p className="text-sm text-muted">Todo dia de manhã, as vendas de ontem e o que precisa de ação hoje (expedição, estoque, promoções, lotes, cashback), com links para o painel. Só números do negócio: nenhum dado de cliente.</p>
       </div>
 
-      <ResumoForm enabled={cfg.enabled} recipients={cfg.recipients} onlyIfAction={cfg.onlyIfAction} admins={admins.filter((a) => a.perfil === "admin").map((a) => a.email)} emailPronto={pronto} />
+      <ResumoForm enabled={cfg.enabled} recipients={cfg.recipients} onlyIfAction={cfg.onlyIfAction} monthly={cfg.monthly} admins={admins.filter((a) => a.perfil === "admin").map((a) => a.email)} emailPronto={pronto} />
 
-      {(cfg.lastSentOn || cfg.lastError) && (
+      {(cfg.lastSentOn || cfg.lastError || cfg.monthly || cfg.monthlyLastMonth) && (
         <Card className="flex flex-col gap-1 text-sm">
           {cfg.lastSentOn && <p>Último envio automático: {dia(cfg.lastSentOn)}.</p>}
           {cfg.lastError && <p className="text-danger">O último envio falhou: {cfg.lastError}</p>}
+          {cfg.monthlyLastMonth && <p>Último relatório mensal enviado: {cfg.monthlyLastMonth.split("-").reverse().join("/")}.</p>}
+          {cfg.monthlyLastError && <p className="text-danger">O último relatório mensal teve falha: {cfg.monthlyLastError}</p>}
         </Card>
       )}
 
@@ -49,6 +56,25 @@ export default async function ResumoPage() {
           <span className="text-muted">Assunto:</span> {previa.assunto}
         </p>
         <iframe title="Prévia do resumo diário" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={previa.html.replace("<body", '<head><base target="_blank"></head><body')} className="h-[28rem] w-full rounded-md border border-border bg-white" />
+      </Card>
+
+      <Card className="flex flex-col gap-2">
+        <h2 className="font-medium">Relatório mensal</h2>
+        {mensal ? (
+          <>
+            <p className="text-sm">
+              <span className="text-muted">Assunto:</span> {mensal.assunto}
+            </p>
+            <iframe title="Prévia do relatório mensal" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mensal.html.replace("<body", '<head><base target="_blank"></head><body')} className="h-[32rem] w-full rounded-md border border-border bg-white" />
+            <Link href="/resumo" className="text-sm underline">
+              Fechar a prévia
+            </Link>
+          </>
+        ) : (
+          <p className="text-sm text-muted">
+            No dia 1º de cada mês (e até o dia 3, se o dia 1 falhar), os destinatários acima recebem os números do mês que passou, comparados com o mês anterior: faturamento, pedidos, ticket médio, lucro e margem estimados, descontos, cashback emitido, mais vendidos e melhor dia. <Link href="/resumo?previa=mensal" className="underline">Ver como ficaria o do mês passado</Link>.
+          </p>
+        )}
       </Card>
 
       <Card className="flex flex-col gap-2 text-sm">
