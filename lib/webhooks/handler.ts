@@ -4,7 +4,9 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Category, Product } from "@/lib/nuvemshop/types";
 import { verifyWebhookSignature } from "@/lib/nuvemshop/webhook-verify";
 import { aplicarRegraRepublicar } from "@/lib/automations/in-stock";
-import { aplicarRegraSemEstoque } from "@/lib/automations/out-of-stock";
+import { autoDespublicarLigado, aplicarRegraSemEstoque } from "@/lib/automations/out-of-stock";
+import { avaliarEsgotado, avisarPedidoPago, type ContextoAlerta } from "@/lib/alerts/service";
+import type { Order } from "@/lib/nuvemshop/orders";
 import { removeCategoryFromMirror, upsertCategories, upsertProducts, type Db } from "@/lib/sync/repo";
 
 /** Eventos que o painel assina na Nuvemshop (produtos e categorias). */
@@ -16,7 +18,9 @@ export const WEBHOOK_EVENTS = [
   "category/updated",
   "category/deleted",
 ] as const;
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+/** Eventos extras, assinados só por quem liga os alertas (Administração → Alertas). */
+export const ALERT_WEBHOOK_EVENTS = ["order/paid"] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number] | (typeof ALERT_WEBHOOK_EVENTS)[number];
 
 /** Corpo dos webhooks de recurso: só identifica o que mudou ({ store_id, event, id }). */
 const payloadSchema = z
@@ -33,6 +37,8 @@ export interface ResourceApi {
   getCategory(id: number): Promise<Category>;
   /** Publica ou despublica o produto na loja (usado pela regra “sem estoque”); opcional para quem só lê. */
   setPublished?(id: number, published: boolean): Promise<Product>;
+  /** Pedido pelo id (usado pelo alerta de pedido pago). */
+  getOrder?(id: number): Promise<Order>;
 }
 
 export interface StoreRef {
@@ -46,6 +52,8 @@ export interface WebhookDeps {
   /** Loja do espelho pelo id da Nuvemshop; null se não for uma loja conectada. */
   findStore(nuvemshopStoreId: number): Promise<StoreRef | null>;
   apiFor(store: StoreRef): Promise<ResourceApi>;
+  /** Alertas por e-mail (pedido pago, produto esgotado). Sem isto, o webhook só mantém o espelho. */
+  alertas?: ContextoAlerta;
   now?: () => number;
   log?: (entry: Record<string, unknown>) => void;
 }
@@ -93,6 +101,12 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
         if (isNotFound(err)) return removeProduct(db, storeId, id); // apagado logo depois do evento
         throw err;
       }
+      // Alerta opcional: produto publicado que acabou de zerar (ou estoque que voltou). Nunca derruba o webhook.
+      if (deps.alertas) {
+        await avaliarEsgotado(db, storeId, produto, { ...deps.alertas, regraDespublicaLigada: await autoDespublicarLigado(db, storeId).catch(() => false) }).catch((err) => {
+          deps.log?.({ event: "webhook.alerta_esgotado_falhou", message: err instanceof Error ? err.message : String(err) });
+        });
+      }
       // Regra opcional: todas as variações sem estoque -> despublica. Uma falha aqui não derruba o webhook (fica no Histórico).
       const regra = await aplicarRegraSemEstoque(db, { storeId, produto, setPublished: api.setPublished?.bind(api) }).catch((err) => {
         deps.log?.({ event: "webhook.regra_sem_estoque_falhou", message: err instanceof Error ? err.message : String(err) });
@@ -111,6 +125,14 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
       if (volta === "republicado") deps.log?.({ event: "webhook.produto_republicado_estoque_voltou", product: id });
       return;
     }
+    case "order/paid": {
+      // Só alerta: pedidos não são espelhados. Falha ao buscar o pedido faz a Nuvemshop reenviar (o alerta é registrado só ao enviar).
+      if (!deps.alertas) return;
+      const api = await deps.apiFor(store);
+      if (!api.getOrder) return;
+      await avisarPedidoPago(db, storeId, await api.getOrder(id), deps.alertas);
+      return;
+    }
     case "category/created":
     case "category/updated": {
       const api = await deps.apiFor(store);
@@ -125,7 +147,7 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
   }
 }
 
-const isKnownEvent = (e: string): e is WebhookEvent => (WEBHOOK_EVENTS as readonly string[]).includes(e);
+const isKnownEvent = (e: string): e is WebhookEvent => (WEBHOOK_EVENTS as readonly string[]).includes(e) || (ALERT_WEBHOOK_EVENTS as readonly string[]).includes(e);
 
 /**
  * Trata uma entrega de webhook de produto/categoria. Resposta:

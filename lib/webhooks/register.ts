@@ -18,10 +18,11 @@ export async function ensureWebhooks(
   registry: WebhookRegistry,
   url: string,
   describeError: (err: unknown) => string = (e) => (e instanceof Error ? e.message : String(e)),
+  events: readonly string[] = WEBHOOK_EVENTS,
 ): Promise<RegisterResult> {
   const current = await registry.list();
   const result: RegisterResult = { created: [], existing: [], otherUrl: [], failed: [] };
-  for (const event of WEBHOOK_EVENTS) {
+  for (const event of events) {
     const forEvent = current.filter((w) => w.event === event);
     if (forEvent.some((w) => w.url === url)) {
       result.existing.push(event);
