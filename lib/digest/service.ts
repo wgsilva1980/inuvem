@@ -1,4 +1,4 @@
-import { painelDoDia } from "@/lib/dashboard/hoje";
+import { painelDoDiaCompleto } from "@/lib/dashboard/hoje-completo";
 import { normalizeEmail } from "@/lib/auth/admin-users";
 import { hojeEmBrasilia } from "@/lib/coupons/lote";
 import type { Db } from "@/lib/sync/repo";
@@ -61,7 +61,7 @@ const dataTexto = (agora: Date) => agora.toLocaleDateString("pt-BR", { timeZone:
 
 /** O e-mail de hoje (sem enviar): serve para a prévia na tela e para o envio. */
 export async function resumoDeHoje(db: Db, storeId: string, appUrl: string, agora: Date = new Date()): Promise<ResumoMontado> {
-  return montarResumo(await painelDoDia(db, storeId, agora), { appUrl, dataTexto: dataTexto(agora) });
+  return montarResumo(await painelDoDiaCompleto(db, storeId, agora), { appUrl, dataTexto: dataTexto(agora) });
 }
 
 export type ResultadoEnvio = { enviado: true; destinatarios: number; aviso?: string; resumo: Pick<ResumoMontado, "assunto" | "urgentes" | "atencao" | "total"> } | { enviado: false; motivo: string };

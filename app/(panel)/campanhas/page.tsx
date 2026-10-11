@@ -20,8 +20,8 @@ const semana = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString(
 const contagem = (n: number) => (n === 0 ? "hoje" : n === 1 ? "amanhã" : `em ${n} dias`);
 
 function proximoPasso(c: CampanhaPrevista): string {
-  if (c.fase === "futura") return `Comece a planejar a compra em ${dia(c.prazoCompra)}.`;
-  if (c.fase === "comprar") return `Encomende a mercadoria até ${dia(c.prazoCompra)} e comece a montar a promoção em ${dia(c.inicioPromo)}.`;
+  if (c.fase === "futura") return `Vá planejando: o ideal é encomendar a mercadoria até ${dia(c.prazoCompra)}.`;
+  if (c.fase === "comprar") return `Já é hora de encomendar a mercadoria (o ideal era até ${dia(c.prazoCompra)}). Comece a montar a promoção em ${dia(c.inicioPromo)}.`;
   if (c.fase === "preparar") return `O prazo ideal de compra (${dia(c.prazoCompra)}) já passou: confira o estoque e prepare a promoção, as fotos e os avisos. As vendas começam em ${dia(c.inicioVendas)}.`;
   return c.dias === 0 ? "É hoje." : `Período de vendas em andamento, até ${dia(c.data)}.`;
 }

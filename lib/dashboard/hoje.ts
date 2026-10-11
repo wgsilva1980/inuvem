@@ -42,6 +42,11 @@ export const HORAS_PEDIDOS_VELHOS = 36;
 const ATRASO_EXPEDICAO_DIAS = 2;
 const ORDEM: Record<TomTarefa, number> = { danger: 0, warning: 1, info: 2 };
 
+/** Do mais urgente para o menos; no empate, a que tem mais itens e depois pelo id. Ordena a lista no lugar e a devolve. */
+export function ordenarTarefas(tarefas: Tarefa[]): Tarefa[] {
+  return tarefas.sort((a, b) => ORDEM[a.tom] - ORDEM[b.tom] || b.quantidade - a.quantidade || a.id.localeCompare(b.id));
+}
+
 /** Uma consulta que falha não derruba a página inicial: a parte dela some e o resto aparece. */
 async function seguro<T>(fn: () => Promise<T>, vazio: T): Promise<T> {
   try {
@@ -161,7 +166,7 @@ export async function painelDoDia(db: Db, storeId: string, agora: Date = new Dat
     }, undefined),
   ]);
 
-  tarefas.sort((a, b) => ORDEM[a.tom] - ORDEM[b.tom] || b.quantidade - a.quantidade || a.id.localeCompare(b.id));
+  ordenarTarefas(tarefas);
 
   const vendas = temPedidos
     ? await seguro<VendasDoDia | null>(async () => {
