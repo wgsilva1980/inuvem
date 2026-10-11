@@ -12,6 +12,7 @@ interface Cfg {
   onPaidOrder: boolean;
   onOutOfStock: boolean;
   onSyncFailure: boolean;
+  onIntegrations: boolean;
 }
 
 export function AlertasForm({ cfg, admins, emailPronto }: { cfg: Cfg; admins: string[]; emailPronto: boolean }) {
@@ -59,6 +60,10 @@ export function AlertasForm({ cfg, admins, emailPronto }: { cfg: Cfg; admins: st
           <label className="flex min-h-11 items-center gap-2">
             <input type="checkbox" name="syncFalhou" defaultChecked={cfg.onSyncFailure} className="size-4" />
             Sincronização falhou
+          </label>
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="checkbox" name="integracoes" defaultChecked={cfg.onIntegrations} className="size-4" />
+            Integração com problema (vigia: conexão, avisos da Nuvemshop, rotinas diárias)
           </label>
         </fieldset>
         <label className="flex flex-col gap-1 text-sm">

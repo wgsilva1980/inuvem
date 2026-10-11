@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -6,8 +7,11 @@ import { EXIGENCIAS, escopoConcedido } from "@/lib/diagnostico/sondas";
 import { valoresDePedidos, type ValorObservado } from "@/lib/diagnostico/executar";
 import { parseScopes } from "@/lib/nuvemshop/scopes";
 import { getActiveStore } from "@/lib/stores";
+import { ROTULO_ITEM, ROTULO_STATUS, type StatusVigia } from "@/lib/vigia/verificacoes";
+import { estadoDoVigia } from "@/lib/vigia/service";
 import { RodarTeste } from "./rodar-teste";
 import { TesteGravacao } from "./teste-gravacao";
+import { VerificarAgora } from "./vigia";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +53,9 @@ export default async function DiagnosticoPage() {
   }
   const concedidos = parseScopes(store.scope);
   const valores = await valoresDePedidos({ query }, store.id);
+  const vigia = await estadoDoVigia({ query }, store.id);
+  const quando = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const TOM: Record<StatusVigia, "success" | "warning" | "danger" | "neutral"> = { ok: "success", aviso: "warning", erro: "danger", inativo: "neutral" };
 
   return (
     <main className="flex max-w-4xl flex-col gap-4 pb-24">
@@ -58,6 +65,33 @@ export default async function DiagnosticoPage() {
           Confere, na sua loja de verdade, o que a Nuvemshop devolve e o que o painel assume: permissões do app, campos de cada recurso e avisos (webhooks). Serve para achar cedo o que não bate, antes de aparecer como erro em uma tela.
         </p>
       </div>
+
+      <Card className="flex flex-col gap-3">
+        <h2 className="font-medium">Vigia das integrações</h2>
+        <p className="text-sm text-muted">
+          Todo dia de manhã o painel confere sozinho a conexão com a Nuvemshop, os avisos (webhooks), as rotinas diárias, as permissões e as chaves de e-mail e de IA. Se um item passar a ter problema, os alertas por e-mail ligados em <Link href="/alertas" className="underline">Alertas</Link> avisam uma vez. Só lê: não altera nada na loja.
+        </p>
+        {vigia.length === 0 ? (
+          <p className="text-sm text-muted">Ainda não houve verificação. Clique em “Verificar agora”.</p>
+        ) : (
+          <ul className="divide-y divide-border text-sm">
+            {vigia.map((v) => (
+              <li key={v.id} className="flex flex-col gap-0.5 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{ROTULO_ITEM[v.id] ?? v.id}</span>
+                  <Badge tone={TOM[v.status]}>{ROTULO_STATUS[v.status]}</Badge>
+                </div>
+                <span className={v.status === "erro" ? "text-danger" : "text-muted"}>{v.detalhe}</span>
+                <span className="text-xs text-muted">
+                  Verificado em {quando(v.verificadoEm)}
+                  {v.status !== "ok" && v.status !== "inativo" ? ` · neste estado desde ${quando(v.desde)}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <VerificarAgora />
+      </Card>
 
       <Card className="flex flex-col gap-3">
         <h2 className="font-medium">Permissões do app</h2>

@@ -10,7 +10,7 @@ import { AlertasForm } from "./alertas-form";
 
 export const dynamic = "force-dynamic";
 
-const TIPO: Record<string, string> = { pedido_pago: "Pedido pago", esgotado: "Esgotou", sync_falhou: "Sincronização", teste: "Teste" };
+const TIPO: Record<string, string> = { pedido_pago: "Pedido pago", esgotado: "Esgotou", sync_falhou: "Sincronização", integracao: "Integração", teste: "Teste" };
 const quando = (iso: string) => new Date(iso.replace(" ", "T") + (/[zZ]|[+-]\d\d(:?\d\d)?$/.test(iso) ? "" : "Z")).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default async function AlertasPage() {
@@ -72,6 +72,9 @@ export default async function AlertasPage() {
           </li>
           <li>
             <strong>Sincronização</strong> avisa, no máximo uma vez por dia, quando a leitura diária do catálogo falha.
+          </li>
+          <li>
+            <strong>Integração com problema</strong> vem do vigia (Administração → Diagnóstico): avisa uma vez quando a conexão com a Nuvemshop cai, os avisos (webhooks) somem ou as rotinas diárias param, e de novo só se o item se recuperar e falhar outra vez.
           </li>
           <li>
             O envio usa o mesmo serviço do resumo diário (Resend). Remetente atual: <span className="font-mono text-xs">{remetente}</span>. Sem domínio verificado, o Resend só entrega ao e-mail dono da conta (veja Resumo diário).

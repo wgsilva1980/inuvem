@@ -45,7 +45,7 @@ describe("configuração", () => {
     await expect(ligar({ recipients: ["estranho@x.com"] })).rejects.toThrow(/administradores/);
     await expect(ligar({ recipients: ["nao-e-email"] })).rejects.toThrow(/não parece válido/);
     await expect(ligar({ recipients: [] })).rejects.toBeInstanceOf(AlertaConfigError);
-    await expect(ligar({ onPaidOrder: false, onOutOfStock: false, onSyncFailure: false })).rejects.toThrow(/ao menos um tipo/);
+    await expect(ligar({ onPaidOrder: false, onOutOfStock: false, onSyncFailure: false, onIntegrations: false })).rejects.toThrow(/ao menos um tipo/);
   });
 });
 
