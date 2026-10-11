@@ -3,8 +3,10 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { relatorioDeQualidade, faixaDaNota, FAIXAS, type Duplicado, type Faixa, type RefProduto } from "@/lib/catalog/qualidade";
+import { camposCorrigiveis } from "@/lib/catalog/corrigir";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
+import { CorrigirQualidade } from "./corrigir";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +74,7 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
   const problemaEscolhido = r.porProblema.find((p) => p.chave === filtro);
   const lista = (problemaEscolhido ? r.produtos.filter((p) => p.problemas.some((x) => x.chave === problemaEscolhido.chave)) : r.produtos.filter((p) => p.problemas.length > 0)).slice(0, LIMITE);
   const total = problemaEscolhido ? problemaEscolhido.produtos : r.produtos.filter((p) => p.problemas.length > 0).length;
+  const corrigiveis = lista.map((p) => ({ id: p.id, nome: p.nome, campos: camposCorrigiveis(p.problemas.map((x) => x.chave)) })).filter((p) => p.campos.length > 0);
   const c = r.cruzadas;
   const temCruzadas = c.skusRepetidos.length + c.nomesRepetidos.length + c.promocaoSemDesconto.length + c.precosMuitoDiferentes.length + c.prontosNaoPublicados.length > 0;
 
@@ -80,7 +83,7 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Qualidade do catálogo</h1>
         <p className="text-sm text-muted">
-          Cada produto recebe uma nota de 0 a 100 pelas mesmas verificações do checklist da página do produto: os itens obrigatórios (foto, preço, categoria, descrição, estoque) pesam o triplo dos recomendados (mais fotos, SEO, SKU, peso e medidas, tags…). Calculado do que o painel já sincronizou; nada é alterado na loja.
+          Cada produto recebe uma nota de 0 a 100 pelas mesmas verificações do checklist da página do produto: os itens obrigatórios (foto, preço, categoria, descrição, estoque) pesam o triplo dos recomendados (mais fotos, SEO, SKU, peso e medidas, tags…). Calculado do que o painel já sincronizou. Descrição, SEO e tags podem ser escritos com a IA em “Corrigir com a IA”, com revisão antes de gravar.
         </p>
       </div>
 
@@ -178,6 +181,8 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
           )}
         </Card>
       )}
+
+      <CorrigirQualidade key={problemaEscolhido?.chave ?? "todos"} itens={corrigiveis} />
 
       <Card className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
