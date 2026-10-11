@@ -6,13 +6,16 @@ import { useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { LINKS_RESTRITOS, type Perfil } from "@/lib/auth/perfis";
 import { ADMIN_LABEL, ADMIN_LINKS, NAV_LINKS as LINKS, isActive } from "@/lib/nav";
 
 /**
  * Cabeçalho do painel. A partir de `md` mostra os links na barra; abaixo disso, um botão abre um menu
  * com os links e a conta (e-mail + Sair), com alvos de toque de 44 px. A página atual leva aria-current.
  */
-export function PanelHeader({ email, signOut }: { email: string; signOut: () => Promise<void> }) {
+export function PanelHeader({ email, perfil, signOut }: { email: string; perfil: Perfil; signOut: () => Promise<void> }) {
+  const restritos = perfil === "admin" ? null : LINKS_RESTRITOS[perfil];
+  const principais: ReadonlyArray<{ href: string; label: string }> = restritos ?? LINKS;
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -54,35 +57,37 @@ export function PanelHeader({ email, signOut }: { email: string; signOut: () => 
         </Link>
 
         <nav aria-label="Principal" className="hidden items-center gap-1 md:flex">
-          {LINKS.map((l) => (
+          {principais.map((l) => (
             <Link key={l.href} href={l.href} className={linkClass(l.href)} aria-current={isActive(pathname, l.href) ? "page" : undefined}>
               {l.label}
             </Link>
           ))}
-          <div ref={adminRef} className="relative">
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition ${adminAtivo ? "bg-border/60 text-foreground" : "text-muted hover:text-foreground"}`}
-              aria-expanded={adminOpen}
-              aria-haspopup="true"
-              aria-controls="submenu-admin"
-              onClick={() => setAdminOpen((v) => !v)}
-            >
-              {ADMIN_LABEL}
-              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 4.5l3 3 3-3" />
-              </svg>
-            </button>
-            {adminOpen && (
-              <div id="submenu-admin" className="absolute right-0 top-full z-20 mt-1 flex max-h-[75vh] min-w-48 flex-col overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
-                {ADMIN_LINKS.map((l) => (
-                  <Link key={l.href} href={l.href} className={linkClass(l.href)} aria-current={isActive(pathname, l.href) ? "page" : undefined}>
-                    {l.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+          {!restritos && (
+            <div ref={adminRef} className="relative">
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition ${adminAtivo ? "bg-border/60 text-foreground" : "text-muted hover:text-foreground"}`}
+                aria-expanded={adminOpen}
+                aria-haspopup="true"
+                aria-controls="submenu-admin"
+                onClick={() => setAdminOpen((v) => !v)}
+              >
+                {ADMIN_LABEL}
+                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 4.5l3 3 3-3" />
+                </svg>
+              </button>
+              {adminOpen && (
+                <div id="submenu-admin" className="absolute right-0 top-full z-20 mt-1 flex max-h-[75vh] min-w-48 flex-col overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
+                  {ADMIN_LINKS.map((l) => (
+                    <Link key={l.href} href={l.href} className={linkClass(l.href)} aria-current={isActive(pathname, l.href) ? "page" : undefined}>
+                      {l.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         <form action={signOut} className="hidden items-center gap-3 md:flex">
@@ -110,7 +115,7 @@ export function PanelHeader({ email, signOut }: { email: string; signOut: () => 
       {open && (
         <div id="menu-mobile" className="absolute inset-x-0 top-full z-20 mt-1 max-h-[80vh] overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-lg md:hidden">
           <nav aria-label="Principal" className="flex flex-col">
-            {LINKS.map((l) => (
+            {principais.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
@@ -120,17 +125,21 @@ export function PanelHeader({ email, signOut }: { email: string; signOut: () => 
                 {l.label}
               </Link>
             ))}
-            <p className="mt-2 px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">{ADMIN_LABEL}</p>
-            {ADMIN_LINKS.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={`flex min-h-11 items-center pl-6 ${linkClass(l.href)}`}
-                aria-current={isActive(pathname, l.href) ? "page" : undefined}
-              >
-                {l.label}
-              </Link>
-            ))}
+            {!restritos && (
+              <>
+              <p className="mt-2 px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">{ADMIN_LABEL}</p>
+              {ADMIN_LINKS.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={`flex min-h-11 items-center pl-6 ${linkClass(l.href)}`}
+                  aria-current={isActive(pathname, l.href) ? "page" : undefined}
+                >
+                  {l.label}
+                </Link>
+              ))}
+              </>
+            )}
           </nav>
           <form action={signOut} className="mt-2 flex flex-col gap-2 border-t border-border p-3">
             <span className="truncate text-sm text-muted">{email}</span>

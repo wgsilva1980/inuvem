@@ -64,7 +64,7 @@ function Tabela({ linhas, vazio }: { linhas: LinhaReposicao[]; vazio: string }) 
 }
 
 export default async function EstoquePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requireAdmin();
+  await requireAdmin("estoque");
   const store = await getActiveStore();
   if (!store) {
     return (

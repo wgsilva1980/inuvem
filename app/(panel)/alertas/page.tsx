@@ -37,7 +37,7 @@ export default async function AlertasPage() {
         </p>
       </div>
 
-      <AlertasForm cfg={cfg} admins={admins.map((a) => a.email)} emailPronto={pronto} />
+      <AlertasForm cfg={cfg} admins={admins.filter((a) => a.perfil === "admin").map((a) => a.email)} emailPronto={pronto} />
 
       <Card className="flex flex-col gap-2">
         <h2 className="font-medium">Últimos alertas</h2>

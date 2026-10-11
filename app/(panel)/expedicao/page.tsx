@@ -20,7 +20,7 @@ const paramsSchema = z.object({
 });
 
 export default async function ExpedicaoPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requireAdmin();
+  await requireAdmin("expedicao");
   const store = await getActiveStore();
   if (!store) {
     return (

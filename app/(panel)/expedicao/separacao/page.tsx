@@ -12,7 +12,7 @@ const dataBr = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { time
 
 /** Lista de separação para imprimir: as peças dos pedidos a enviar somadas (com foto) e, abaixo, o que leva cada pedido. */
 export default async function SeparacaoPage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
-  await requireAdmin();
+  await requireAdmin("expedicao");
   const store = await getActiveStore();
   if (!store) return null;
   const sp = await searchParams;

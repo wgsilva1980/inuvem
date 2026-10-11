@@ -12,7 +12,7 @@ const op = (v: string | null, lista: number[], padrao: number) => (lista.include
 
 /** Planilha de reposição (esgotadas que vendiam e as que estão acabando) com os mesmos parâmetros da tela /estoque. */
 export async function GET(req: Request) {
-  const admin = await requireAdminApi();
+  const admin = await requireAdminApi("estoque");
   if (admin instanceof Response) return admin;
   const store = await getActiveStore();
   if (!store) return Response.json({ error: "Nenhuma loja conectada." }, { status: 409 });

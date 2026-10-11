@@ -34,6 +34,7 @@ const FIXED: Record<string, string> = {
   "cliente.sincronizar": "Clientes da loja sincronizados",
   "usuario.adicionar": "Usuário adicionado",
   "usuario.remover": "Usuário removido",
+  "usuario.perfil": "Perfil de usuário alterado",
   "imagem.adicionar": "Imagem adicionada (por endereço)",
   "imagem.enviar": "Imagem enviada (arquivo)",
   "imagem.remover": "Imagem removida",

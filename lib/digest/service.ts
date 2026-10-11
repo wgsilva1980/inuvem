@@ -26,10 +26,10 @@ export async function obterConfigResumo(db: Db, storeId: string): Promise<Config
 
 export class ResumoConfigError extends Error {}
 
-/** Quais e-mails dessa lista são administradores do painel (os únicos que podem receber o resumo). */
+/** Quais e-mails dessa lista são administradores do painel com perfil Administrador (os únicos que podem receber resumo e alertas: trazem números do negócio). */
 export async function administradoresEntre(db: Db, emails: string[]): Promise<string[]> {
   if (emails.length === 0) return [];
-  const rows = await db.query<{ email: string }>("SELECT email FROM admins WHERE email = ANY($1::text[])", [emails]);
+  const rows = await db.query<{ email: string }>("SELECT email FROM admins WHERE perfil = 'admin' AND email = ANY($1::text[])", [emails]);
   const ok = new Set(rows.map((r) => r.email));
   return emails.filter((e) => ok.has(e));
 }
