@@ -12,6 +12,7 @@ export const ADMIN_LINKS = [
   { href: "/cupons", label: "Cupons" },
   { href: "/vendas", label: "Vendas" },
   { href: "/custos", label: "Custos" },
+  { href: "/simulador", label: "Simulador" },
   { href: "/estoque", label: "Estoque" },
   { href: "/compras", label: "Compras" },
   { href: "/qualidade", label: "Qualidade" },
