@@ -57,6 +57,7 @@ const FIXED: Record<string, string> = {
   "email.colado": "Texto novo do e-mail colado na loja (marcado pelo usuário)",
   "selos.configurar": "Selos da vitrine configurados",
   "cashback.regras": "Regras do cashback alteradas",
+  "backup.gerar": "Backup baixado",
   "desfazer.executar": "Alteração desfeita (valor de antes devolvido)",
   "compra.criar": "Pedido de compra criado",
   "compra.receber": "Pedido de compra recebido",

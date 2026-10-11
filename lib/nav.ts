@@ -26,6 +26,7 @@ export const ADMIN_LINKS = [
   { href: "/lote", label: "Lotes" },
   { href: "/historico", label: "Histórico" },
   { href: "/desfazer", label: "Desfazer" },
+  { href: "/backup", label: "Backup" },
   { href: "/automacoes", label: "Automações" },
   { href: "/resumo", label: "Resumo diário" },
   { href: "/diagnostico", label: "Diagnóstico" },

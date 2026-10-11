@@ -146,6 +146,19 @@ export async function painelDoDia(db: Db, storeId: string, agora: Date = new Dat
         add({ id: "cash-elegiveis", titulo: `${plural(podem, "pedido pode", "pedidos podem")} ganhar cashback`, quantidade: podem, tom: "info", href: "/cashback" });
       }
     }, undefined),
+
+    // backup
+    seguro(async () => {
+      const [b] = await db.query<{ produtos: string; ultimo: string | null }>(
+        `SELECT (SELECT count(*) FROM products WHERE store_id = $1::uuid)::text AS produtos,
+                (SELECT max(created_at)::text FROM audit_log WHERE store_id = $1::uuid AND acao = 'backup.gerar') AS ultimo`,
+        [storeId],
+      );
+      if (!b || Number(b.produtos) === 0) return;
+      const dias = b.ultimo ? Math.floor((agora.getTime() - Date.parse(b.ultimo)) / 86_400_000) : null;
+      if (dias === null) add({ id: "backup-nunca", titulo: "Você ainda não baixou um backup da loja", detalhe: "Uma cópia sua dos dados, fora do painel e da Nuvemshop.", quantidade: 1, tom: "info", href: "/backup" });
+      else if (dias >= 30) add({ id: "backup-velho", titulo: `O último backup foi há ${dias} dias`, detalhe: "Baixe um novo.", quantidade: 1, tom: "info", href: "/backup" });
+    }, undefined),
   ]);
 
   tarefas.sort((a, b) => ORDEM[a.tom] - ORDEM[b.tom] || b.quantidade - a.quantidade || a.id.localeCompare(b.id));
