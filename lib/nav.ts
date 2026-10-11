@@ -29,6 +29,7 @@ export const ADMIN_LINKS = [
   { href: "/backup", label: "Backup" },
   { href: "/automacoes", label: "Automações" },
   { href: "/resumo", label: "Resumo diário" },
+  { href: "/alertas", label: "Alertas" },
   { href: "/diagnostico", label: "Diagnóstico" },
   { href: "/usuarios", label: "Usuários" },
 ] as const;

@@ -74,6 +74,7 @@ const FIXED: Record<string, string> = {
   "custo.margem_minima": "Margem mínima alterada",
   "resumo.enviar": "Resumo diário por e-mail enviado",
   "resumo.configurar": "Resumo diário configurado",
+  "alertas.configurar": "Alertas por e-mail configurados",
   "lote.completar": "Lote: COR e TAMANHO completados no produto",
 };
 
