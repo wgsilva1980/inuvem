@@ -7,6 +7,7 @@ import { valoresDePedidos, type ValorObservado } from "@/lib/diagnostico/executa
 import { parseScopes } from "@/lib/nuvemshop/scopes";
 import { getActiveStore } from "@/lib/stores";
 import { RodarTeste } from "./rodar-teste";
+import { TesteGravacao } from "./teste-gravacao";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,8 @@ export default async function DiagnosticoPage() {
       </Card>
 
       <RodarTeste />
+
+      <TesteGravacao />
 
       <Card className="flex flex-col gap-3">
         <h2 className="font-medium">Situações que aparecem nos seus pedidos</h2>
