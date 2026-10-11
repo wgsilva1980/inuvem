@@ -20,7 +20,7 @@ describe("navegação principal", () => {
   });
 
   it("agrupa as páginas administrativas no submenu", () => {
-    expect(ADMIN_LINKS.map((l) => l.label)).toEqual(["Promoções", "Cupons", "Vendas", "Custos", "Simulador", "Estoque", "Compras", "Campanhas", "Qualidade", "Carrinhos", "Expedição", "Reativação", "Imagens", "SEO", "Conteúdo", "E-mails", "Selos", "Lotes", "Histórico", "Desfazer", "Backup", "Automações", "Resumo diário", "Alertas", "Diagnóstico", "Usuários"]);
+    expect(ADMIN_LINKS.map((l) => l.label)).toEqual(["Promoções", "Cupons", "Vendas", "Custos", "Simulador", "Estoque", "Compras", "Campanhas", "Qualidade", "Carrinhos", "Expedição", "Reativação", "Pós-venda", "Segmentos", "Imagens", "SEO", "Conteúdo", "E-mails", "Selos", "Lotes", "Histórico", "Desfazer", "Backup", "Automações", "Resumo diário", "Alertas", "Diagnóstico", "Usuários"]);
   });
 });
 
