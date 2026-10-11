@@ -126,10 +126,17 @@ describe("envio do resumo do dia", () => {
 
   it("'só com ação' pula quando não há nada urgente nem de atenção", async () => {
     await salvarConfigResumo(db, { storeId, actor, enabled: true, recipients: ["dona@loja.com"], onlyIfAction: true });
-    const r = await enviar();
+    const r = await enviar({ agora: new Date("2027-01-05T10:00:00Z") }); // data sem campanha pedindo ação
     expect(r).toMatchObject({ enviado: false, motivo: expect.stringMatching(/Nada urgente/) }); // banco vazio: sem pedidos lidos é só "para saber"
     expect(enviados).toEqual([]);
     expect((await obterConfigResumo(db, storeId)).lastSentOn).toBeNull(); // não conta como enviado
+  });
+
+  it("uma campanha que pede ação (encomendar para a Black Friday) conta como atenção e dispara o resumo mesmo com 'só com ação'", async () => {
+    await salvarConfigResumo(db, { storeId, actor, enabled: true, recipients: ["dona@loja.com"], onlyIfAction: true });
+    const r = await enviar(); // 10/10/2026: a Black Friday está a 48 dias
+    expect(r).toMatchObject({ enviado: true, resumo: { atencao: expect.any(Number) } });
+    expect(r.enviado && r.resumo.atencao).toBeGreaterThanOrEqual(1);
   });
 
   it("destinatário que deixou de ser administrador não recebe", async () => {

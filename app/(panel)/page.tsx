@@ -5,7 +5,8 @@ import { SyncButton } from "@/components/sync-button";
 import { WebhookButton } from "@/components/webhook-button";
 import Link from "next/link";
 import { getCatalogStats, type CatalogStats } from "@/lib/dashboard/stats";
-import { painelDoDia, type PainelDoDia } from "@/lib/dashboard/hoje";
+import { type PainelDoDia } from "@/lib/dashboard/hoje";
+import { painelDoDiaCompleto } from "@/lib/dashboard/hoje-completo";
 import { PainelDoDiaCard } from "./painel-do-dia";
 import { acaoLabel } from "@/lib/history/labels";
 import { listHistory, type HistoryEntry } from "@/lib/history/query";
@@ -40,7 +41,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   let lastWebhook: { event: string; received_at: string } | null = null;
   if (store) {
     [stats, recent] = await Promise.all([getCatalogStats({ query }, store.id), listHistory({ query }, store.id).then((h) => h.items.slice(0, 6))]);
-    painel = await painelDoDia({ query }, store.id);
+    painel = await painelDoDiaCompleto({ query }, store.id);
     lastWebhook = await queryOne<{ event: string; received_at: string }>(
       "SELECT event, received_at FROM webhook_events WHERE store_id = $1 ORDER BY received_at DESC LIMIT 1",
       [store.id],
