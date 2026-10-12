@@ -73,6 +73,7 @@ export default async function AutomacoesPage() {
           <li>Uma categoria só é oculta quando <strong>nenhum produto publicado</strong> está nela nem em suas subcategorias. Uma categoria pai com subcategorias que têm produto continua visível.</li>
           <li>Muda só a visibilidade da categoria na loja (ela some do menu e da vitrine). Os produtos, o nome e o endereço continuam como estão.</li>
           <li>Quando volta um produto publicado (ou a categoria recebe um produto), ela é mostrada de novo. <strong>Só volta sozinha a categoria que esta regra ocultou</strong>: as que você ocultou por conta própria (como uma de Black Friday) nunca são mostradas pela regra.</li>
+          <li>Em <Link href="/categorias" className="underline">Categorias</Link> você pode ocultar ou mostrar qualquer categoria à mão. <strong>Mostrar à mão deixa a categoria “sempre visível”</strong>: a regra não a oculta mais, mesmo vazia, até você clicar em “Devolver à automação”. Ocultar à mão tira a categoria da regra (ela não volta sozinha).</li>
           <li>Categoria nova e ainda vazia também é ocultada na próxima verificação e aparece sozinha quando receber o primeiro produto publicado.</li>
           <li>Por segurança, oculta no máximo 5 categorias por vez e não faz nada se o painel não tiver nenhum produto publicado no espelho (sincronize o catálogo).</li>
         </ul>

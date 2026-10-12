@@ -8,7 +8,7 @@ import { descendantIds, type CategoryNode } from "./tree";
 export interface CategoryApi {
   get(id: number): Promise<Category>;
   create(input: { name: { pt: string }; parent?: number }): Promise<Category>;
-  update(id: number, input: { name?: { pt: string }; parent?: number | null }): Promise<Category>;
+  update(id: number, input: { name?: { pt: string }; parent?: number | null; visibility?: "visible" | "hidden" }): Promise<Category>;
   remove(id: number): Promise<void>;
 }
 

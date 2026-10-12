@@ -28,7 +28,7 @@ export interface ItemCategoria {
 }
 
 export interface PlanoCategorias {
-  /** Visíveis hoje e sem nenhum produto publicado nelas nem nas subcategorias. */
+  /** Visíveis hoje e sem nenhum produto publicado nelas nem nas subcategorias (menos as que você mostrou à mão). */
   ocultar: ItemCategoria[];
   /** Ocultadas pela regra que voltaram a ter produto publicado. */
   exibir: ItemCategoria[];
@@ -44,6 +44,7 @@ interface Linha {
   oculta: boolean;
   publicados: string;
   automatica: boolean;
+  fixa: boolean;
 }
 
 /**
@@ -60,7 +61,8 @@ export async function planejarCategorias(db: Db, storeId: string): Promise<Plano
      SELECT c.id::text AS id, c.name AS nome, coalesce(c.raw_json->>'visibility', 'visible') = 'hidden' AS oculta,
             (SELECT count(DISTINCT p.id) FROM arvore a JOIN products p ON p.store_id = $1::uuid AND p.published
                AND p.categories @> jsonb_build_array(jsonb_build_object('id', a.no)) WHERE a.raiz = c.id)::text AS publicados,
-            EXISTS (SELECT 1 FROM auto_hidden_categories h WHERE h.store_id = c.store_id AND h.category_id = c.id) AS automatica
+            EXISTS (SELECT 1 FROM auto_hidden_categories h WHERE h.store_id = c.store_id AND h.category_id = c.id) AS automatica,
+            EXISTS (SELECT 1 FROM category_rule_exceptions e WHERE e.store_id = c.store_id AND e.category_id = c.id) AS fixa
      FROM categories c WHERE c.store_id = $1::uuid ORDER BY c.name, c.id`,
     [storeId],
   );
@@ -69,7 +71,7 @@ export async function planejarCategorias(db: Db, storeId: string): Promise<Plano
   const item = (l: Linha): ItemCategoria => ({ id: l.id, nome: l.nome });
   return {
     espelhoSemProdutos,
-    ocultar: espelhoSemProdutos ? [] : linhas.filter((l) => !l.oculta && Number(l.publicados) === 0).map(item),
+    ocultar: espelhoSemProdutos ? [] : linhas.filter((l) => !l.oculta && !l.fixa && Number(l.publicados) === 0).map(item),
     exibir: linhas.filter((l) => l.automatica && l.oculta && Number(l.publicados) > 0).map(item),
     ocultasPelaRegra: linhas.filter((l) => l.automatica && l.oculta && Number(l.publicados) === 0).map(item),
   };
