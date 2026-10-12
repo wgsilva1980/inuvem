@@ -9,6 +9,9 @@ export interface CategoryInput {
   seo_description?: I18n;
   handle?: I18n;
   parent?: number | null;
+  /** Aparece (visible) ou não (hidden) no menu e na vitrine da loja. */
+  visibility?: "visible" | "hidden";
+  google_shopping_category?: string;
 }
 
 export async function listAllCategories(c: NuvemshopClient): Promise<Category[]> {
@@ -30,6 +33,9 @@ export function categoriaCompleta(c: Category): CategoryInput {
     ...(i18n(o.seo_title) ? { seo_title: i18n(o.seo_title) } : {}),
     ...(i18n(o.seo_description) ? { seo_description: i18n(o.seo_description) } : {}),
     parent: c.parent ? c.parent : null,
+    // o PUT substitui a categoria: o que não for reenviado volta ao padrão (uma categoria oculta apareceria de novo)
+    ...(o.visibility === "hidden" || o.visibility === "visible" ? { visibility: o.visibility } : {}),
+    ...(typeof o.google_shopping_category === "string" && o.google_shopping_category !== "" ? { google_shopping_category: o.google_shopping_category } : {}),
   };
 }
 
@@ -45,6 +51,9 @@ export function semTextosVazios<T extends object>(input: T): T {
   }
   return out as T;
 }
+
+/** Visibilidade da categoria na loja; sem o campo, vale visível. */
+export const visibilidadeDe = (c: Category): "visible" | "hidden" => ((c as Record<string, unknown>).visibility === "hidden" ? "hidden" : "visible");
 
 export class CategoriaAlteradaError extends Error {}
 
@@ -62,6 +71,7 @@ export async function updateCategory(c: NuvemshopClient, id: number, changes: Ca
   if (changes.handle === undefined && pt(depois.handle) !== pt(antes.handle)) perdeu.push("endereço (handle)");
   if (changes.description === undefined && pt(depois.description) !== pt(antes.description)) perdeu.push("descrição");
   if (changes.parent === undefined && (depois.parent ?? 0) !== (antes.parent ?? 0)) perdeu.push("categoria pai");
+  if (changes.visibility === undefined && visibilidadeDe(depois) !== visibilidadeDe(antes)) perdeu.push("visibilidade");
   if (perdeu.length > 0) {
     await c.put(`/categories/${id}`, semTextosVazios(base));
     throw new CategoriaAlteradaError(`A loja alterou ${perdeu.join(", ")} da categoria ao salvar; o que havia antes foi restaurado. Nada foi gravado.`);

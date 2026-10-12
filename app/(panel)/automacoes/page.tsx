@@ -3,11 +3,13 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { autoOcultarCategoriasLigado, planejarCategorias, ultimasAcoesCategorias, ACAO_EXIBIR } from "@/lib/automations/categorias";
 import { autoRepublicarLigado, listarAguardandoEstoque } from "@/lib/automations/in-stock";
 import { autoDespublicarLigado, contarPublicadosSemEstoque, ultimasAcoesAutomaticas } from "@/lib/automations/out-of-stock";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import { AutomacaoForm } from "./automacao-form";
+import { CategoriasVaziasAgora, CategoriasVaziasForm } from "./categorias-vazias";
 import { AguardandoEstoque } from "./aguardando-estoque";
 import { DespublicarAgora } from "./despublicar-agora";
 import { RepublicarForm } from "./republicar-form";
@@ -25,6 +27,9 @@ export default async function AutomacoesPage() {
   const republicar = store ? await autoRepublicarLigado(db, store.id) : false;
   const espera = store ? await listarAguardandoEstoque(db, store.id) : [];
   const acoes = store ? await ultimasAcoesAutomaticas(db, store.id) : [];
+  const catLigada = store ? await autoOcultarCategoriasLigado(db, store.id) : false;
+  const plano = store ? await planejarCategorias(db, store.id) : null;
+  const acoesCat = store ? await ultimasAcoesCategorias(db, store.id) : [];
 
   return (
     <main className="flex max-w-3xl flex-col gap-4">
@@ -59,6 +64,45 @@ export default async function AutomacoesPage() {
         </ul>
         <h3 className="text-sm font-semibold">Despublicados por falta de estoque ({espera.length})</h3>
         <AguardandoEstoque linhas={espera.map((e) => ({ product_id: e.product_id, produto: e.produto ?? `Produto ${e.product_id}`, desde: e.desde, manter: e.manter, comEstoque: e.comEstoque }))} />
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <h2 className="text-base font-semibold">Categoria sem produto publicado fica oculta</h2>
+        <CategoriasVaziasForm ligado={catLigada} />
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
+          <li>Uma categoria só é oculta quando <strong>nenhum produto publicado</strong> está nela nem em suas subcategorias. Uma categoria pai com subcategorias que têm produto continua visível.</li>
+          <li>Muda só a visibilidade da categoria na loja (ela some do menu e da vitrine). Os produtos, o nome e o endereço continuam como estão.</li>
+          <li>Quando volta um produto publicado (ou a categoria recebe um produto), ela é mostrada de novo. <strong>Só volta sozinha a categoria que esta regra ocultou</strong>: as que você ocultou por conta própria (como uma de Black Friday) nunca são mostradas pela regra.</li>
+          <li>Categoria nova e ainda vazia também é ocultada na próxima verificação e aparece sozinha quando receber o primeiro produto publicado.</li>
+          <li>Por segurança, oculta no máximo 5 categorias por vez e não faz nada se o painel não tiver nenhum produto publicado no espelho (sincronize o catálogo).</li>
+        </ul>
+        {plano?.espelhoSemProdutos ? (
+          <p className="text-sm text-danger">O painel não tem nenhum produto publicado no espelho. Sincronize o catálogo antes de usar esta regra.</p>
+        ) : plano ? (
+          <div className="flex flex-col gap-1 text-sm">
+            <p>
+              Agora há <strong>{plano.ocultar.length}</strong> categoria(s) visível(is) sem produto publicado
+              {plano.ocultar.length > 0 ? `: ${plano.ocultar.slice(0, 8).map((c) => c.nome).join(", ")}${plano.ocultar.length > 8 ? "…" : ""}` : ""}.
+            </p>
+            <p>
+              A regra mantém <strong>{plano.ocultasPelaRegra.length + plano.exibir.length}</strong> categoria(s) oculta(s) por ela
+              {plano.exibir.length > 0 ? `; ${plano.exibir.length} já tem(êm) produto de volta: ${plano.exibir.slice(0, 8).map((c) => c.nome).join(", ")}` : ""}.
+            </p>
+          </div>
+        ) : null}
+        <CategoriasVaziasAgora ocultar={plano?.ocultar.length ?? 0} exibir={plano?.exibir.length ?? 0} />
+        {acoesCat.length > 0 && (
+          <ul className="flex flex-col divide-y divide-border text-sm">
+            {acoesCat.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                <span className="text-muted">{quando(a.created_at)}</span>
+                <span className="font-medium">{a.categoria}</span>
+                {a.sucesso ? <Badge tone="success">{a.acao === ACAO_EXIBIR ? "Mostrada de novo" : "Ocultada"}</Badge> : <Badge tone="danger">Falhou</Badge>}
+                {a.mensagem && <span className="text-danger">{a.mensagem}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card className="flex flex-col gap-2">

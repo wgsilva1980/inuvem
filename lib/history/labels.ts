@@ -41,6 +41,8 @@ const FIXED: Record<string, string> = {
   "imagem.reordenar": "Imagens reordenadas",
   "imagem.reenquadrar": "Foto reenquadrada manualmente",
   "categoria.criar": "Categoria criada",
+  "categoria.ocultar_sem_produtos": "Categoria ocultada (sem produto publicado)",
+  "categoria.exibir_com_produtos": "Categoria mostrada de novo (voltou a ter produto publicado)",
   "categoria.atualizar": "Categoria editada",
   "categoria.apagar": "Categoria apagada",
   "lote.criar": "Lote criado (pré-visualização)",

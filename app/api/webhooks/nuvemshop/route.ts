@@ -1,6 +1,6 @@
 import { getEnv } from "@/lib/env";
 import { query, queryOne } from "@/lib/db";
-import { getCategory, getOrder, getProduct, updateProduct } from "@/lib/nuvemshop";
+import { getCategory, getOrder, getProduct, updateCategory, updateProduct } from "@/lib/nuvemshop";
 import { SIGNATURE_HEADER } from "@/lib/nuvemshop/webhook-verify";
 import { clientForStore } from "@/lib/stores";
 import { handleWebhook, type StoreRef } from "@/lib/webhooks/handler";
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
           getProduct: (id) => getProduct(client, id),
           getCategory: (id) => getCategory(client, id),
           setPublished: (id, published) => updateProduct(client, id, { published }),
+          setCategoryVisibility: (id, visibility) => updateCategory(client, id, { visibility }),
           getOrder: (id) => getOrder(client, id),
         };
       },

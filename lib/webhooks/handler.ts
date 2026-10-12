@@ -4,6 +4,7 @@ import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Category, Product } from "@/lib/nuvemshop/types";
 import { verifyWebhookSignature } from "@/lib/nuvemshop/webhook-verify";
 import { aplicarRegraRepublicar } from "@/lib/automations/in-stock";
+import { aplicarRegraCategorias, type ApiCategorias } from "@/lib/automations/categorias";
 import { autoDespublicarLigado, aplicarRegraSemEstoque } from "@/lib/automations/out-of-stock";
 import { avaliarEsgotado, avisarPedidoPago, type ContextoAlerta } from "@/lib/alerts/service";
 import type { Order } from "@/lib/nuvemshop/orders";
@@ -37,6 +38,8 @@ export interface ResourceApi {
   getCategory(id: number): Promise<Category>;
   /** Publica ou despublica o produto na loja (usado pela regra “sem estoque”); opcional para quem só lê. */
   setPublished?(id: number, published: boolean): Promise<Product>;
+  /** Oculta ou reexibe a categoria na loja (regra “categoria sem produto publicado fica oculta”). */
+  setCategoryVisibility?: ApiCategorias["setVisibility"];
   /** Pedido pelo id (usado pelo alerta de pedido pago). */
   getOrder?(id: number): Promise<Order>;
 }
@@ -82,12 +85,27 @@ async function removeProduct(db: Db, storeId: string, id: number) {
   await db.query("DELETE FROM products WHERE store_id = $1::uuid AND id = $2::bigint", [storeId, id]);
 }
 
+/** Regra opcional das categorias vazias, depois de qualquer mudança nos produtos. Nunca derruba o webhook (falhas ficam no Histórico e no log). */
+async function regraCategorias(deps: WebhookDeps, store: StoreRef): Promise<void> {
+  try {
+    const api = await deps.apiFor(store);
+    const setVisibility = api.setCategoryVisibility?.bind(api);
+    if (!setVisibility) return;
+    const r = await aplicarRegraCategorias(deps.db, { getCategory: api.getCategory.bind(api), setVisibility }, { storeId: store.id });
+    if (r.ocultadas > 0 || r.exibidas > 0) deps.log?.({ event: "webhook.categorias_vazias", ocultadas: r.ocultadas, exibidas: r.exibidas });
+  } catch (err) {
+    deps.log?.({ event: "webhook.regra_categorias_falhou", message: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEvent, id: number) {
   const { db } = deps;
   const storeId = store.id;
   switch (event) {
-    case "product/deleted":
-      return removeProduct(db, storeId, id);
+    case "product/deleted": {
+      await removeProduct(db, storeId, id);
+      return regraCategorias(deps, store);
+    }
     case "category/deleted":
       return removeCategoryFromMirror(db, storeId, id);
     case "product/created":
@@ -98,7 +116,10 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
         produto = await api.getProduct(id);
         await upsertProducts(db, storeId, [produto]);
       } catch (err) {
-        if (isNotFound(err)) return removeProduct(db, storeId, id); // apagado logo depois do evento
+        if (isNotFound(err)) {
+          await removeProduct(db, storeId, id); // apagado logo depois do evento
+          return regraCategorias(deps, store);
+        }
         throw err;
       }
       // Alerta opcional: produto publicado que acabou de zerar (ou estoque que voltou). Nunca derruba o webhook.
@@ -123,7 +144,8 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
               return "falhou" as const;
             });
       if (volta === "republicado") deps.log?.({ event: "webhook.produto_republicado_estoque_voltou", product: id });
-      return;
+      // O produto pode ter sido publicado/despublicado (por nós ou por fora): confere se alguma categoria ficou vazia ou voltou a ter produto.
+      return regraCategorias(deps, store);
     }
     case "order/paid": {
       // Só alerta: pedidos não são espelhados. Falha ao buscar o pedido faz a Nuvemshop reenviar (o alerta é registrado só ao enviar).
