@@ -82,6 +82,22 @@ export async function GET(request: Request) {
     mensal = { enviado: false, motivo: "falhou" };
     console.error(JSON.stringify({ level: "error", event: "cron.relatorio_mensal_failed", message: err instanceof Error ? err.message : String(err) }));
   }
+  let categorias: { ocultadas: number; exibidas: number } | undefined;
+  try {
+    // Rede de segurança da regra das categorias vazias (a regra principal roda a cada aviso de produto): só age se a pessoa ligou a opção.
+    const { query } = await import("@/lib/db");
+    const { clientForStore, getActiveStore } = await import("@/lib/stores");
+    const { getCategory, updateCategory } = await import("@/lib/nuvemshop");
+    const { aplicarRegraCategorias } = await import("@/lib/automations/categorias");
+    const loja = await getActiveStore();
+    if (loja) {
+      const client = await clientForStore(loja);
+      const r = await aplicarRegraCategorias({ query }, { getCategory: (id) => getCategory(client, id), setVisibility: (id, visibility) => updateCategory(client, id, { visibility }) }, { storeId: loja.id });
+      if (!r.desligada) categorias = { ocultadas: r.ocultadas, exibidas: r.exibidas };
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ level: "error", event: "cron.categorias_vazias_failed", message: err instanceof Error ? err.message : String(err) }));
+  }
   let vigia: { problemas: number } | undefined;
   try {
     // Vigia das integrações: confere conexão, avisos da Nuvemshop e rotinas diárias; avisa por e-mail quando algo passa a ter problema.
@@ -104,7 +120,7 @@ export async function GET(request: Request) {
     const { getActiveStore } = await import("@/lib/stores");
     const store = await getActiveStore();
     if (!store) return Response.json({ skipped: "Nenhuma loja conectada." });
-    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos, resumo, mensal, vigia });
+    if (!(await ultimaSincronizacao({ query }, store.id))) return Response.json({ skipped: "Clientes ainda não sincronizados à mão.", promocoes, pedidos, resumo, mensal, vigia, categorias });
 
     let page: number | undefined;
     let inicio: string | undefined;
@@ -113,8 +129,8 @@ export async function GET(request: Request) {
     for (;;) {
       const passo = await passoClientesDaLoja({ page, inicio, budgetMs: Math.max(1_000, limite - Date.now()), actor: "cron" });
       lidos += passo.lidos;
-      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos, resumo, mensal, vigia });
-      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos, resumo, mensal, vigia });
+      if (passo.concluido) return Response.json({ done: true, lidos, promocoes, pedidos, resumo, mensal, vigia, categorias });
+      if (Date.now() >= limite) return Response.json({ done: false, lidos, proxima: passo.proxima, promocoes, pedidos, resumo, mensal, vigia, categorias });
       page = passo.proxima ?? undefined;
       inicio = passo.inicio;
     }
