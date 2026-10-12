@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/admin";
 import { CategoryRuleError, categoryEditSchema, createCategory, deleteCategory, updateCategory, type CategoryApi } from "@/lib/categories/manage";
+import { devolverAAutomacao, definirVisibilidade } from "@/lib/categories/visibilidade";
 import { query } from "@/lib/db";
 import { NuvemshopError, createCategory as apiCreate, deleteCategory as apiDelete, getCategory, updateCategory as apiUpdate } from "@/lib/nuvemshop";
 import { clientForStore, getActiveStore } from "@/lib/stores";
@@ -76,4 +77,27 @@ export async function deleteCategoryAction(id: number): Promise<CategoryActionSt
     const r = await deleteCategory(db, api, { storeId, actor, id });
     return r.produtos > 0 ? `Categoria apagada. ${r.produtos} ${r.produtos === 1 ? "produto deixou" : "produtos deixaram"} de tê-la.` : "Categoria apagada.";
   });
+}
+
+/** Oculta ou mostra a categoria na loja (muda só a visibilidade). */
+export async function visibilidadeCategoriaAction(id: number, visibility: "visible" | "hidden"): Promise<CategoryActionState> {
+  await requireAdmin(); // a autorização vem antes de qualquer validação
+  if (!Number.isInteger(id) || id <= 0 || (visibility !== "visible" && visibility !== "hidden")) return { message: "Pedido inválido." };
+  return run(async ({ storeId, actor, api }) => {
+    const r = await definirVisibilidade(db, { get: api.get, setVisibility: (cid, v) => api.update(cid, { visibility: v }) }, { storeId, actor, id, visibility });
+    if (!r.changed) return "A categoria já estava assim na loja.";
+    return visibility === "hidden" ? "Categoria oculta na loja." : "Categoria visível na loja. A automação não vai ocultá-la.";
+  });
+}
+
+/** A automação das categorias vazias volta a poder ocultar esta categoria. */
+export async function devolverCategoriaAction(id: number): Promise<CategoryActionState> {
+  await requireAdmin();
+  if (!Number.isInteger(id) || id <= 0) return { message: "Categoria inválida." };
+  const store = await getActiveStore();
+  if (!store) return { message: "Nenhuma loja conectada." };
+  await devolverAAutomacao(db, store.id, id);
+  revalidatePath("/categorias");
+  revalidatePath("/automacoes");
+  return { ok: true, message: "A automação voltou a cuidar desta categoria." };
 }

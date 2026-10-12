@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/card";
 import { pendentesDeRestauracao } from "@/lib/categories/restore";
 import { loadCategories, productCountsByCategory } from "@/lib/categories/manage";
 import { descendantIds, flattenTree } from "@/lib/categories/tree";
+import { estadoDeVisibilidade } from "@/lib/categories/visibilidade";
 import { query } from "@/lib/db";
 import { getActiveStore } from "@/lib/stores";
 import { RestaurarCategorias } from "./restaurar-categorias";
-import { CreateCategoryForm, DeleteCategoryButton, EditCategoryForm, type ParentOption } from "./category-forms";
+import { CreateCategoryForm, DeleteCategoryButton, EditCategoryForm, VisibilidadeCategoria, type ParentOption } from "./category-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function CategoriasPage() {
   const db = { query };
   const [rows, counts] = await Promise.all([loadCategories(db, store.id), productCountsByCategory(db, store.id)]);
   const pendentes = await pendentesDeRestauracao(db, store.id);
+  const visibilidade = await estadoDeVisibilidade(db, store.id);
   const flat = flattenTree(rows);
   const label = (r: { name: string; depth: number }) => `${"— ".repeat(r.depth)}${r.name}`;
   const allOptions: ParentOption[] = flat.map((r) => ({ id: r.id, label: label(r) }));
@@ -73,6 +75,15 @@ export default async function CategoriasPage() {
                       </Link>
                     </div>
                     <DeleteCategoryButton id={c.id} name={c.name} products={n} hasChildren={hasChildren} />
+                  </div>
+                  <div className="mt-1">
+                    <VisibilidadeCategoria
+                      id={c.id}
+                      nome={c.name}
+                      oculta={visibilidade.get(c.id)?.oculta ?? false}
+                      daAutomacao={visibilidade.get(c.id)?.daAutomacao ?? false}
+                      fixa={visibilidade.get(c.id)?.fixa ?? false}
+                    />
                   </div>
                   <details className="mt-1">
                     <summary className="cursor-pointer text-sm text-muted hover:text-foreground">Editar nome ou mover</summary>

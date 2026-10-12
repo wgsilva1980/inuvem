@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { createCategoryAction, deleteCategoryAction, updateCategoryAction, type CategoryActionState } from "./actions";
+import { createCategoryAction, deleteCategoryAction, devolverCategoriaAction, updateCategoryAction, visibilidadeCategoriaAction, type CategoryActionState } from "./actions";
 import { fieldClass } from "@/components/ui/field";
 
 export interface ParentOption {
@@ -103,6 +103,44 @@ export function DeleteCategoryButton({ id, name, products, hasChildren }: { id: 
       </Button>
       {state?.message && !state.ok && (
         <span role="alert" className="text-sm text-danger">
+          {state.message}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Oculta ou mostra a categoria na loja; se ela é "fixa" (mostrada à mão), oferece devolvê-la à automação. */
+export function VisibilidadeCategoria({ id, nome, oculta, daAutomacao, fixa }: { id: number; nome: string; oculta: boolean; daAutomacao: boolean; fixa: boolean }) {
+  const [pending, startTransition] = useTransition();
+  const [state, setState] = useState<CategoryActionState | null>(null);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2 text-sm">
+      {oculta ? <span className="rounded-full border border-border-strong px-2 py-0.5 text-xs">Oculta na loja{daAutomacao ? " (pela automação)" : ""}</span> : fixa ? <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">Sempre visível</span> : null}
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-8 px-3 py-1"
+        disabled={pending}
+        onClick={() => {
+          if (!oculta && !window.confirm(`Ocultar a categoria "${nome}" na loja? Ela some do menu e da vitrine; os produtos continuam nela. Dá para mostrar de novo quando quiser.`)) return;
+          startTransition(async () => setState(await visibilidadeCategoriaAction(id, oculta ? "visible" : "hidden")));
+        }}
+      >
+        {pending ? "Salvando…" : oculta ? "Mostrar na loja" : "Ocultar da loja"}
+      </Button>
+      {fixa && !oculta && (
+        <button
+          type="button"
+          disabled={pending}
+          className="text-xs text-muted underline hover:text-foreground"
+          onClick={() => startTransition(async () => setState(await devolverCategoriaAction(id)))}
+        >
+          Devolver à automação
+        </button>
+      )}
+      {state?.message && (
+        <span role={state.ok ? "status" : "alert"} className={`w-full text-xs ${state.ok ? "text-muted" : "text-danger"}`}>
           {state.message}
         </span>
       )}
