@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/brand";
+import { BuscaGlobal } from "@/components/busca-global";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { LINKS_RESTRITOS, type Perfil } from "@/lib/auth/perfis";
@@ -19,6 +20,8 @@ export function PanelHeader({ email, perfil, signOut }: { email: string; perfil:
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const gatilhoBusca = useRef<HTMLElement | null>(null);
   const adminRef = useRef<HTMLDivElement>(null);
   const adminAtivo = ADMIN_LINKS.some((l) => isActive(pathname, l.href));
 
@@ -27,6 +30,27 @@ export function PanelHeader({ email, perfil, signOut }: { email: string; perfil:
     setOpen(false);
     setAdminOpen(false);
   }, [pathname]);
+  // Ctrl+K (⌘K no Mac) abre e fecha a busca de qualquer tela.
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        gatilhoBusca.current = (document.activeElement as HTMLElement | null) ?? null;
+        setBuscaAberta((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, []);
+  const abrirBusca = (e: React.MouseEvent<HTMLElement>) => {
+    gatilhoBusca.current = e.currentTarget;
+    setOpen(false);
+    setBuscaAberta(true);
+  };
+  const fecharBusca = () => {
+    setBuscaAberta(false);
+    setTimeout(() => gatilhoBusca.current?.focus?.(), 0);
+  };
   // Fecha o submenu ao clicar fora ou com Esc.
   useEffect(() => {
     if (!adminOpen) return;
@@ -91,6 +115,14 @@ export function PanelHeader({ email, perfil, signOut }: { email: string; perfil:
         </nav>
 
         <form action={signOut} className="hidden items-center gap-3 md:flex">
+          <button type="button" onClick={abrirBusca} aria-label="Buscar no painel (Ctrl+K)" className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted hover:text-foreground">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="9" cy="9" r="6" />
+              <path d="M14 14l4 4" />
+            </svg>
+            Buscar
+            <kbd className="rounded border border-border px-1 text-[10px]">Ctrl K</kbd>
+          </button>
           <ThemeToggle />
           <span className="max-w-48 truncate text-sm text-muted">{email}</span>
           <Button type="submit" variant="outline">
@@ -98,6 +130,12 @@ export function PanelHeader({ email, perfil, signOut }: { email: string; perfil:
           </Button>
         </form>
 
+        <button type="button" onClick={abrirBusca} aria-label="Buscar no painel" className="ml-auto inline-flex size-11 items-center justify-center rounded-md border border-border-strong bg-card md:hidden">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="9" cy="9" r="6" />
+            <path d="M14 14l4 4" />
+          </svg>
+        </button>
         <button
           type="button"
           className="inline-flex size-11 items-center justify-center rounded-md border border-border-strong bg-card md:hidden"
@@ -150,6 +188,7 @@ export function PanelHeader({ email, perfil, signOut }: { email: string; perfil:
           </form>
         </div>
       )}
+      <BuscaGlobal aberta={buscaAberta} onFechar={fecharBusca} perfil={perfil} />
     </header>
   );
 }
