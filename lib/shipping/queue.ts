@@ -11,6 +11,8 @@ export interface ItemDoPedido {
   nome: string;
   variacao: string;
   sku: string | null;
+  /** Código de barras da variação na loja, quando cadastrado. */
+  barras: string | null;
   quantidade: number;
   foto: string | null;
 }
@@ -37,7 +39,7 @@ interface Linha {
   total: string;
   situacao_envio: string | null;
   rastreio: string | null;
-  itens: Array<{ product_id: string | null; nome: string | null; valores: string[] | null; sku: string | null; quantidade: number; foto: string | null }> | null;
+  itens: Array<{ product_id: string | null; nome: string | null; valores: string[] | null; sku: string | null; barras: string | null; quantidade: number; foto: string | null }> | null;
 }
 
 /**
@@ -51,7 +53,7 @@ export async function filaDeExpedicao(db: Db, storeId: string, atrasoDias: numbe
             o.total::text AS total, o.shipping_status AS situacao_envio, o.tracking_code AS rastreio,
             (SELECT jsonb_agg(jsonb_build_object(
                 'product_id', i.product_id::text, 'nome', coalesce(p.name, i.name), 'valores', i.variant_values,
-                'sku', v.sku, 'quantidade', i.quantity, 'foto', p.raw_json->'images'->0->>'src') ORDER BY i.seq)
+                'sku', v.sku, 'barras', nullif(trim(v.raw_json->>'barcode'), ''), 'quantidade', i.quantity, 'foto', p.raw_json->'images'->0->>'src') ORDER BY i.seq)
              FROM order_items i
              LEFT JOIN products p ON p.store_id = i.store_id AND p.id = i.product_id
              LEFT JOIN variants v ON v.store_id = i.store_id AND v.id = i.variant_id
@@ -67,6 +69,7 @@ export async function filaDeExpedicao(db: Db, storeId: string, atrasoDias: numbe
       nome: i.nome ?? "Produto",
       variacao: (i.valores ?? []).join(" / "),
       sku: i.sku,
+      barras: i.barras,
       quantidade: i.quantidade,
       foto: i.foto,
     }));

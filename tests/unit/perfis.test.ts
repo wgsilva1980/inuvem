@@ -44,6 +44,7 @@ describe("quem declara uma área", () => {
       .sort();
     expect(usos).toEqual([
       "app/(panel)/estoque/page.tsx",
+      "app/(panel)/expedicao/conferir/page.tsx",
       "app/(panel)/expedicao/page.tsx",
       "app/(panel)/expedicao/separacao/page.tsx",
       "app/api/estoque/exportar/route.ts",

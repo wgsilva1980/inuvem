@@ -11,6 +11,7 @@ import type { Product } from "@/lib/nuvemshop/types";
 import { mapearPedido } from "@/lib/orders/map";
 import { gravarPedidos } from "@/lib/orders/sync";
 import { filaDeExpedicao, lerRastreios, listaDeSeparacao } from "@/lib/shipping/queue";
+import { ajustar, contagensVazias, lerCodigo, progresso } from "@/lib/shipping/conferencia";
 import { ACAO_ENVIAR, marcarComoEnviados, type ApiExpedicao } from "@/lib/shipping/enviar";
 import { acaoLabel } from "@/lib/history/labels";
 
@@ -176,5 +177,47 @@ describe("API de pedidos", () => {
     expect((await pg.query<{ tracking_code: string }>("SELECT tracking_code FROM orders WHERE id = 1")).rows[0]!.tracking_code).toBe("AA111111111BR");
     await gravar([pedido(1, [], { shipping_status: "shipped" })]);
     expect((await pg.query<{ tracking_code: string }>("SELECT tracking_code FROM orders WHERE id = 1")).rows[0]!.tracking_code).toBe("AA111111111BR");
+  });
+});
+
+describe("conferência por código", () => {
+  const itens = [
+    { nome: "Vestido Azul", variacao: "P", sku: "SKU1", barras: "7891234567895", quantidade: 2 },
+    { nome: "Blusa", variacao: "M", sku: "SKU2", barras: null, quantidade: 1 },
+    { nome: "Vestido Azul", variacao: "P", sku: "SKU1", barras: "7891234567895", quantidade: 1 },
+  ];
+
+  it("lê por SKU (sem diferenciar maiúsculas/espaços) ou por código de barras, ignorando zeros à esquerda", () => {
+    expect(lerCodigo(itens, [0, 0, 0], " sku2\n")).toEqual({ tipo: "ok", indice: 1 });
+    expect(lerCodigo(itens, [0, 0, 0], "7891234567895")).toEqual({ tipo: "ok", indice: 0 });
+    expect(lerCodigo(itens, [0, 0, 0], "07891234567895")).toEqual({ tipo: "ok", indice: 0 });
+    expect(lerCodigo(itens, [0, 0, 0], "999")).toEqual({ tipo: "desconhecido" });
+    expect(lerCodigo(itens, [0, 0, 0], "  ")).toEqual({ tipo: "vazio" });
+  });
+
+  it("o mesmo código em duas linhas conta na primeira que ainda falta; completo vira excesso", () => {
+    expect(lerCodigo(itens, [2, 0, 0], "SKU1")).toEqual({ tipo: "ok", indice: 2 });
+    expect(lerCodigo(itens, [2, 0, 1], "SKU1")).toEqual({ tipo: "excesso", indice: 0 });
+  });
+
+  it("ajusta sem passar do pedido nem abaixo de zero e calcula o progresso", () => {
+    let c = contagensVazias(itens);
+    c = ajustar(itens, c, 1, 5);
+    expect(c).toEqual([0, 1, 0]);
+    c = ajustar(itens, c, 0, -1);
+    expect(c).toEqual([0, 1, 0]);
+    expect(progresso(itens, c)).toEqual({ lidas: 1, total: 4, completo: false, faltando: [{ indice: 0, faltam: 2 }, { indice: 2, faltam: 1 }] });
+    c = [2, 1, 1];
+    expect(progresso(itens, c)).toMatchObject({ lidas: 4, completo: true, faltando: [] });
+    expect(progresso([], [])).toMatchObject({ completo: false });
+  });
+
+  it("a fila traz o código de barras da variação quando cadastrado", async () => {
+    const p = produto(1, "Vestido Azul");
+    (p.variants![0] as unknown as Record<string, unknown>).barcode = " 7891234567895 ";
+    await upsertProducts(db, storeId, [p]);
+    await gravar([pedido(1, [{ product_id: 1, variant_id: 100, quantity: 1 }])]);
+    const fila = await filaDeExpedicao(db, storeId, 2);
+    expect(fila[0]!.itens[0]).toMatchObject({ sku: "SKU1", barras: "7891234567895" });
   });
 });
