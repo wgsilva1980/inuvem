@@ -24,7 +24,7 @@ const SINONIMOS: Record<string, string> = {
   "/campanhas": "datas black friday natal dia das mães calendário",
   "/qualidade": "nota checklist descrição seo corrigir",
   "/carrinhos": "abandonados recuperar",
-  "/expedicao": "envio enviar separação rastreio embalar",
+  "/expedicao": "envio enviar separação rastreio embalar conferir conferência código de barras celular",
   "/reativacao": "clientes sumidas voltar inativas",
   "/posvenda": "avaliação entrega depois da compra",
   "/segmentos": "clientes grupos exportar campanhas lista",

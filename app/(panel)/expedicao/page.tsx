@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/admin";
+import { buttonClass } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { query } from "@/lib/db";
 import { coberturaDosPedidos } from "@/lib/orders/stats";
@@ -49,6 +50,13 @@ export default async function ExpedicaoPage({ searchParams }: { searchParams: Pr
         <h1 className="text-xl font-semibold">Expedição</h1>
         <p className="text-sm text-muted">Pedidos pagos que ainda não foram enviados, a lista de separação com a foto das peças e o código de rastreio em lote. Atualize os pedidos antes de começar, para a fila refletir a loja.</p>
       </div>
+
+      <Card className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted">No celular: leia o código de cada peça do pedido antes de lacrar o pacote.</p>
+        <Link href="/expedicao/conferir" className={buttonClass("outline")}>
+          Conferir pedido (celular)
+        </Link>
+      </Card>
 
       <Card className="flex flex-col gap-2">
         <SincronizarPedidos ultima={ultima} />
