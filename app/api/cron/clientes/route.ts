@@ -94,6 +94,9 @@ export async function GET(request: Request) {
       const client = await clientForStore(loja);
       const r = await aplicarRegraCategorias({ query }, { getCategory: (id) => getCategory(client, id), setVisibility: (id, visibility) => updateCategory(client, id, { visibility }) }, { storeId: loja.id });
       if (!r.desligada) categorias = { ocultadas: r.ocultadas, exibidas: r.exibidas };
+      // rede de segurança do arquivo de menu (FTP): reenvia se o conteúdo mudou desde o último envio
+      const { atualizarMenuSeLigado } = await import("@/lib/menu/service");
+      await atualizarMenuSeLigado({ query }, loja.id, "cron");
     }
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "cron.categorias_vazias_failed", message: err instanceof Error ? err.message : String(err) }));

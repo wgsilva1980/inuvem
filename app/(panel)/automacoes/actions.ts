@@ -6,6 +6,7 @@ import { salvarAutoOcultarCategorias } from "@/lib/automations/categorias";
 import { definirManterDespublicado, salvarAutoRepublicar } from "@/lib/automations/in-stock";
 import { salvarAutoDespublicar } from "@/lib/automations/out-of-stock";
 import { query } from "@/lib/db";
+import { salvarMenuAutomatico } from "@/lib/menu/service";
 import { getActiveStore } from "@/lib/stores";
 
 export interface AutomacaoState {
@@ -44,6 +45,17 @@ export async function salvarCategoriasVaziasAction(_prev: AutomacaoState | null,
   await salvarAutoOcultarCategorias({ query }, store.id, ligado, admin.email);
   revalidatePath("/automacoes");
   return { ok: true, message: ligado ? "Regra ligada: categorias sem produto publicado serão ocultadas." : "Regra desligada. As categorias já ocultadas continuam assim até você mostrá-las ou ligar a regra." };
+}
+
+/** Liga ou desliga o envio automático do arquivo de menu (hidden-menu-urls.tpl) por FTP. */
+export async function salvarMenuArquivoAction(_prev: AutomacaoState | null, formData: FormData): Promise<AutomacaoState> {
+  const admin = await requireAdmin();
+  const store = await getActiveStore();
+  if (!store) return { message: "Nenhuma loja conectada." };
+  const ligado = formData.get("auto_menu") === "on";
+  await salvarMenuAutomatico({ query }, store.id, ligado, admin.email);
+  revalidatePath("/automacoes");
+  return { ok: true, message: ligado ? "Envio automático ligado." : "Envio automático desligado. Use “Enviar agora” quando quiser." };
 }
 
 /** Marca (ou desmarca) um produto para NÃO voltar sozinho quando o estoque voltar. */
