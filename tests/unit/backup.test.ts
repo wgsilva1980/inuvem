@@ -75,11 +75,11 @@ describe("montar o backup", () => {
     await semear();
     const { zip, resumo, nomeSugerido } = await montarBackup(db, { storeId, nomeDaLoja: "Donatelle Concept", opcoes: { incluirClientes: false }, agora: AGORA });
     expect(nomeSugerido).toBe("backup-inuvem-2026-10-11.zip");
-    expect(resumo).toMatchObject({ produtos: 1, variacoes: 2, categorias: 1, pedidos: 1, clientes: null, custos: 1, blocos: 1, pedidosDeCompra: 1, arquivos: 11 });
+    expect(resumo).toMatchObject({ produtos: 1, variacoes: 2, categorias: 1, pedidos: 1, clientes: null, custos: 1, blocos: 1, pedidosDeCompra: 1, arquivos: 13 });
     expect(resumo.bytes).toBe(zip.length);
     const z = await abrir(zip);
     expect(Object.keys(z.files).sort()).toEqual([
-      "LEIAME.txt", "dados/blocos-de-conteudo.json", "dados/categorias.json", "dados/configuracoes.json", "dados/custos-dos-produtos.json", "dados/pedidos-de-compra.json", "dados/produtos.json",
+      "LEIAME.txt", "dados/blocos-de-conteudo.json", "dados/categorias.json", "dados/configuracoes.json", "dados/custos-das-variacoes.json", "dados/custos-dos-produtos.json", "dados/fornecedor-dos-produtos.json", "dados/pedidos-de-compra.json", "dados/produtos.json",
       "planilhas/catalogo.xlsx", "planilhas/custos.csv", "planilhas/itens-dos-pedidos.csv", "planilhas/pedidos.csv",
     ]);
     const produtos = JSON.parse(await z.file("dados/produtos.json")!.async("string")) as Array<{ id: number; variants: Array<{ id: number; sku: string }> }>;

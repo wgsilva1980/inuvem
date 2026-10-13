@@ -1,5 +1,6 @@
 import { NuvemshopError } from "@/lib/nuvemshop/errors";
 import type { Variant, VariantInput } from "@/lib/nuvemshop/types";
+import { SQL_CUSTO_DA_VARIACAO, gravarCustoDaVariacao } from "@/lib/costs/variante";
 import { mapVariant } from "@/lib/sync/mappers";
 import { upsertVariantRows, type Db } from "@/lib/sync/repo";
 import { buildVariantInput, changedVariantFields, pickVariant, remoteVariantToEdit, valuesToStrings, variantToEdit, type VariantEdit } from "./variants";
@@ -40,12 +41,13 @@ export class DuplicateVariantError extends Error {
   }
 }
 
-export type VariantUpdateResult = { changed: false } | { changed: true; fields: string[] };
+export type VariantUpdateResult = { changed: false } | { changed: true; fields: string[]; avisos?: string[] };
 
 interface MirrorRow {
   sku: string | null;
   price: string | null;
   promotional_price: string | null;
+  cost: string | null;
   stock: number | null;
   stock_management: boolean;
   image_id: string | null;
@@ -73,7 +75,7 @@ async function audit(
 /** A variante como o espelho a tem hoje, no formato de edição (para somar ao estoque sem mexer no resto). */
 export async function edicaoDaVariante(db: Db, storeId: string, productId: number, variantId: number): Promise<VariantEdit | null> {
   const rows = await db.query<MirrorRow>(
-    `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management,
+    `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, ${SQL_CUSTO_DA_VARIACAO}, stock, stock_management,
             nullif(raw_json->>'image_id', '') AS image_id, weight::text AS weight,
             depth::text AS depth, width::text AS width, height::text AS height,
             raw_json->>'mpn' AS mpn, raw_json->>'age_group' AS age_group, raw_json->>'gender' AS gender, values
@@ -121,7 +123,7 @@ export async function updateVariant(
 ): Promise<VariantUpdateResult> {
   const { storeId, actor, productId, variantId, after } = args;
   const rows = await db.query<MirrorRow>(
-    `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, stock, stock_management,
+    `SELECT sku, price::text AS price, promotional_price::text AS promotional_price, ${SQL_CUSTO_DA_VARIACAO}, stock, stock_management,
             nullif(raw_json->>'image_id', '') AS image_id, weight::text AS weight,
             depth::text AS depth, width::text AS width, height::text AS height,
             raw_json->>'mpn' AS mpn, raw_json->>'age_group' AS age_group, raw_json->>'gender' AS gender, values
@@ -148,18 +150,35 @@ export async function updateVariant(
   }
 
   const remote = await api.get(productId, variantId);
-  if (changedVariantFields(before, remoteVariantToEdit(remote)).length > 0) {
+  // O custo não entra na conferência de alteração por fora: o painel guarda a sua própria cópia, que pode diferir da da loja.
+  if (changedVariantFields(before, { ...remoteVariantToEdit(remote), cost: before.cost ?? null }).length > 0) {
     await upsertVariantRows(db, storeId, [mapVariant(remote, productId)]);
     throw new VariantConflictError();
   }
 
   const antes = pickVariant(before, fields);
   const depois = pickVariant(after, fields);
+  const avisos: string[] = [];
   try {
-    const updated = await api.put(productId, variantId, buildVariantInput(after, fields, rows[0].values));
+    let updated: Variant | null = null;
+    try {
+      updated = await api.put(productId, variantId, buildVariantInput(after, fields, rows[0].values));
+    } catch (err) {
+      // A loja recusou o pacote por causa do custo: grava o resto sem ele e guarda o custo só no painel.
+      const outros = fields.filter((f) => f !== "cost");
+      if (fields.includes("cost") && err instanceof NuvemshopError && (err.status === 400 || err.status === 422)) {
+        avisos.push("A Nuvemshop recusou o preço de custo da variação; ele ficou guardado só no painel.");
+        updated = outros.length > 0 ? await api.put(productId, variantId, buildVariantInput(after, outros, rows[0].values)) : remote;
+      } else throw err;
+    }
     await upsertVariantRows(db, storeId, [mapVariant(updated, productId)]);
-    await audit(db, { storeId, actor, variantId, antes, depois, resultado: { status: "ok" }, sucesso: true });
-    return { changed: true, fields };
+    if (fields.includes("cost")) {
+      await gravarCustoDaVariacao(db, { storeId, productId, variantId, cost: after.cost ?? null, actor });
+      const devolvido = remoteVariantToEdit(updated).cost ?? null;
+      if (avisos.length === 0 && Number(devolvido ?? 0) !== Number(after.cost ?? 0)) avisos.push("A Nuvemshop não gravou o preço de custo da variação; ele ficou guardado só no painel.");
+    }
+    await audit(db, { storeId, actor, variantId, antes, depois, resultado: { status: "ok", ...(avisos.length > 0 ? { avisos } : {}) }, sucesso: true });
+    return { changed: true, fields, ...(avisos.length > 0 ? { avisos } : {}) };
   } catch (err) {
     const resultado =
       err instanceof NuvemshopError ? { status: err.status, mensagem: err.apiMessage ?? err.message } : { mensagem: err instanceof Error ? err.message : String(err) };

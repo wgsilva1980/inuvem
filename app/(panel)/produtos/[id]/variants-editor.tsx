@@ -127,7 +127,7 @@ function VariantRow({
           ))}
         </div>
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">SKU</span>
           <input name={`${p}sku`} defaultValue={variant.sku ?? ""} maxLength={255} className={fieldClass} />
@@ -142,6 +142,11 @@ function VariantRow({
           <span className="text-muted">Promocional (R$)</span>
           <input name={`${p}promotional_price`} defaultValue={ptMoney(variant.promotional_price)} inputMode="decimal" className={fieldClass} />
           {err("promotional_price") && <span className="text-danger">{err("promotional_price")}</span>}
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-muted">Preço de custo (R$)</span>
+          <input name={`${p}cost`} defaultValue={ptMoney(variant.cost ?? null)} inputMode="decimal" placeholder="0,00" className={fieldClass} aria-invalid={!!err("cost")} />
+          {err("cost") && <span className="text-danger">{err("cost")}</span>}
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Estoque</span>

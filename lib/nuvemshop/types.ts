@@ -107,6 +107,8 @@ export type VariantInput = Partial<{
   sku: string | null;
   price: string | number;
   promotional_price: string | number | null;
+  /** Preço de custo da variação. */
+  cost: string | number | null;
   stock_management: boolean;
   stock: number | null;
   weight: string | number | null;

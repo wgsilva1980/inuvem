@@ -8,12 +8,14 @@ import { DescricaoIa } from "./descricao-ia";
 import { SeoIa } from "./seo-ia";
 import { juntarTags } from "./sugerir-ia";
 import type { CategoryOption, ProductDetail } from "@/lib/catalog/query";
+import Link from "next/link";
+import type { Fornecedor } from "@/lib/catalog/fornecedor";
 import { saveProduct, type SaveState } from "./actions";
 import { fieldClass } from "@/components/ui/field";
 import { Alert } from "@/components/ui/alert";
 import { FieldErrorsContext } from "./save-context";
 
-export function ProductForm({ product, categories, children }: { product: ProductDetail; categories: CategoryOption[]; children?: ReactNode }) {
+export function ProductForm({ product, categories, fornecedores = [], fornecedorId = null, children }: { product: ProductDetail; categories: CategoryOption[]; fornecedores?: Fornecedor[]; fornecedorId?: string | null; children?: ReactNode }) {
   const [state, action, pending] = useActionState<SaveState | null, FormData>(saveProduct.bind(null, Number(product.id)), null);
   const selected = new Set(product.categories.map((c) => c.id));
   const err = (name: string) => state?.fieldErrors?.[name];
@@ -67,6 +69,24 @@ export function ProductForm({ product, categories, children }: { product: Produc
           <span className="font-medium">Tags (separadas por vírgula)</span>
           <input name="tags" defaultValue={product.tags ?? ""} className={fieldClass} />
           {err("tags") && <span className="text-danger">{err("tags")}</span>}
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Fornecedor</span>
+          <select name="fornecedor_id" defaultValue={fornecedorId ?? ""} className={fieldClass} aria-invalid={!!err("fornecedor_id")}>
+            <option value="">Sem fornecedor</option>
+            {fornecedores.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nome}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted">
+            Escolha entre os contatos do tipo “fornecedor”. Fica só no painel (a Nuvemshop não tem esse campo).{" "}
+            <Link href="/contatos" className="underline">
+              Cadastrar ou editar fornecedores
+            </Link>
+          </span>
+          {err("fornecedor_id") && <span className="text-danger">{err("fornecedor_id")}</span>}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="published" defaultChecked={product.published} />

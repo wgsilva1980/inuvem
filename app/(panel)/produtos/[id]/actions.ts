@@ -9,6 +9,8 @@ import { ProductConflictError, ProductNotFoundError, updateProduct } from "@/lib
 import { deleteProduct } from "@/lib/catalog/delete";
 import { ProductMissingError } from "@/lib/catalog/images";
 import { AttributesConflictError, InvalidAttributesError, renameAttributes, type ManageApi } from "@/lib/catalog/manage-variants";
+import { FornecedorInvalidoError, definirFornecedor } from "@/lib/catalog/fornecedor";
+import { sincronizarCustoDoProduto } from "@/lib/costs/variante";
 import { DuplicateVariantError, InvalidVariantImageError, InvalidVariantValuesError, VariantConflictError, VariantNotFoundError, updateVariant } from "@/lib/catalog/update-variant";
 import { formVariantIds, variantEditSchema, variantFormInput } from "@/lib/catalog/variants";
 import { query } from "@/lib/db";
@@ -28,6 +30,7 @@ const KNOWN = [
   ProductMissingError,
   VariantConflictError,
   VariantNotFoundError,
+  FornecedorInvalidoError,
   InvalidVariantValuesError,
   DuplicateVariantError,
   InvalidVariantImageError,
@@ -71,6 +74,15 @@ export async function saveProduct(productId: number, _prev: SaveState | null, fo
   }
   if (Object.keys(fieldErrors).length > 0 || !parsed.success) return { message: "Corrija os campos destacados. Nada foi salvo.", fieldErrors };
 
+  // Fornecedor (só no painel): ausente no formulário = não edita; vazio = sem fornecedor.
+  let fornecedor: number | null | undefined;
+  if (formData.has("fornecedor_id")) {
+    const raw = String(formData.get("fornecedor_id") ?? "").trim();
+    if (raw === "") fornecedor = null;
+    else if (/^\d{1,15}$/.test(raw)) fornecedor = Number(raw);
+    else return { message: "Corrija os campos destacados. Nada foi salvo.", fieldErrors: { fornecedor_id: "Fornecedor inválido." } };
+  }
+
   const nameKeys = [...formData.keys()].filter((k) => /^name_\d{1,2}$/.test(k)).sort((a, b) => Number(a.slice(5)) - Number(b.slice(5)));
   const attributeNames = nameKeys.map((k) => String(formData.get(k) ?? ""));
 
@@ -79,6 +91,8 @@ export async function saveProduct(productId: number, _prev: SaveState | null, fo
 
   let changes = 0;
   const problems: string[] = [];
+  const avisos: string[] = [];
+  let custoMudou = false;
   try {
     const client = await clientForStore(store);
 
@@ -118,9 +132,25 @@ export async function saveProduct(productId: number, _prev: SaveState | null, fo
           { get: (pid, vid) => getVariant(client, pid, vid), put: (pid, vid, input) => apiUpdateVariant(client, pid, vid, input) },
           { storeId: store.id, actor: admin.email, productId, variantId: id, after },
         );
-        if (r.changed) changes++;
+        if (r.changed) {
+          changes++;
+          if (r.fields.includes("cost")) custoMudou = true;
+          for (const a of r.avisos ?? []) avisos.push(`Variante ${variantLabel(formData, id)}: ${a}`);
+        }
       } catch (err) {
         problems.push(`Variante ${variantLabel(formData, id)}: ${describe(err, "variant.update.failed")}`);
+      }
+    }
+
+    // O custo do produto (Custos, Simulador, margens) acompanha a média dos custos das variações.
+    if (custoMudou) await sincronizarCustoDoProduto({ query }, store.id, productId, admin.email).catch(() => undefined);
+
+    if (fornecedor !== undefined) {
+      try {
+        const r = await definirFornecedor({ query }, { storeId: store.id, productId, contactId: fornecedor, actor: admin.email });
+        if (r.changed) changes++;
+      } catch (err) {
+        problems.push(err instanceof FornecedorInvalidoError ? err.message : `Fornecedor: ${describe(err, "product.supplier.failed")}`);
       }
     }
   } catch (err) {
@@ -129,7 +159,8 @@ export async function saveProduct(productId: number, _prev: SaveState | null, fo
 
   revalidatePath("/produtos");
   revalidatePath(`/produtos/${productId}`);
-  if (problems.length === 0) return { ok: true, message: changes > 0 ? "Alterações salvas na Nuvemshop." : "Nada foi alterado." };
+  const aviso = avisos.length > 0 ? ` Atenção: ${avisos.join(" · ")}` : "";
+  if (problems.length === 0) return { ok: true, message: (changes > 0 ? "Alterações salvas na Nuvemshop." : "Nada foi alterado.") + aviso };
   const done = changes > 0 ? `${changes} parte(s) salva(s). ` : "";
   return { message: `${done}Não foi possível salvar: ${problems.join(" · ")}` };
 }
