@@ -52,7 +52,7 @@ function ListaDuplicados({ itens, rotulo }: { itens: Duplicado[]; rotulo: string
   );
 }
 
-export default async function QualidadePage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
+export default async function QualidadePage({ searchParams }: { searchParams: Promise<{ filtro?: string; publicados?: string }> }) {
   await requireAdmin();
   const store = await getActiveStore();
   if (!store) {
@@ -62,15 +62,38 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
       </Card>
     );
   }
-  const r = await relatorioDeQualidade({ query }, store.id);
+  const sp = await searchParams;
+  // Padrão: só os produtos publicados. “Todos os produtos” vem de ?publicados=0.
+  const soPublicados = !/^(0|false|nao|não)$/i.test(sp.publicados ?? "");
+  const r = await relatorioDeQualidade({ query }, store.id, { soPublicados });
   if (r.produtos.length === 0) {
     return (
       <Card>
-        <p className="text-sm text-muted">O catálogo ainda não foi sincronizado. Sincronize os produtos na página inicial.</p>
+        <p className="text-sm text-muted">
+          {r.foraDoFiltro > 0 ? (
+            <>
+              Nenhum produto publicado no catálogo.{" "}
+              <Link href="/qualidade?publicados=0" className="underline">
+                Ver todos os produtos
+              </Link>
+              .
+            </>
+          ) : (
+            "O catálogo ainda não foi sincronizado. Sincronize os produtos na página inicial."
+          )}
+        </p>
       </Card>
     );
   }
-  const filtro = (await searchParams).filtro;
+  const filtro = sp.filtro;
+  const href = (chave?: string) => {
+    const q = new URLSearchParams();
+    if (chave) q.set("filtro", chave);
+    if (!soPublicados) q.set("publicados", "0");
+    const s = q.toString();
+    return `/qualidade${s ? `?${s}` : ""}`;
+  };
+  const pill = (ativo: boolean) => `rounded-full border px-3 py-1 ${ativo ? "border-primary bg-primary text-primary-foreground" : "border-border-strong hover:bg-border/40"}`;
   const problemaEscolhido = r.porProblema.find((p) => p.chave === filtro);
   const lista = (problemaEscolhido ? r.produtos.filter((p) => p.problemas.some((x) => x.chave === problemaEscolhido.chave)) : r.produtos.filter((p) => p.problemas.length > 0)).slice(0, LIMITE);
   const total = problemaEscolhido ? problemaEscolhido.produtos : r.produtos.filter((p) => p.problemas.length > 0).length;
@@ -83,9 +106,20 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Qualidade do catálogo</h1>
         <p className="text-sm text-muted">
-          Cada produto recebe uma nota de 0 a 100 pelas mesmas verificações do checklist da página do produto: os itens obrigatórios (foto, preço, categoria, descrição, estoque) pesam o triplo dos recomendados (mais fotos, SEO, SKU, peso e medidas, tags…). Calculado do que o painel já sincronizou. Descrição, SEO e tags podem ser escritos com a IA em “Corrigir com a IA”, com revisão antes de gravar.
+          {soPublicados ? "Só os produtos publicados entram nas notas e nas listas. " : ""}Cada produto recebe uma nota de 0 a 100 pelas mesmas verificações do checklist da página do produto: os itens obrigatórios (foto, preço, categoria, descrição, estoque) pesam o triplo dos recomendados (mais fotos, SEO, SKU, peso e medidas, tags…). Calculado do que o painel já sincronizou. Descrição, SEO e tags podem ser escritos com a IA em “Corrigir com a IA”, com revisão antes de gravar.
         </p>
       </div>
+
+      <nav aria-label="Produtos considerados" className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted">Mostrar:</span>
+        <Link href={filtro ? `/qualidade?filtro=${encodeURIComponent(filtro)}` : "/qualidade"} aria-current={soPublicados ? "page" : undefined} className={pill(soPublicados)}>
+          Só produtos publicados
+        </Link>
+        <Link href={filtro ? `/qualidade?filtro=${encodeURIComponent(filtro)}&publicados=0` : "/qualidade?publicados=0"} aria-current={!soPublicados ? "page" : undefined} className={pill(!soPublicados)}>
+          Todos os produtos
+        </Link>
+        {soPublicados && r.foraDoFiltro > 0 && <span className="text-xs text-muted">{r.foraDoFiltro} não publicado(s) fora desta visão</span>}
+      </nav>
 
       <section aria-label="Resumo" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="flex flex-col gap-1">
@@ -123,7 +157,7 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
           <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
             {r.porProblema.map((p) => (
               <li key={p.chave}>
-                <Link href={`/qualidade?filtro=${p.chave}`} aria-current={problemaEscolhido?.chave === p.chave ? "true" : undefined} className={`flex min-h-11 items-center justify-between gap-3 rounded-md border px-3 py-2 hover:bg-border/40 ${problemaEscolhido?.chave === p.chave ? "border-foreground" : "border-border-strong"}`}>
+                <Link href={href(p.chave)} aria-current={problemaEscolhido?.chave === p.chave ? "true" : undefined} className={`flex min-h-11 items-center justify-between gap-3 rounded-md border px-3 py-2 hover:bg-border/40 ${problemaEscolhido?.chave === p.chave ? "border-foreground" : "border-border-strong"}`}>
                   <span>
                     {p.rotulo}
                     {p.obrigatorio && <span className="text-danger"> · obrigatório</span>}
@@ -182,13 +216,13 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
         </Card>
       )}
 
-      <CorrigirQualidade key={problemaEscolhido?.chave ?? "todos"} itens={corrigiveis} />
+      <CorrigirQualidade key={`${problemaEscolhido?.chave ?? "todos"}|${soPublicados}`} itens={corrigiveis} />
 
       <Card className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-medium">{problemaEscolhido ? `Produtos com “${problemaEscolhido.rotulo}” pendente` : "Produtos com pendências, dos piores para os melhores"}</h2>
           {problemaEscolhido && (
-            <Link href="/qualidade" className="text-sm underline">
+            <Link href={href()} className="text-sm underline">
               Ver todos
             </Link>
           )}
