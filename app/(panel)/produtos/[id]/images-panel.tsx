@@ -8,6 +8,7 @@ import { prepareImageFile } from "@/lib/client/compress-image";
 import { fieldClass } from "@/components/ui/field";
 import { ENQUADRAMENTO_LABEL, TAMANHO, TIPO_LABEL, type Enquadramento, type Tipo } from "@/lib/images/standard";
 import type { Recorte } from "@/lib/images/recorte";
+import { AuditarFotos } from "./auditar-fotos";
 import { CropEditor } from "./crop-editor";
 import { moveProductImage, previewProductImage, previewReenquadro, reenquadrarProductImage, removeProductImage, setMainProductImage, uploadProductImage, type ActionState, type PreviewReenquadro, type PreviewState } from "./media-actions";
 
@@ -51,7 +52,7 @@ interface Reenquadro {
   erro?: string;
 }
 
-export function ImagesPanel({ productId, images, comOriginal = [] }: { productId: number; images: ImageRow[]; comOriginal?: string[] }) {
+export function ImagesPanel({ productId, images, comOriginal = [], auditoria }: { productId: number; images: ImageRow[]; comOriginal?: string[]; auditoria?: { total: number; medidas: number } }) {
   const [busy, startTransition] = useTransition();
   const [message, setMessage] = useState<ActionState | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -220,6 +221,11 @@ export function ImagesPanel({ productId, images, comOriginal = [] }: { productId
     <Card>
       <h2 className="text-base font-semibold">Imagens</h2>
       <p className="mt-1 text-sm text-muted">A primeira imagem é a principal. A ordem mostrada é a que a loja usa.</p>
+      {auditoria && (
+        <div className="mt-3">
+          <AuditarFotos productId={productId} total={auditoria.total} medidas={auditoria.medidas} />
+        </div>
+      )}
 
       <div
         onDragOver={(e) => {
