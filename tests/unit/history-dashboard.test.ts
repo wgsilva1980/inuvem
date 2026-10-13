@@ -66,6 +66,25 @@ describe("indicadores do catálogo e filtros correspondentes", () => {
     expect(filtersQueryString(catalogParamsSchema.parse({ sem_imagem: "1", sem_estoque: "1", ordem: "nome", pagina: "3" }))).toBe("sem_imagem=1&sem_estoque=1");
   });
 
+  it("só publicados: produtos, variantes, categorias e cada pendência olham só os publicados; os totais de publicados e não publicados seguem os da loja", async () => {
+    await upsertCategories(db, storeId, [{ id: 1, name: { pt: "Cat" } }, { id: 2, name: { pt: "Só rascunho" } }] as Category[]);
+    await upsertProducts(db, storeId, [product(7, { published: false, categories: [{ id: 2, name: { pt: "Só rascunho" } }], description: { pt: "" } })]);
+    expect(await getCatalogStats(db, storeId)).toMatchObject({ produtos: 6, categorias: 2, semDescricao: 2 });
+    expect(await getCatalogStats(db, storeId, { soPublicados: true })).toEqual({
+      produtos: 4, publicados: 4, naoPublicados: 2, variantes: 5, categorias: 1,
+      semImagem: 0, semCategoria: 1, semSku: 1, semEstoque: 1, semDescricao: 1,
+    });
+  });
+
+  it("com só publicados, cada indicador bate com a lista filtrada por status=publicados (o link do painel)", async () => {
+    const ids = async (q: Record<string, string>) => (await listCatalog(db, storeId, paramsToFilters(catalogParamsSchema.parse({ ...q, status: "publicados" })))).items.map((i) => i.id).sort();
+    expect(await ids({ sem_imagem: "1" })).toEqual([]); // o produto 2 (sem imagem) é rascunho
+    expect(await ids({ sem_categoria: "1" })).toEqual(["3"]);
+    expect(await ids({ sem_sku: "1" })).toEqual(["4"]);
+    expect(await ids({ sem_estoque: "1" })).toEqual(["4"]);
+    expect(await ids({ sem_descricao: "1" })).toEqual(["3"]);
+  });
+
   it("estoque zerado ignora variante sem controle de estoque", async () => {
     await upsertProducts(db, storeId, [product(6, { variants: [variant(60, 6, { stock_management: false, stock: 0 })] })]);
     expect((await getCatalogStats(db, storeId)).semEstoque).toBe(1);

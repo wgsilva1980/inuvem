@@ -29,10 +29,13 @@ function fmt(date: string | null): string {
   return date ? new Date(date).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—";
 }
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ conectado?: string; erro?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ conectado?: string; erro?: string; publicados?: string }> }) {
   await requireAdmin();
   const sp = await searchParams;
   const store = await getActiveStore();
+  // Padrão: só os produtos publicados. “Todos os produtos” vem de ?publicados=0.
+  const soPublicados = !/^(0|false|nao|não)$/i.test(sp.publicados ?? "");
+  const filtroDoPainel = soPublicados ? "&status=publicados" : "";
 
   let stats: CatalogStats | null = null;
   let recent: HistoryEntry[] = [];
@@ -40,7 +43,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   let painel: PainelDoDia | null = null;
   let lastWebhook: { event: string; received_at: string } | null = null;
   if (store) {
-    [stats, recent] = await Promise.all([getCatalogStats({ query }, store.id), listHistory({ query }, store.id).then((h) => h.items.slice(0, 6))]);
+    [stats, recent] = await Promise.all([getCatalogStats({ query }, store.id, { soPublicados }), listHistory({ query }, store.id).then((h) => h.items.slice(0, 6))]);
     painel = await painelDoDiaCompleto({ query }, store.id);
     lastWebhook = await queryOne<{ event: string; received_at: string }>(
       "SELECT event, received_at FROM webhook_events WHERE store_id = $1 ORDER BY received_at DESC LIMIT 1",
@@ -64,6 +67,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       ]
     : [];
 
+  const temProdutos = stats !== null && stats.publicados + stats.naoPublicados > 0;
+
   // O bloco de conexão fica aberto só quando precisa de ação: sem loja, nunca sincronizou ou a última sincronização falhou.
   const connectionNeedsAttention = !store || !last || last.status === "failed";
   const connectionSummary = !store
@@ -83,20 +88,29 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
         </Alert>
       )}
 
-      {painel && stats && stats.produtos > 0 && <PainelDoDiaCard painel={painel} />}
+      {painel && temProdutos && <PainelDoDiaCard painel={painel} />}
 
-      {stats && stats.produtos > 0 && (
+      {stats && temProdutos && (
         <>
+          <nav aria-label="Produtos considerados" className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted">Mostrar:</span>
+            <Link href="/" aria-current={soPublicados ? "page" : undefined} className={`rounded-full border px-3 py-1 ${soPublicados ? "border-primary bg-primary text-primary-foreground" : "border-border-strong hover:bg-border/40"}`}>
+              Só produtos publicados
+            </Link>
+            <Link href="/?publicados=0" aria-current={!soPublicados ? "page" : undefined} className={`rounded-full border px-3 py-1 ${!soPublicados ? "border-primary bg-primary text-primary-foreground" : "border-border-strong hover:bg-border/40"}`}>
+              Todos os produtos
+            </Link>
+          </nav>
           <Card>
-            <h2 className="text-base font-semibold">Precisa de atenção</h2>
+            <h2 className="text-base font-semibold">Precisa de atenção{soPublicados ? " (produtos publicados)" : ""}</h2>
             {attention.every((a) => a.value === 0) ? (
-              <p className="mt-2 text-sm text-success">Tudo em ordem: nenhum produto com pendências.</p>
+              <p className="mt-2 text-sm text-success">Tudo em ordem: nenhum produto {soPublicados ? "publicado " : ""}com pendências.</p>
             ) : (
               <ul className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                 {attention.map((a) => (
                   <li key={a.param}>
                     {a.value > 0 ? (
-                      <Link href={`/produtos?${a.param}=1`} className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border-strong px-3 py-2 hover:bg-border/40">
+                      <Link href={`/produtos?${a.param}=1${filtroDoPainel}`} className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border-strong px-3 py-2 hover:bg-border/40">
                         <span>Produtos {a.label}</span>
                         <Badge tone="danger">{a.value}</Badge>
                       </Link>
@@ -113,16 +127,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
           </Card>
 
           <Card>
-            <h2 className="text-base font-semibold">Visão geral do catálogo</h2>
-            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+            <h2 className="text-base font-semibold">Visão geral do catálogo{soPublicados ? " (produtos publicados)" : ""}</h2>
+            <dl className={`mt-3 grid grid-cols-2 gap-3 text-sm ${soPublicados ? "sm:grid-cols-3" : "sm:grid-cols-5"}`}>
               {(
-                [
-                  ["Produtos", stats.produtos, "/produtos"],
-                  ["Publicados", stats.publicados, "/produtos?status=publicados"],
-                  ["Não publicados", stats.naoPublicados, "/produtos?status=rascunhos"],
-                  ["Variantes", stats.variantes, null],
-                  ["Categorias", stats.categorias, "/categorias"],
-                ] as const
+                soPublicados
+                  ? ([
+                      ["Produtos publicados", stats.produtos, "/produtos?status=publicados"],
+                      ["Variantes", stats.variantes, null],
+                      ["Categorias com produto publicado", stats.categorias, "/categorias"],
+                    ] as const)
+                  : ([
+                      ["Produtos", stats.produtos, "/produtos"],
+                      ["Publicados", stats.publicados, "/produtos?status=publicados"],
+                      ["Não publicados", stats.naoPublicados, "/produtos?status=rascunhos"],
+                      ["Variantes", stats.variantes, null],
+                      ["Categorias", stats.categorias, "/categorias"],
+                    ] as const)
               ).map(([label, value, href]) => (
                 <div key={label}>
                   <dt className="text-muted">{label}</dt>
@@ -130,6 +150,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
                 </div>
               ))}
             </dl>
+            {soPublicados && stats.naoPublicados > 0 && (
+              <p className="mt-3 text-sm text-muted">
+                Fora desta visão: <Link href="/produtos?status=rascunhos" className="underline hover:text-foreground">{stats.naoPublicados} produto(s) não publicado(s)</Link>. Use “Todos os produtos” para incluí-los.
+              </p>
+            )}
           </Card>
         </>
       )}
