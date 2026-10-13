@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { DescricaoIa } from "./descricao-ia";
+import { SeoIa } from "./seo-ia";
+import { juntarTags } from "./sugerir-ia";
 import type { CategoryOption, ProductDetail } from "@/lib/catalog/query";
 import { saveProduct, type SaveState } from "./actions";
 import { fieldClass } from "@/components/ui/field";
@@ -23,6 +25,7 @@ export function ProductForm({ product, categories, children }: { product: Produc
   const formRef = useRef<HTMLFormElement>(null);
   const [descInicial, setDescInicial] = useState(product.description ?? "");
   const [descVersao, setDescVersao] = useState(0);
+  const campo = (nome: string) => formRef.current?.elements.namedItem(nome) as HTMLInputElement | HTMLTextAreaElement | null;
   useEffect(() => setDirty(false), [formKey]);
   useEffect(() => {
     if (!dirty || pending) return;
@@ -48,9 +51,11 @@ export function ProductForm({ product, categories, children }: { product: Produc
             <DescricaoIa
               produtoId={product.id}
               descricaoAtual={() => (formRef.current?.elements.namedItem("description") as HTMLInputElement | null)?.value ?? ""}
-              aoGerar={(html) => {
+              aoGerar={({ html, tags }) => {
                 setDescInicial(html);
                 setDescVersao((v) => v + 1);
+                const t = campo("tags");
+                if (t && tags) t.value = juntarTags(t.value, tags);
                 setDirty(true);
               }}
             />
@@ -70,7 +75,20 @@ export function ProductForm({ product, categories, children }: { product: Produc
       </Card>
 
       <Card className="flex flex-col gap-4">
-        <h2 className="text-base font-semibold">SEO</h2>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h2 className="text-base font-semibold">SEO</h2>
+          <SeoIa
+            produtoId={product.id}
+            jaPreenchido={() => (campo("seo_title")?.value.trim() ?? "") !== "" || (campo("seo_description")?.value.trim() ?? "") !== ""}
+            aoGerar={({ titulo, descricao }) => {
+              const t = campo("seo_title");
+              const d = campo("seo_description");
+              if (t) t.value = titulo;
+              if (d) d.value = descricao;
+              setDirty(true);
+            }}
+          />
+        </div>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Título (até 70 caracteres)</span>
           <input name="seo_title" defaultValue={product.seo_title} maxLength={70} className={fieldClass} />
