@@ -63,7 +63,12 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
       <VariantsManage productId={productId} attributes={product.attributes} />
 
       <div id="imagens" className="scroll-mt-4">
-        <ImagesPanel productId={productId} images={images} comOriginal={comOriginal} />
+        <ImagesPanel
+          productId={productId}
+          images={images}
+          comOriginal={comOriginal}
+          auditoria={{ total: auditoria[0]?.imagens.length ?? 0, medidas: (auditoria[0]?.imagens ?? []).filter((i) => i.medida && !i.medida.error).length }}
+        />
       </div>
 
       <DeleteProduct productId={productId} name={product.name} />

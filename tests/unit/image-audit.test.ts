@@ -65,6 +65,21 @@ describe("medição em lote", () => {
     medidor.chamadas.length = 0;
   });
 
+  it("com produtoId, mede e conta só as fotos desse produto", async () => {
+    await produto(1, "A", [{ id: 10, src: "https://x/grande-1.jpg" }, { id: 11, src: "https://x/pequena-2.jpg" }]);
+    await produto(2, "B", [{ id: 20, src: "https://x/grande-3.jpg" }]);
+    expect(await contarPendentes(db, storeId, 1)).toEqual({ total: 2, medidas: 0 });
+    expect(await medirPendentes(db, { storeId, budgetMs: 10_000, medir: medidor, produtoId: 1 })).toEqual({ medidas: 2, restantes: false });
+    expect(medidor.chamadas.sort()).toEqual(["https://x/grande-1.jpg", "https://x/pequena-2.jpg"]);
+    expect(await contarPendentes(db, storeId, 1)).toEqual({ total: 2, medidas: 2 });
+    expect(await contarPendentes(db, storeId, 2)).toEqual({ total: 1, medidas: 0 }); // o outro produto não foi tocado
+    expect(await contarPendentes(db, storeId)).toEqual({ total: 3, medidas: 2 });
+    // reanalisar só um produto não mede os outros
+    medidor.chamadas.length = 0;
+    await medirPendentes(db, { storeId, budgetMs: 10_000, medir: medidor, produtoId: 1, todas: true });
+    expect(medidor.chamadas.sort()).toEqual(["https://x/grande-1.jpg", "https://x/pequena-2.jpg"]);
+  });
+
   it("mede só o que falta e é retomável", async () => {
     await produto(1, "A", [{ id: 10, src: "https://x/grande-1.jpg" }, { id: 11, src: "https://x/pequena-2.jpg" }]);
     await produto(2, "B", [{ id: 20, src: "https://x/grande-3.jpg" }]);

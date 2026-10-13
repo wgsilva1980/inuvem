@@ -15,11 +15,14 @@ export async function POST(request: Request) {
   const store = await getActiveStore();
   if (!store) return Response.json({ error: "Nenhuma loja conectada." }, { status: 409 });
 
-  const body = (await request.json().catch(() => ({}))) as { todas?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { todas?: unknown; produtoId?: unknown };
+  // `produtoId` (opcional) mede só as fotos desse produto; sem ele, mede as de todo o catálogo
+  const produtoId = typeof body.produtoId === "number" && Number.isInteger(body.produtoId) && body.produtoId > 0 ? body.produtoId : undefined;
+  if (body.produtoId !== undefined && produtoId === undefined) return Response.json({ error: "Produto inválido." }, { status: 400 });
   try {
     const db = { query };
-    const { restantes } = await medirPendentes(db, { storeId: store.id, budgetMs: 25_000, todas: body.todas === true });
-    return Response.json({ restantes, ...(await contarPendentes(db, store.id)) });
+    const { restantes } = await medirPendentes(db, { storeId: store.id, budgetMs: 25_000, todas: body.todas === true, produtoId });
+    return Response.json({ restantes, ...(await contarPendentes(db, store.id, produtoId)) });
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "image.audit.failed", message: err instanceof Error ? err.message : String(err) }));
     return Response.json({ error: "Falha inesperada ao analisar as imagens." }, { status: 500 });
