@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
+import { DescricaoIa } from "./descricao-ia";
 import type { CategoryOption, ProductDetail } from "@/lib/catalog/query";
 import { saveProduct, type SaveState } from "./actions";
 import { fieldClass } from "@/components/ui/field";
@@ -18,6 +19,10 @@ export function ProductForm({ product, categories, children }: { product: Produc
   // Alterações ainda não salvas: avisa ao fechar/recarregar a aba. Volta a "limpo" quando o espelho é atualizado (salvou ou recarregou).
   const formKey = `${product.updated_at_remote ?? product.id}|${product.variants.map((v) => [v.id, v.sku, v.price, v.promotional_price, v.stock, v.stock_management, v.image_id, v.weight, JSON.stringify(v.values)].join("¦")).join("|")}|${product.attributes.join("¦")}`;
   const [dirty, setDirty] = useState(false);
+  // Descrição escrita pela IA: o editor é recriado com o novo texto (a descrição só vai para a loja ao salvar).
+  const formRef = useRef<HTMLFormElement>(null);
+  const [descInicial, setDescInicial] = useState(product.description ?? "");
+  const [descVersao, setDescVersao] = useState(0);
   useEffect(() => setDirty(false), [formKey]);
   useEffect(() => {
     if (!dirty || pending) return;
@@ -28,7 +33,7 @@ export function ProductForm({ product, categories, children }: { product: Produc
 
   return (
     // `key` recria o formulário com os valores novos quando o espelho é atualizado (conflito ou salvamento).
-    <form key={formKey} action={action} onChange={() => setDirty(true)} className="flex flex-col gap-4">
+    <form key={formKey} ref={formRef} action={action} onChange={() => setDirty(true)} className="flex flex-col gap-4">
       <Card className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Nome</span>
@@ -36,10 +41,21 @@ export function ProductForm({ product, categories, children }: { product: Produc
           {err("name") && <span className="text-danger">{err("name")}</span>}
         </label>
         <div className="flex flex-col gap-1 text-sm">
-          <label htmlFor="description-editor" className="font-medium">
-            Descrição
-          </label>
-          <RichTextEditor name="description" defaultValue={product.description ?? ""} id="description-editor" onChange={() => setDirty(true)} />
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <label htmlFor="description-editor" className="font-medium">
+              Descrição
+            </label>
+            <DescricaoIa
+              produtoId={product.id}
+              descricaoAtual={() => (formRef.current?.elements.namedItem("description") as HTMLInputElement | null)?.value ?? ""}
+              aoGerar={(html) => {
+                setDescInicial(html);
+                setDescVersao((v) => v + 1);
+                setDirty(true);
+              }}
+            />
+          </div>
+          <RichTextEditor key={descVersao} name="description" defaultValue={descInicial} id="description-editor" onChange={() => setDirty(true)} />
           {err("description") && <span className="text-danger">{err("description")}</span>}
         </div>
         <label className="flex flex-col gap-1 text-sm">
