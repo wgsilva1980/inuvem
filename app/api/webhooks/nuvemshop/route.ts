@@ -1,5 +1,6 @@
 import { getEnv } from "@/lib/env";
 import { query, queryOne } from "@/lib/db";
+import { atualizarMenuSeLigado } from "@/lib/menu/service";
 import { getCategory, getOrder, getProduct, updateCategory, updateProduct } from "@/lib/nuvemshop";
 import { SIGNATURE_HEADER } from "@/lib/nuvemshop/webhook-verify";
 import { clientForStore } from "@/lib/stores";
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
         };
       },
       alertas: { appUrl: getEnv().APP_URL },
+      aoMudarCategorias: (store) => atualizarMenuSeLigado({ query }, store.id),
     },
     raw,
     request.headers.get(SIGNATURE_HEADER),

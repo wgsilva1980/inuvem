@@ -57,6 +57,8 @@ export interface WebhookDeps {
   apiFor(store: StoreRef): Promise<ResourceApi>;
   /** Alertas por e-mail (pedido pago, produto esgotado). Sem isto, o webhook só mantém o espelho. */
   alertas?: ContextoAlerta;
+  /** Chamado depois de mudar uma categoria (a pessoa ocultou na loja, a regra ocultou/mostrou): atualiza o arquivo de menu por FTP, se ligado. */
+  aoMudarCategorias?: (store: StoreRef) => Promise<unknown>;
   now?: () => number;
   log?: (entry: Record<string, unknown>) => void;
 }
@@ -85,6 +87,12 @@ async function removeProduct(db: Db, storeId: string, id: number) {
   await db.query("DELETE FROM products WHERE store_id = $1::uuid AND id = $2::bigint", [storeId, id]);
 }
 
+async function avisarMudancaDeCategorias(deps: WebhookDeps, store: StoreRef): Promise<void> {
+  await deps.aoMudarCategorias?.(store).catch((err) => {
+    deps.log?.({ event: "webhook.menu_falhou", message: err instanceof Error ? err.message : String(err) });
+  });
+}
+
 /** Regra opcional das categorias vazias, depois de qualquer mudança nos produtos. Nunca derruba o webhook (falhas ficam no Histórico e no log). */
 async function regraCategorias(deps: WebhookDeps, store: StoreRef): Promise<void> {
   try {
@@ -92,7 +100,10 @@ async function regraCategorias(deps: WebhookDeps, store: StoreRef): Promise<void
     const setVisibility = api.setCategoryVisibility?.bind(api);
     if (!setVisibility) return;
     const r = await aplicarRegraCategorias(deps.db, { getCategory: api.getCategory.bind(api), setVisibility }, { storeId: store.id });
-    if (r.ocultadas > 0 || r.exibidas > 0) deps.log?.({ event: "webhook.categorias_vazias", ocultadas: r.ocultadas, exibidas: r.exibidas });
+    if (r.ocultadas > 0 || r.exibidas > 0) {
+      deps.log?.({ event: "webhook.categorias_vazias", ocultadas: r.ocultadas, exibidas: r.exibidas });
+      await avisarMudancaDeCategorias(deps, store);
+    }
   } catch (err) {
     deps.log?.({ event: "webhook.regra_categorias_falhou", message: err instanceof Error ? err.message : String(err) });
   }
@@ -107,7 +118,8 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
       return regraCategorias(deps, store);
     }
     case "category/deleted":
-      return removeCategoryFromMirror(db, storeId, id);
+      await removeCategoryFromMirror(db, storeId, id);
+      return avisarMudancaDeCategorias(deps, store);
     case "product/created":
     case "product/updated": {
       const api = await deps.apiFor(store);
@@ -161,10 +173,13 @@ async function applyEvent(deps: WebhookDeps, store: StoreRef, event: WebhookEven
       try {
         await upsertCategories(db, storeId, [await api.getCategory(id)]);
       } catch (err) {
-        if (isNotFound(err)) return removeCategoryFromMirror(db, storeId, id);
+        if (isNotFound(err)) {
+          await removeCategoryFromMirror(db, storeId, id);
+          return avisarMudancaDeCategorias(deps, store);
+        }
         throw err;
       }
-      return;
+      return avisarMudancaDeCategorias(deps, store); // a pessoa pode ter ocultado ou mostrado a categoria no admin da loja
     }
   }
 }

@@ -3,6 +3,7 @@ import { isSameOrigin } from "@/lib/security";
 import { query } from "@/lib/db";
 import { aplicarRegraCategorias } from "@/lib/automations/categorias";
 import { NuvemshopError, getCategory, updateCategory } from "@/lib/nuvemshop";
+import { atualizarMenuSeLigado } from "@/lib/menu/service";
 import { clientForStore, getActiveStore } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
       { getCategory: (id) => getCategory(client, id), setVisibility: (id, visibility) => updateCategory(client, id, { visibility }) },
       { storeId: store.id, ator: admin.email, forcar: true },
     );
+    if (r.ocultadas > 0 || r.exibidas > 0) await atualizarMenuSeLigado({ query }, store.id, admin.email);
     return Response.json(r);
   } catch (err) {
     if (err instanceof NuvemshopError) return Response.json({ error: err.userMessage }, { status: 502 });

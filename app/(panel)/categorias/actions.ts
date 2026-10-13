@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { CategoryRuleError, categoryEditSchema, createCategory, deleteCategory, updateCategory, type CategoryApi } from "@/lib/categories/manage";
 import { devolverAAutomacao, definirVisibilidade } from "@/lib/categories/visibilidade";
 import { query } from "@/lib/db";
+import { atualizarMenuSeLigado } from "@/lib/menu/service";
 import { NuvemshopError, createCategory as apiCreate, deleteCategory as apiDelete, getCategory, updateCategory as apiUpdate } from "@/lib/nuvemshop";
 import { clientForStore, getActiveStore } from "@/lib/stores";
 
@@ -85,6 +86,7 @@ export async function visibilidadeCategoriaAction(id: number, visibility: "visib
   if (!Number.isInteger(id) || id <= 0 || (visibility !== "visible" && visibility !== "hidden")) return { message: "Pedido inválido." };
   return run(async ({ storeId, actor, api }) => {
     const r = await definirVisibilidade(db, { get: api.get, setVisibility: (cid, v) => api.update(cid, { visibility: v }) }, { storeId, actor, id, visibility });
+    await atualizarMenuSeLigado(db, storeId, actor);
     if (!r.changed) return "A categoria já estava assim na loja.";
     return visibility === "hidden" ? "Categoria oculta na loja." : "Categoria visível na loja. A automação não vai ocultá-la.";
   });

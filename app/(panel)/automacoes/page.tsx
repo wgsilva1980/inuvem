@@ -7,8 +7,12 @@ import { autoOcultarCategoriasLigado, planejarCategorias, ultimasAcoesCategorias
 import { autoRepublicarLigado, listarAguardandoEstoque } from "@/lib/automations/in-stock";
 import { autoDespublicarLigado, contarPublicadosSemEstoque, ultimasAcoesAutomaticas } from "@/lib/automations/out-of-stock";
 import { query } from "@/lib/db";
+import { NOME_ARQUIVO, listaOculta } from "@/lib/menu/arquivo";
+import { lerConfigFtp } from "@/lib/menu/ftp";
+import { estadoDoMenu, menuAutomaticoLigado } from "@/lib/menu/service";
 import { getActiveStore } from "@/lib/stores";
 import { AutomacaoForm } from "./automacao-form";
+import { MenuArquivoAcoes, MenuArquivoForm } from "./menu-arquivo";
 import { CategoriasVaziasAgora, CategoriasVaziasForm } from "./categorias-vazias";
 import { AguardandoEstoque } from "./aguardando-estoque";
 import { DespublicarAgora } from "./despublicar-agora";
@@ -29,6 +33,10 @@ export default async function AutomacoesPage() {
   const acoes = store ? await ultimasAcoesAutomaticas(db, store.id) : [];
   const catLigada = store ? await autoOcultarCategoriasLigado(db, store.id) : false;
   const plano = store ? await planejarCategorias(db, store.id) : null;
+  const ftp = lerConfigFtp();
+  const menuLigado = store ? await menuAutomaticoLigado(db, store.id) : false;
+  const menu = store ? await estadoDoMenu(db, store.id) : null;
+  const ocultas = store ? await listaOculta(db, store.id) : null;
   const acoesCat = store ? await ultimasAcoesCategorias(db, store.id) : [];
 
   return (
@@ -104,6 +112,37 @@ export default async function AutomacoesPage() {
             ))}
           </ul>
         )}
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <h2 className="text-base font-semibold">Arquivo de menu da loja (envio por FTP)</h2>
+        <p className="text-sm text-muted">
+          O tema da loja esconde do menu as categorias listadas em <code>snipplets/navigation/{NOME_ARQUIVO}</code>. O painel gera esse arquivo com <strong>todas as categorias ocultas</strong> (as que a automação ocultou, as que você oculta à mão e as já ocultas na loja) e o envia por FTPS, sobrescrevendo o arquivo inteiro.
+        </p>
+        {!ftp.config ? (
+          <p className="text-sm text-danger">Falta configurar o FTP na Vercel (Settings → Environment Variables): {ftp.faltando.join(", ")}. Veja as variáveis no README (item 98).</p>
+        ) : (
+          <p className="text-sm text-muted">
+            FTP configurado: {ftp.config.host}:{ftp.config.port} ({ftp.config.secure === "implicit" ? "TLS implícito" : "TLS explícito"}), pasta <code>{ftp.config.dir}</code>.
+          </p>
+        )}
+        <MenuArquivoForm ligado={menuLigado} configurado={ftp.config !== null} />
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
+          <li>Antes de gravar, o painel confere se a pasta tem o <code>navigation-top.tpl</code> (para não gravar na pasta errada), envia com o nome <code>{NOME_ARQUIVO}.tmp</code>, confere o tamanho e só então renomeia: a loja nunca lê um arquivo pela metade.</li>
+          <li>Só envia quando o conteúdo mudou. A versão anterior fica guardada para voltar atrás. Depois de um envio, a loja pode levar alguns minutos para refletir (cache). Cada envio vai para o Histórico.</li>
+          <li>Se o envio falhar, as tentativas automáticas esperam 5 minutos; o botão “Enviar agora” tenta na hora.</li>
+        </ul>
+        {ocultas && (
+          <div className="flex flex-col gap-1 text-sm">
+            <p>
+              Hoje há <strong>{ocultas.caminhos.length}</strong> categoria(s) oculta(s) no arquivo{ocultas.caminhos.length > 0 ? `: ${ocultas.caminhos.slice(0, 10).join(", ")}${ocultas.caminhos.length > 10 ? "…" : ""}` : ""}.
+            </p>
+            {ocultas.descartadas.length > 0 && <p className="text-danger">Ficaram de fora, por não terem um endereço válido (só letras minúsculas, números e hífen): {ocultas.descartadas.join(", ")}.</p>}
+            {menu?.enviadoEm ? <p className="text-muted">Último envio: {quando(menu.enviadoEm)}.</p> : <p className="text-muted">Nenhum envio feito ainda.</p>}
+            {menu?.erro && <p className="text-danger">Última tentativa falhou ({menu.tentativaEm ? quando(menu.tentativaEm) : "—"}): {menu.erro}.</p>}
+          </div>
+        )}
+        <MenuArquivoAcoes configurado={ftp.config !== null} temAnterior={menu?.anterior != null} />
       </Card>
 
       <Card className="flex flex-col gap-2">
