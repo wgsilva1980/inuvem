@@ -165,9 +165,17 @@ export interface RelatorioQualidade {
   porFaixa: Record<Faixa, number>;
   porProblema: ContagemProblema[];
   cruzadas: CruzadasDoCatalogo;
+  /** Produtos que ficaram de fora porque o relatório olha só os publicados. */
+  foraDoFiltro: number;
 }
 
-export function montarRelatorio(itens: Array<{ produto: ProductDetail; fotos: number }>): RelatorioQualidade {
+export interface OpcoesRelatorio {
+  /** Avalia só os produtos publicados (resumo, pendências e verificações entre produtos); os não publicados ficam de fora. */
+  soPublicados?: boolean;
+}
+
+export function montarRelatorio(todos: Array<{ produto: ProductDetail; fotos: number }>, opcoes: OpcoesRelatorio = {}): RelatorioQualidade {
+  const itens = opcoes.soPublicados ? todos.filter((i) => i.produto.published) : todos;
   const avaliados = itens.map(({ produto, fotos }) => ({ produto, q: qualidadeDoProduto(produto, fotos) }));
   const produtos = avaliados.map((a) => a.q).sort((a, b) => a.nota - b.nota || a.nome.localeCompare(b.nome, "pt-BR"));
   const porFaixa: Record<Faixa, number> = { otimo: 0, bom: 0, regular: 0, fraco: 0 };
@@ -185,7 +193,9 @@ export function montarRelatorio(itens: Array<{ produto: ProductDetail; fotos: nu
     porFaixa,
     porProblema: [...contagem.values()].sort((a, b) => Number(b.obrigatorio) - Number(a.obrigatorio) || b.produtos - a.produtos),
     cruzadas: verificacoesCruzadas(avaliados),
+    foraDoFiltro: todos.length - itens.length,
   };
 }
 
-export const relatorioDeQualidade = async (db: Db, storeId: string): Promise<RelatorioQualidade> => montarRelatorio(await detalhesDosProdutos(db, storeId));
+export const relatorioDeQualidade = async (db: Db, storeId: string, opcoes: OpcoesRelatorio = {}): Promise<RelatorioQualidade> =>
+  montarRelatorio(await detalhesDosProdutos(db, storeId), opcoes);

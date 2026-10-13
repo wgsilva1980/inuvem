@@ -107,4 +107,27 @@ describe("relatório de qualidade do catálogo", () => {
     await variante(1, { sku: "U-1" });
     expect((await relatorioDeQualidade(db, storeId)).cruzadas.skusRepetidos).toEqual([]);
   });
+
+  it("só publicados: nota, faixas, pendências e verificações entre produtos olham apenas os publicados", async () => {
+    await produto(1, "Vestido Publicado");
+    await variante(1, { sku: "REP-1" });
+    await produto(2, "Vestido Rascunho", { publicado: false, fotos: 0, descricao: null });
+    await variante(2, { sku: "REP-1" }); // SKU repetido, mas o produto 2 é rascunho
+    await produto(3, "Vestido Pronto Rascunho", { publicado: false });
+    await variante(3);
+    const todos = await relatorioDeQualidade(db, storeId);
+    expect(todos.produtos).toHaveLength(3);
+    expect(todos.foraDoFiltro).toBe(0);
+    expect(todos.cruzadas.skusRepetidos).toHaveLength(1);
+    expect(todos.cruzadas.prontosNaoPublicados.map((p) => p.nome)).toEqual(["Vestido Pronto Rascunho"]);
+
+    const pub = await relatorioDeQualidade(db, storeId, { soPublicados: true });
+    expect(pub.produtos.map((p) => p.nome)).toEqual(["Vestido Publicado"]);
+    expect(pub.foraDoFiltro).toBe(2);
+    expect(pub.notaMedia).toBe(100);
+    expect(pub.porFaixa).toEqual({ otimo: 1, bom: 0, regular: 0, fraco: 0 });
+    expect(pub.porProblema).toEqual([]);
+    expect(pub.cruzadas.skusRepetidos).toEqual([]);
+    expect(pub.cruzadas.prontosNaoPublicados).toEqual([]);
+  });
 });
