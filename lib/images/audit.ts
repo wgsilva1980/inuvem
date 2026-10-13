@@ -75,18 +75,18 @@ export interface ImagemPendente {
   src: string;
 }
 
-/** Imagens do espelho que ainda não foram medidas (ou cujo endereço mudou). `todas` ignora as medidas existentes. */
-export async function imagensPendentes(db: Db, storeId: string, limite: number, todas = false): Promise<ImagemPendente[]> {
+/** Imagens do espelho que ainda não foram medidas (ou cujo endereço mudou). `todas` ignora as medidas existentes; `produtoId` limita a um produto. */
+export async function imagensPendentes(db: Db, storeId: string, limite: number, todas = false, produtoId?: number): Promise<ImagemPendente[]> {
   return db.query<ImagemPendente>(
     `SELECT (i->>'id') AS image_id, (i->>'src') AS src
      FROM products p
      CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) AS i
      LEFT JOIN image_audit a ON a.store_id = p.store_id AND a.image_id = (i->>'id')::bigint
-     WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL
+     WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL AND ($4::bigint IS NULL OR p.id = $4::bigint)
        AND ($3::boolean OR a.image_id IS NULL OR a.src <> (i->>'src') OR (a.error IS NOT NULL AND a.checked_at < now() - interval '10 minutes'))
      ORDER BY p.id, (i->>'id')::bigint
      LIMIT $2`,
-    [storeId, limite, todas],
+    [storeId, limite, todas, produtoId ?? null],
   );
 }
 
@@ -99,14 +99,14 @@ export async function gravarMedida(db: Db, storeId: string, p: ImagemPendente, m
   );
 }
 
-export async function contarPendentes(db: Db, storeId: string): Promise<{ total: number; medidas: number }> {
+export async function contarPendentes(db: Db, storeId: string, produtoId?: number): Promise<{ total: number; medidas: number }> {
   const rows = await db.query<{ total: string; medidas: string }>(
     `SELECT count(*)::text AS total, count(a.image_id)::text AS medidas
      FROM products p
      CROSS JOIN LATERAL jsonb_array_elements(coalesce(p.raw_json->'images', '[]'::jsonb)) AS i
      LEFT JOIN image_audit a ON a.store_id = p.store_id AND a.image_id = (i->>'id')::bigint AND a.src = (i->>'src')
-     WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL`,
-    [storeId],
+     WHERE p.store_id = $1::uuid AND (i->>'src') IS NOT NULL AND ($2::bigint IS NULL OR p.id = $2::bigint)`,
+    [storeId, produtoId ?? null],
   );
   return { total: Number(rows[0]?.total ?? 0), medidas: Number(rows[0]?.medidas ?? 0) };
 }
@@ -114,7 +114,7 @@ export async function contarPendentes(db: Db, storeId: string): Promise<{ total:
 /** Mede imagens pendentes até estourar o orçamento de tempo, `concorrencia` por vez. Devolve quantas mediu e se ainda há pendentes. */
 export async function medirPendentes(
   db: Db,
-  args: { storeId: string; budgetMs: number; medir?: Medidor; concorrencia?: number; todas?: boolean; now?: () => number },
+  args: { storeId: string; budgetMs: number; medir?: Medidor; concorrencia?: number; todas?: boolean; produtoId?: number; now?: () => number },
 ): Promise<{ medidas: number; restantes: boolean }> {
   const medir = args.medir ?? medirImagemRemota;
   const now = args.now ?? Date.now;
@@ -125,7 +125,7 @@ export async function medirPendentes(
   let ignorarMedidas = args.todas ?? false;
   const vistas = new Set<string>();
   while (now() - inicio < args.budgetMs) {
-    const lote = (await imagensPendentes(db, args.storeId, concorrencia * 3, ignorarMedidas)).filter((p) => !vistas.has(p.image_id));
+    const lote = (await imagensPendentes(db, args.storeId, concorrencia * 3, ignorarMedidas, args.produtoId)).filter((p) => !vistas.has(p.image_id));
     if (lote.length === 0) return { medidas, restantes: false };
     for (const p of lote) vistas.add(p.image_id);
     let proximo = 0;
