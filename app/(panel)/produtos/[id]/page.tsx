@@ -9,6 +9,7 @@ import { getActiveStore } from "@/lib/stores";
 import { Alert } from "@/components/ui/alert";
 import { avaliarProntidao } from "@/lib/catalog/readiness";
 import { auditarProdutos } from "@/lib/images/audit";
+import { fornecedorDoProduto, listarFornecedores } from "@/lib/catalog/fornecedor";
 import { ImagesPanel } from "./images-panel";
 import { ReadinessCard } from "./readiness-card";
 import { ProductForm } from "./product-form";
@@ -25,12 +26,14 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
   const store = await getActiveStore();
   if (!store) notFound();
   const db = { query };
-  const [product, categories, images, comOriginal, auditoria] = await Promise.all([
+  const [product, categories, images, comOriginal, auditoria, fornecedores, fornecedor] = await Promise.all([
     getProductDetail(db, store.id, productId),
     listCategoryOptions(db, store.id),
     getProductImages(db, store.id, productId),
     fotosComOriginal(db, store.id, productId),
     auditarProdutos(db, store.id, productId),
+    listarFornecedores(db, store.id),
+    fornecedorDoProduto(db, store.id, productId),
   ]);
   if (!product) notFound();
   const checklist = avaliarProntidao(product, images.length, auditoria[0] ?? null);
@@ -56,7 +59,7 @@ export default async function ProdutoPage({ params, searchParams }: { params: Pr
 
       <ReadinessCard productId={productId} publicado={product.published} checklist={checklist} />
 
-      <ProductForm product={product} categories={categories}>
+      <ProductForm product={product} categories={categories} fornecedores={fornecedores} fornecedorId={fornecedor?.id ?? null}>
         <VariantFields productId={productId} variants={product.variants} images={images} attributes={product.attributes} />
       </ProductForm>
 

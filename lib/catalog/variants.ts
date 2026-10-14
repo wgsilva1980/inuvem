@@ -121,6 +121,8 @@ export const variantEditSchema = z
       .transform((v) => (v === "" ? null : v)),
     price: money(true, "Informe o preço."),
     promotional_price: money(false, ""),
+    /** Preço de custo (opcional: ausente = não estou editando). */
+    cost: money(false, "").transform((v) => (v !== null && Number(v) === 0 ? null : v)).optional(),
     stock_management: z.boolean(),
     stock: stockValue,
     image_id: imageId,
@@ -150,6 +152,7 @@ export const variantEditSchema = z
     sku: v.sku,
     price: v.price as string,
     promotional_price: v.promotional_price,
+    ...(v.cost !== undefined ? { cost: v.cost } : {}),
     stock_management: v.stock_management,
     // sem controle de estoque, a quantidade não vale (a API usa null = ilimitado)
     stock: v.stock_management ? v.stock : null,
@@ -191,6 +194,7 @@ export function variantToEdit(v: {
   sku?: string | null;
   price?: unknown;
   promotional_price?: unknown;
+  cost?: unknown;
   stock_management?: boolean | null;
   stock?: number | null;
   image_id?: number | null;
@@ -208,6 +212,7 @@ export function variantToEdit(v: {
     sku: v.sku ? v.sku : null,
     price: money2(v.price) ?? "0.00",
     promotional_price: money2(v.promotional_price),
+    cost: ((c) => (c !== null && Number(c) === 0 ? null : c))(money2(v.cost)),
     stock_management: management,
     stock: management ? (v.stock ?? null) : null,
     image_id: v.image_id ?? null,
@@ -234,6 +239,7 @@ export function changedVariantFields(before: VariantEdit, after: VariantEdit): V
   if ((before.promotional_price === null) !== (after.promotional_price === null) || Number(before.promotional_price) !== Number(after.promotional_price)) {
     fields.push("promotional_price");
   }
+  if (after.cost !== undefined && !sameWeight(before.cost ?? null, after.cost)) fields.push("cost");
   if (before.stock_management !== after.stock_management) fields.push("stock_management");
   if (before.stock !== after.stock) fields.push("stock");
   if (before.image_id !== after.image_id) fields.push("image_id");
@@ -264,6 +270,7 @@ export function buildVariantInput(after: VariantEdit, fields: VariantField[], cu
   if (has("sku")) input.sku = after.sku;
   if (has("price")) input.price = after.price;
   if (has("promotional_price")) input.promotional_price = after.promotional_price;
+  if (has("cost")) input.cost = after.cost ?? null;
   if (has("stock_management")) input.stock_management = after.stock_management;
   // ao ligar o controle, a quantidade precisa ir junto
   if (has("stock") || (has("stock_management") && after.stock_management)) input.stock = after.stock;
@@ -298,6 +305,8 @@ export function variantFormInput(formData: FormData, id: number): Record<string,
     sku: formData.get(`${p}sku`) ?? "",
     price: formData.get(`${p}price`) ?? "",
     promotional_price: formData.get(`${p}promotional_price`) ?? "",
+    // sem o campo no formulário (outras telas), o custo não é editado
+    cost: formData.has(`${p}cost`) ? String(formData.get(`${p}cost`) ?? "") : undefined,
     stock_management: formData.get(`${p}stock_management`) === "on",
     stock: formData.get(`${p}stock`) ?? "",
     image_id: formData.get(`${p}image_id`) ?? "",

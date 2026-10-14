@@ -36,6 +36,8 @@ export async function montarBackup(db: Db, args: { storeId: string; nomeDaLoja: 
     db, "SELECT id::text, product_id::text, sku, price::text, promotional_price::text, stock, stock_management, values, raw_json FROM variants WHERE store_id = $1::uuid ORDER BY product_id, position NULLS LAST, id", [storeId]);
   const categorias = await consulta<{ id: string; raw_json: unknown }>(db, "SELECT id::text, raw_json FROM categories WHERE store_id = $1::uuid ORDER BY id", [storeId]);
   const custos = await consulta<{ product_id: string; nome: string | null; cost: string; source: string }>(db, "SELECT c.product_id::text, p.name AS nome, c.cost::text, c.source FROM product_costs c LEFT JOIN products p ON p.store_id = c.store_id AND p.id = c.product_id WHERE c.store_id = $1::uuid ORDER BY c.product_id", [storeId]);
+  const custosVariacoes = await consulta<{ variant_id: string; product_id: string; cost: string }>(db, "SELECT variant_id::text, product_id::text, cost::text FROM variant_costs WHERE store_id = $1::uuid ORDER BY product_id, variant_id", [storeId]);
+  const fornecedores = await consulta<{ product_id: string; contato_id: string; nome: string }>(db, "SELECT s.product_id::text, s.contact_id::text AS contato_id, coalesce(nullif(c.trade_name, ''), c.name) AS nome FROM product_suppliers s JOIN contacts c ON c.id = s.contact_id WHERE s.store_id = $1::uuid ORDER BY s.product_id", [storeId]);
   const blocos = await consulta<{ name: string; html: string; updated_at: string }>(db, "SELECT name, html, updated_at::text FROM content_blocks WHERE store_id = $1::uuid ORDER BY lower(name)", [storeId]);
   const compras = await consulta<{ id: string; supplier: string; expected_on: string | null; note: string | null; status: string; created_at: string }>(db, "SELECT id::text, supplier, expected_on::text, note, status, created_at::text FROM purchase_orders WHERE store_id = $1::uuid ORDER BY id", [storeId]);
   const itensCompra = await consulta<{ order_id: string; seq: number; product_id: string; variant_id: string; product_name: string; variation: string; sku: string | null; qty: number; unit_cost: string | null }>(
@@ -57,6 +59,8 @@ export async function montarBackup(db: Db, args: { storeId: string; nomeDaLoja: 
   arquivos.push({ nome: "dados/produtos.json", conteudo: json(produtos.map((p) => ({ ...(p.raw_json as object), variants: porProduto.get(p.id) ?? (p.raw_json as { variants?: unknown }).variants ?? [] }))) });
   arquivos.push({ nome: "dados/categorias.json", conteudo: json(categorias.map((c) => c.raw_json)) });
   arquivos.push({ nome: "dados/custos-dos-produtos.json", conteudo: json(custos.map((c) => ({ produto_id: c.product_id, produto: c.nome, custo: Number(c.cost), origem: c.source }))) });
+  arquivos.push({ nome: "dados/custos-das-variacoes.json", conteudo: json(custosVariacoes.map((c) => ({ variacao_id: c.variant_id, produto_id: c.product_id, custo: Number(c.cost) }))) });
+  arquivos.push({ nome: "dados/fornecedor-dos-produtos.json", conteudo: json(fornecedores.map((f) => ({ produto_id: f.product_id, contato_id: f.contato_id, fornecedor: f.nome }))) });
   arquivos.push({ nome: "dados/blocos-de-conteudo.json", conteudo: json(blocos) });
   arquivos.push({ nome: "dados/pedidos-de-compra.json", conteudo: json(compras.map((c) => ({ ...c, itens: itensCompra.filter((i) => i.order_id === c.id) }))) });
   arquivos.push({ nome: "dados/configuracoes.json", conteudo: json(configuracoes) });
